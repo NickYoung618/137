@@ -66,7 +66,7 @@ class DataToolTests(unittest.TestCase):
                 directory = root / split / "sample_1" / "pos_1"
                 directory.mkdir(parents=True)
                 Image.new("L", (8, 6), 10).save(directory / f"{split}.bmp")
-            manifest = build_manifest(root, "split-leak", "slot_pose", 2, "sample_1", "pos_1")
+            manifest = build_manifest(root, "split-leak", "a_end_face", 2, "sample_1", "pos_1")
             report = validate_manifest(manifest, root)
             self.assertFalse(report["valid"])
             self.assertIn("SPLIT_LEAKAGE", {item["code"] for item in report["errors"]})

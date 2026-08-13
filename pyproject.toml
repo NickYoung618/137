@@ -1,7 +1,7 @@
 [project]
-name = "housing-inspection-slot-pose"
-version = "0.1.0"
-description = "Offline dataset tooling and fail-closed slot pose contract skeleton"
+name = "housing-inspection-a-end-face"
+version = "1.0.0"
+description = "Independent JSON CLI around the preserved desktop A-end-face detector"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "numpy==2.4.4",

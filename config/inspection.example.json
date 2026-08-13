@@ -1,69 +1,9 @@
 {
-  "schema_version": "slot-pose-config/1",
-  "project": "137-housing-slot-pose",
-  "config_id": "slot-pose-server-mvp-pending-site-v1",
-  "legacy_asset": {
-    "source_path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py",
-    "source_sha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
-    "annotation_path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/annotation.json",
-    "annotation_sha256": "d949f779a309dc8d3741067e863aa8918aee103f60177dad7068f1e999302390",
-    "reference_path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/reference.bmp",
-    "reference_sha256": "cf8b4e0437f1e04fbd55782b1fb33e13c0693ecaf3a436786b2d38dd933053f0"
-  },
-  "calibration": {
-    "mm_per_px": null,
-    "status": "not_required_for_angle_only_skeleton",
-    "calibration_id": null,
-    "note": "保留统一字段；若未来同时输出平移量，必须填入受控标定值。"
-  },
-  "pose": {
-    "reference_frame": "A_FACE_REFERENCE_PENDING",
-    "target_frame": "PLC_ROTATION_TARGET_PENDING",
-    "mechanical_zero_image_deg": null,
-    "positive_direction": null,
-    "conventions_confirmed": false,
-    "valid_range_deg": null,
-    "production_plc_mapping_confirmed": false
-  },
-  "detector": {
-    "min_notch_prominence": 12.0,
-    "min_polar_score": 3.0,
-    "max_rotation_disagreement_deg": 5.0,
-    "min_scale": 0.75,
-    "max_scale": 1.25
-  },
-  "feature_mappings": [
-    {
-      "feature_code": "A_FACE_SLOT_SIGNED_ROTATION",
-      "name": "A端面槽带符号相对旋转量",
-      "source_column": "signed_relative_rotation_deg",
-      "source_quantity": "signed_relative_rotation",
-      "source_unit": "deg",
-      "scale": 1.0,
-      "output_quantity": "signed_relative_rotation",
-      "output_unit": "deg",
-      "tolerance": {
-        "nominal": null,
-        "lower": null,
-        "upper": null,
-        "unit": "deg",
-        "confirmed": false
-      },
-      "repeatability_tier": "ANGLE_PENDING",
-      "enabled": true
-    }
-  ],
-  "repeatability": {
-    "metric": "range",
-    "min_valid_repeats": 20,
-    "min_dynamic_positions": 2,
-    "tiers_confirmed": false,
-    "tiers": {
-      "R0.10": {"unit": "mm", "limit": 0.1},
-      "R0.05": {"unit": "mm", "limit": 0.05},
-      "R0.03": {"unit": "mm", "limit": 0.03},
-      "ANGLE_PENDING": {"unit": "deg", "limit": null}
-    },
-    "note": "角度重复性限值尚未确认；当前只计算统计量，不给PASS/FAIL。"
-  }
+  "schema_version": "a-end-face-runtime/1",
+  "project": "137-housing-a-end-face",
+  "pixel_size": 1.0,
+  "pixel_size_unit": "px",
+  "core_source_sha256": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc",
+  "annotation_path": "/path/to/sample_1_label.json",
+  "note": "CLI parameters are authoritative; this file documents deploy-time values only."
 }

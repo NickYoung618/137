@@ -37,3 +37,13 @@ reports/
 # Large local archives must stay outside the server repository
 *.rar
 *.zip
+
+# External inspection imagery and large LabelMe assets
+*.bmp
+*.tif
+*.tiff
+*.jpg
+*.jpeg
+*.png
+*_label.json
+*annotation.json
