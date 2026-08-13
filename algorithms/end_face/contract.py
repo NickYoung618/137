@@ -13,7 +13,7 @@ from algorithms.end_face import CORE_SOURCE_SHA256
 
 SCHEMA_VERSION = "a-end-face-result/3"
 ALGORITHM_NAME = "desktop-a-end-face-core"
-ALGORITHM_VERSION = "1.2.0"
+ALGORITHM_VERSION = "1.3.0"
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:

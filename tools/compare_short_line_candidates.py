@@ -35,6 +35,33 @@ class ComparisonInputError(ValueError):
     pass
 
 
+def validate_single_development_group(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Require one complete, explicitly development-tagged physical 20-frame group."""
+    images = manifest.get("images")
+    if not isinstance(images, list):
+        raise ComparisonInputError("development Manifest images must be an array")
+    groups: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for item in images:
+        if not isinstance(item, Mapping):
+            raise ComparisonInputError("development Manifest image entries must be objects")
+        key = (str(item.get("sampleId") or ""), str(item.get("position") or ""))
+        groups.setdefault(key, []).append(item)
+    if len(groups) != 1:
+        raise ComparisonInputError(f"development comparison requires exactly one physical sample/position group, found {len(groups)}")
+    (sample_id, position), group = next(iter(groups.items()))
+    if not sample_id or not position:
+        raise ComparisonInputError("development group requires sampleId and position")
+    if len(group) != 20:
+        raise ComparisonInputError(f"development group {sample_id}/{position} must contain exactly 20 images, found {len(group)}")
+    repeats = sorted(item.get("repeatIndex") for item in group)
+    if repeats != list(range(1, 21)):
+        raise ComparisonInputError("development group repeatIndex values must be exactly 1..20")
+    splits = {str(item.get("split") or "unassigned") for item in group}
+    if splits != {"development"}:
+        raise ComparisonInputError(f"development group must be tagged split='development', found {sorted(splits)}")
+    return {"sampleId": sample_id, "position": position, "imageCount": len(group)}
+
+
 def preflight_comparison_inputs(
     manifest_path: Path,
     data_root: Path,
@@ -215,6 +242,12 @@ def summarize_comparisons(
             "comparisonJsonlSha256": dataset.get("comparisonJsonlSha256"),
             "coreSourceSha256": dataset.get("coreSourceSha256"),
             "candidateConfigSha256": dataset.get("candidateConfigSha256"),
+            "candidateReferenceMode": dataset.get("candidateReferenceMode"),
+            "candidateReferenceSchemaVersion": dataset.get("candidateReferenceSchemaVersion"),
+            "candidateReferenceAnnotationSha256": dataset.get("candidateReferenceAnnotationSha256"),
+            "candidateReferenceImageSha256": dataset.get("candidateReferenceImageSha256"),
+            "evaluationScope": dataset.get("evaluationScope"),
+            "developmentGroup": dataset.get("developmentGroup"),
         },
         "imageCount": len(materialized),
         "comparisonStatus": {
@@ -272,6 +305,7 @@ def compare_batch(args: argparse.Namespace) -> int:
     data_root = args.data_root.resolve()
     results_path = args.results_jsonl.resolve()
     manifest, result_by_task = preflight_comparison_inputs(manifest_path, data_root, results_path)
+    development_group = validate_single_development_group(manifest) if args.development_group else None
     annotation = args.annotation.resolve()
     if not annotation.is_file():
         raise ComparisonInputError(f"annotation does not exist: {annotation}")
@@ -283,14 +317,22 @@ def compare_batch(args: argparse.Namespace) -> int:
         reference_model,
         load_candidate_config(candidate_path),
         candidate_path,
+        args.short_line_labelme_reference.resolve() if args.short_line_labelme_reference is not None else None,
     )
+    candidate_provenance = evaluator.provenance
     provenance = {
         "annotationSha256": sha256_file(annotation),
         "referenceSha256": sha256_file(reference_model.reference_path),
         "coreSourceSha256": CORE_SOURCE_SHA256,
-        "candidateId": evaluator.provenance["candidateId"],
-        "candidateAlgorithmVersion": evaluator.provenance["algorithmVersion"],
-        "candidateConfigSha256": evaluator.provenance["configSha256"],
+        "candidateId": candidate_provenance["candidateId"],
+        "candidateAlgorithmVersion": candidate_provenance["algorithmVersion"],
+        "candidateConfigSha256": candidate_provenance["configSha256"],
+        "candidateReferenceMode": candidate_provenance["referenceMode"],
+        "candidateReferenceSchemaVersion": candidate_provenance["referenceSchemaVersion"],
+        "candidateReferenceAnnotationSha256": candidate_provenance["referenceAnnotationSha256"],
+        "candidateReferenceImageSha256": candidate_provenance["referenceImageSha256"],
+        "evaluationScope": "development_20" if development_group is not None else "unspecified",
+        "developmentGroup": development_group,
     }
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -333,6 +375,12 @@ def compare_batch(args: argparse.Namespace) -> int:
         "comparisonJsonlSha256": sha256_file(comparison_path),
         "coreSourceSha256": CORE_SOURCE_SHA256,
         "candidateConfigSha256": evaluator.provenance["configSha256"],
+        "candidateReferenceMode": evaluator.provenance["referenceMode"],
+        "candidateReferenceSchemaVersion": evaluator.provenance["referenceSchemaVersion"],
+        "candidateReferenceAnnotationSha256": evaluator.provenance["referenceAnnotationSha256"],
+        "candidateReferenceImageSha256": evaluator.provenance["referenceImageSha256"],
+        "evaluationScope": provenance["evaluationScope"],
+        "developmentGroup": development_group,
     }
     summary = summarize_comparisons(records, dataset)
     summary_path = output_dir / "short-line-summary.json"
@@ -354,6 +402,19 @@ def summarize_jsonl(args: argparse.Namespace) -> int:
     if records and isinstance(records[0].get("provenance"), Mapping):
         candidate_sha = records[0]["provenance"].get("candidateConfigSha256")
         core_sha = records[0]["provenance"].get("coreSourceSha256")
+        candidate_reference_mode = records[0]["provenance"].get("candidateReferenceMode")
+        candidate_reference_schema_version = records[0]["provenance"].get("candidateReferenceSchemaVersion")
+        candidate_reference_annotation_sha = records[0]["provenance"].get("candidateReferenceAnnotationSha256")
+        candidate_reference_image_sha = records[0]["provenance"].get("candidateReferenceImageSha256")
+        evaluation_scope = records[0]["provenance"].get("evaluationScope")
+        development_group = records[0]["provenance"].get("developmentGroup")
+    else:
+        candidate_reference_mode = None
+        candidate_reference_schema_version = None
+        candidate_reference_annotation_sha = None
+        candidate_reference_image_sha = None
+        evaluation_scope = None
+        development_group = None
     dataset = {
         "datasetId": args.dataset_id,
         "datasetFingerprint": args.dataset_fingerprint,
@@ -361,6 +422,12 @@ def summarize_jsonl(args: argparse.Namespace) -> int:
         "comparisonJsonlSha256": sha256_file(comparison_path),
         "coreSourceSha256": core_sha,
         "candidateConfigSha256": candidate_sha,
+        "candidateReferenceMode": candidate_reference_mode,
+        "candidateReferenceSchemaVersion": candidate_reference_schema_version,
+        "candidateReferenceAnnotationSha256": candidate_reference_annotation_sha,
+        "candidateReferenceImageSha256": candidate_reference_image_sha,
+        "evaluationScope": evaluation_scope,
+        "developmentGroup": development_group,
     }
     write_strict_json(args.output.resolve(), summarize_comparisons(records, dataset))
     print(f"summary -> {args.output.resolve()}")
@@ -376,6 +443,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     compare_parser.add_argument("--annotation", required=True, type=Path)
     compare_parser.add_argument("--results-jsonl", required=True, type=Path)
     compare_parser.add_argument("--candidate-config", type=Path, default=DEFAULT_CANDIDATE_CONFIG)
+    compare_parser.add_argument("--short-line-labelme-reference", type=Path)
+    compare_parser.add_argument(
+        "--development-group",
+        action="store_true",
+        help="Require exactly one split=development physical group with repeatIndex 1..20.",
+    )
     compare_parser.add_argument("--output-dir", required=True, type=Path)
     compare_parser.set_defaults(handler=compare_batch)
 

@@ -53,6 +53,36 @@ ROI/对比度/梯度/峰值/搜索边界诊断、失败检查和 `recovered/regr
 梯度联合配准，重新估计局部位置和方向；它不覆盖 `featureQuality`、`measurements`、定位状态或旧
 `measurementCompleteness`。
 
+## LabelMe 标注语义
+
+现有 A 端面 `sample_1_label.json` 的标注与核心解释已经核对：
+
+| 稳定尺寸名 | 原始 LabelMe 标注 | 图形 | 核心解释 |
+| --- | --- | --- | --- |
+| 100 | 损坏直径字形 + `100` | `linestrip`，30 点 | 最大圆，外圆定位锚及半径/直径 |
+| 71 | 损坏直径字形 + `71` | `linestrip`，26 点 | 最小圆，内孔定位及半径/直径 |
+| 86 / 80 / M78 | 圆弧点集 | `linestrip`，85/88/85 点 | 中间环半径/直径 |
+| 46 | 两端点 | `line` | 从中心到外缘的径向长度及角度 |
+| 20 | 两端点 | `line` | 线段长度及角度 |
+| 19 / 30 | 两端点 | `line` | 短线位置、方向和长度；旧标注长度约 44.80/26.20 px |
+| 字符区域 | 四点区域 | `polygon` | 区域包围框和面积；不是定位必要项 |
+
+LabelMe 中 19/30 必须各使用一个两点 `line`，点落在真实边缘并保持既有起止方向。原文件中的损坏
+单位/直径字形不作为稳定身份，适配层统一映射为 `19`、`30`、`100` 等 canonical feature。
+
+Mac A2 可从一个物理样品、一个位置的完整 20 张中选一张代表图，手工建立域内 19/30 参考。先检查
+标注；输出 catalog 只有坐标、尺寸和 SHA，不包含嵌入的 `imageData`：
+
+```bash
+uv run python tools/inspect_short_line_labelme.py \
+  --annotation "/external/A2/development/sample_001/a2-short-lines.json" \
+  --output "/external/A2/outputs/a2-short-lines-catalog.json"
+```
+
+传入 `--short-line-labelme-reference` 后，候选局部模板来自该外置 A2 标注图；桌面核心仍使用原参考，
+其 SHA、旧量测和 `coreValid` 均不改变。候选输出 provenance 会记录 `external_labelme` 以及标注/图片
+SHA-256。未传该参数时保持原 v1 桌面参考行为。
+
 接口契约见 `contracts/a-end-face-result.schema.json`，质量分层与批量评估的 Spec Kit 规格见
 `specs/004-quality-policy-batch/`；短线候选增量规格见 `specs/005-short-line-candidate/`。
 
@@ -67,6 +97,7 @@ uv run python tools/evaluate_end_face_batch.py detect \
   --annotation /external/sample_1_label.json \
   --quality-policy config/end_face_quality.example.json \
   --short-line-candidate-config config/end_face_short_line_candidate.v1.json \
+  --short-line-labelme-reference /external/A2/development/sample_001/a2-short-lines.json \
   --output-dir outputs/a2-evaluation
 ```
 
@@ -80,21 +111,27 @@ uv run python tools/evaluate_end_face_batch.py detect \
 
 ```bash
 uv run python tools/compare_short_line_candidates.py compare \
-  --manifest "$HOME/Desktop/壳体项目/137/a2-manifest.json" \
+  --manifest "$HOME/Desktop/壳体项目/137/a2-development-20-manifest.json" \
   --data-root "$HOME/Desktop/壳体项目/137/A2" \
   --annotation "/path/to/sample_1_label.json" \
-  --results-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-v2-first-25/results.jsonl" \
+  --results-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-v2-development-20/results.jsonl" \
   --candidate-config config/end_face_short_line_candidate.v1.json \
-  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-v1-first-25"
+  --short-line-labelme-reference "$HOME/Desktop/壳体项目/137/A2/development/sample_001/a2-short-lines.json" \
+  --development-group \
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-labelme-development-20"
 ```
 
 输出 `short-line-comparison.jsonl` 和 `short-line-summary.json`。无图重统计：
 
 ```bash
 uv run python tools/compare_short_line_candidates.py summarize \
-  --comparison-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-v1-first-25/short-line-comparison.jsonl" \
-  --output "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-v1-first-25/short-line-summary-recomputed.json"
+  --comparison-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-labelme-development-20/short-line-comparison.jsonl" \
+  --output "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-labelme-development-20/short-line-summary-recomputed.json"
 ```
+
+开发时同一样品/位置的 20 张必须全部留在 development Manifest；冻结标注 SHA 和配置 SHA 后，使用
+不含该物理样品的全样品 Manifest 做 validation/acceptance。不得把同一组 20 帧随机拆到两个集合。
+增量规格和 Mac 命令见 `specs/006-a2-labelme-short-line-reference/`。
 
 ## 数据边界
 

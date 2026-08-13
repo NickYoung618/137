@@ -124,6 +124,7 @@ class EndFaceCliTests(unittest.TestCase):
         self.assertIn("--image", completed.stdout)
         self.assertIn("--quality-policy", completed.stdout)
         self.assertIn("--short-line-candidate-config", completed.stdout)
+        self.assertIn("--short-line-labelme-reference", completed.stdout)
 
 
 if __name__ == "__main__":

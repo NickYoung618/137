@@ -32,6 +32,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_SHORT_LINE_CANDIDATE,
         help="Versioned core-external 19/30 candidate configuration JSON.",
     )
+    parser.add_argument(
+        "--short-line-labelme-reference",
+        type=Path,
+        help="Optional external LabelMe JSON with exactly one line each for canonical features 19 and 30.",
+    )
     parser.add_argument("--output", default="-", help="Result JSON path, or '-' for stdout.")
     parser.add_argument("--pixel-size", type=float, default=1.0, help="Physical units per pixel; 1 keeps pixel units.")
     parser.add_argument("--task-id", help="Caller correlation id; defaults to the input image name.")
@@ -46,6 +51,7 @@ def run(
     task_id: str | None = None,
     quality_policy: Path = DEFAULT_QUALITY_POLICY,
     short_line_candidate_config: Path | None = DEFAULT_SHORT_LINE_CANDIDATE,
+    short_line_labelme_reference: Path | None = None,
 ) -> dict:
     image = image.resolve()
     annotation = annotation.resolve()
@@ -57,6 +63,7 @@ def run(
             quality_policy,
             pixel_size,
             short_line_candidate_config,
+            short_line_labelme_reference,
         )
         return inspector.inspect(image, resolved_task_id)
     except Exception as exc:
@@ -79,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             args.task_id,
             args.quality_policy,
             args.short_line_candidate_config,
+            args.short_line_labelme_reference,
         )
         content = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
         if args.output == "-":

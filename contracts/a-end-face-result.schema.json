@@ -41,7 +41,13 @@
                 "candidateId": {"const": "reference-gradient-registration-v1"},
                 "algorithmVersion": {"type": "string", "minLength": 1},
                 "configSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-                "configPath": {"type": ["string", "null"]}
+                "configPath": {"type": ["string", "null"]},
+                "referenceMode": {"enum": ["desktop_core", "external_labelme"]},
+                "referenceSchemaVersion": {"type": ["string", "null"], "enum": ["a-end-face-labelme-short-line-reference/1", null]},
+                "referenceAnnotationPath": {"type": ["string", "null"]},
+                "referenceAnnotationSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+                "referenceImagePath": {"type": ["string", "null"]},
+                "referenceImageSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
               },
               "additionalProperties": false
             }

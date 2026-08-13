@@ -21,6 +21,7 @@ class EndFaceInspector:
         quality_policy: Path,
         pixel_size: float = 1.0,
         short_line_candidate_config: Path | None = None,
+        short_line_labelme_reference: Path | None = None,
     ):
         self.annotation = annotation.resolve()
         self.quality_policy_path = quality_policy.resolve()
@@ -50,6 +51,7 @@ class EndFaceInspector:
                 self.reference_model,
                 candidate_config,
                 candidate_path,
+                short_line_labelme_reference.resolve() if short_line_labelme_reference is not None else None,
             )
 
     def inspect(self, image: Path, task_id: str | None = None) -> dict:

@@ -12,6 +12,7 @@ import json
 import math
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,53 @@ CANDIDATE_CONFIG_SCHEMA_VERSION = "a-end-face-short-line-candidate-config/1"
 DIAGNOSTIC_VERSION = "short-line-diagnostic/1"
 CANDIDATE_SOURCE = "reference-gradient-registration-v1"
 SUPPORTED_FEATURES = {"19", "30"}
+LABELME_REFERENCE_SCHEMA_VERSION = "a-end-face-labelme-short-line-reference/1"
+
+
+@dataclass(frozen=True)
+class ShortLineTemplateModel:
+    label: str
+    shape_type: str
+    points: tuple[tuple[float, float], tuple[float, float]]
+
+
+@dataclass
+class LabelMeShortLineReference:
+    annotation_path: Path
+    annotation_sha256: str
+    image_path: Path
+    image_sha256: str
+    width: int
+    height: int
+    image_data_ignored: bool
+    models: dict[str, ShortLineTemplateModel]
+    reference_grad: np.ndarray
+
+    def catalog(self) -> dict[str, Any]:
+        features: dict[str, Any] = {}
+        for canonical, model in sorted(self.models.items()):
+            p1 = np.asarray(model.points[0], dtype=np.float64)
+            p2 = np.asarray(model.points[1], dtype=np.float64)
+            vector = p2 - p1
+            features[canonical] = {
+                "rawLabel": model.label,
+                "canonicalFeature": canonical,
+                "shapeType": model.shape_type,
+                "points": [[float(value) for value in point] for point in model.points],
+                "annotatedLengthPx": float(np.linalg.norm(vector)),
+                "angleDeg": math.degrees(math.atan2(float(vector[1]), float(vector[0]))),
+            }
+        return {
+            "schemaVersion": LABELME_REFERENCE_SCHEMA_VERSION,
+            "annotationPath": str(self.annotation_path),
+            "annotationSha256": self.annotation_sha256,
+            "imagePath": str(self.image_path),
+            "imageSha256": self.image_sha256,
+            "width": self.width,
+            "height": self.height,
+            "imageDataIgnored": self.image_data_ignored,
+            "features": features,
+        }
 
 
 def _finite_number(value: Any) -> float | None:
@@ -39,6 +87,104 @@ def _finite_number(value: Any) -> float | None:
 
 def _canonical_json(payload: Mapping[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_labelme_short_line_reference(path: Path) -> LabelMeShortLineReference:
+    """Load a strict external 19/30 template without exposing embedded image data."""
+    annotation_path = path.resolve()
+    if not annotation_path.is_file():
+        raise ValueError(f"short-line LabelMe annotation does not exist: {annotation_path}")
+    try:
+        annotation = core.read_labelme(annotation_path)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"cannot read short-line LabelMe annotation: {exc}") from exc
+    if not isinstance(annotation, Mapping):
+        raise ValueError("short-line LabelMe annotation must be an object")
+
+    image_value = annotation.get("imagePath")
+    if not isinstance(image_value, str) or not image_value.strip():
+        raise ValueError("short-line LabelMe imagePath is required")
+    portable_image_value = image_value.strip().replace("\\", "/")
+    image_path_value = Path(portable_image_value)
+    image_path = (
+        image_path_value if image_path_value.is_absolute() else annotation_path.parent / image_path_value
+    ).resolve()
+    if not image_path.is_file():
+        raise ValueError(f"short-line LabelMe reference image does not exist: {image_path}")
+    reference_gray = core.load_detection_gray(image_path)
+    if reference_gray.ndim != 2 or not reference_gray.size:
+        raise ValueError("short-line LabelMe reference image must be a non-empty image")
+    actual_height, actual_width = map(int, reference_gray.shape)
+    declared_width = annotation.get("imageWidth")
+    declared_height = annotation.get("imageHeight")
+    if (
+        not isinstance(declared_width, int)
+        or isinstance(declared_width, bool)
+        or not isinstance(declared_height, int)
+        or isinstance(declared_height, bool)
+        or declared_width != actual_width
+        or declared_height != actual_height
+    ):
+        raise ValueError(
+            "short-line LabelMe imageWidth/imageHeight must match the referenced image "
+            f"(declared={declared_width}x{declared_height}, actual={actual_width}x{actual_height})"
+        )
+
+    shapes = annotation.get("shapes")
+    if not isinstance(shapes, list):
+        raise ValueError("short-line LabelMe shapes must be an array")
+    models: dict[str, ShortLineTemplateModel] = {}
+    for shape_index, shape in enumerate(shapes, start=1):
+        if not isinstance(shape, Mapping):
+            raise ValueError(f"short-line LabelMe shape {shape_index} must be an object")
+        raw_label = str(shape.get("label", ""))
+        canonical = canonical_feature_label(raw_label)
+        if canonical not in SUPPORTED_FEATURES:
+            continue
+        if canonical in models:
+            raise ValueError(f"short-line LabelMe feature {canonical} is duplicated")
+        if shape.get("shape_type") != "line":
+            raise ValueError(f"short-line LabelMe feature {canonical} must use shape_type 'line'")
+        raw_points = shape.get("points")
+        if not isinstance(raw_points, list) or len(raw_points) != 2:
+            raise ValueError(f"short-line LabelMe feature {canonical} must contain exactly two points")
+        points: list[tuple[float, float]] = []
+        for point_index, point in enumerate(raw_points, start=1):
+            if not isinstance(point, Sequence) or isinstance(point, (str, bytes, bytearray)) or len(point) != 2:
+                raise ValueError(f"short-line LabelMe feature {canonical} point {point_index} must be [x, y]")
+            x = _finite_number(point[0])
+            y = _finite_number(point[1])
+            if x is None or y is None:
+                raise ValueError(f"short-line LabelMe feature {canonical} point {point_index} must be finite")
+            if not (0.0 <= x < actual_width and 0.0 <= y < actual_height):
+                raise ValueError(f"short-line LabelMe feature {canonical} point {point_index} is outside the image")
+            points.append((x, y))
+        if math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1]) <= 1e-9:
+            raise ValueError(f"short-line LabelMe feature {canonical} endpoints must be distinct")
+        models[canonical] = ShortLineTemplateModel(raw_label, "line", (points[0], points[1]))
+
+    missing = sorted(SUPPORTED_FEATURES - set(models))
+    if missing:
+        raise ValueError(f"short-line LabelMe annotation is missing canonical features: {missing}")
+    return LabelMeShortLineReference(
+        annotation_path=annotation_path,
+        annotation_sha256=_sha256_file(annotation_path),
+        image_path=image_path,
+        image_sha256=_sha256_file(image_path),
+        width=actual_width,
+        height=actual_height,
+        image_data_ignored=annotation.get("imageData") is not None,
+        models=models,
+        reference_grad=core.gradient_magnitude(reference_gray),
+    )
 
 
 def candidate_config_sha256(config: Mapping[str, Any]) -> str:
@@ -450,7 +596,13 @@ def _angle_delta_deg(value: float, baseline: float) -> float:
 class ShortLineCandidateEvaluator:
     """Evaluate 19/30 without modifying the baseline core result."""
 
-    def __init__(self, reference_model: Any, config: Mapping[str, Any], config_path: Path | None = None):
+    def __init__(
+        self,
+        reference_model: Any,
+        config: Mapping[str, Any],
+        config_path: Path | None = None,
+        labelme_reference_path: Path | None = None,
+    ):
         validate_candidate_config(config)
         self.reference_model = reference_model
         self.config = json.loads(_canonical_json(config))
@@ -463,14 +615,46 @@ class ShortLineCandidateEvaluator:
             and canonical_feature_label(str(model.label)) in SUPPORTED_FEATURES
             and len(getattr(model, "points", [])) == 2
         }
+        self.labelme_reference = (
+            load_labelme_short_line_reference(labelme_reference_path)
+            if labelme_reference_path is not None
+            else None
+        )
+        self.template_models = (
+            self.labelme_reference.models if self.labelme_reference is not None else self.models
+        )
+        self.template_gradient = (
+            self.labelme_reference.reference_grad
+            if self.labelme_reference is not None
+            else np.asarray(getattr(reference_model, "reference_grad", np.empty((0, 0))), dtype=np.float64)
+        )
+        for canonical, template_model in self.template_models.items():
+            length = math.hypot(
+                template_model.points[1][0] - template_model.points[0][0],
+                template_model.points[1][1] - template_model.points[0][1],
+            )
+            minimum = float(self.config["gates"]["minimumPredictionLengthPx"])
+            maximum = float(self.config["gates"]["maximumPredictionLengthPx"])
+            if not minimum <= length <= maximum:
+                raise ValueError(
+                    f"short-line LabelMe feature {canonical} annotated length {length:.6f}px "
+                    f"is outside candidate range [{minimum}, {maximum}]"
+                )
 
     @property
     def provenance(self) -> dict[str, Any]:
+        labelme = self.labelme_reference
         return {
             "candidateId": self.config["candidateId"],
             "algorithmVersion": self.config["algorithmVersion"],
             "configSha256": self.config_sha256,
             "configPath": str(self.config_path) if self.config_path is not None else None,
+            "referenceMode": "external_labelme" if labelme is not None else "desktop_core",
+            "referenceSchemaVersion": LABELME_REFERENCE_SCHEMA_VERSION if labelme is not None else None,
+            "referenceAnnotationPath": str(labelme.annotation_path) if labelme is not None else None,
+            "referenceAnnotationSha256": labelme.annotation_sha256 if labelme is not None else None,
+            "referenceImagePath": str(labelme.image_path) if labelme is not None else None,
+            "referenceImageSha256": labelme.image_sha256 if labelme is not None else None,
         }
 
     def evaluate_image(
@@ -494,7 +678,8 @@ class ShortLineCandidateEvaluator:
         output: dict[str, Any] = {}
         for canonical in self.config["features"]:
             model = self.models.get(canonical)
-            if model is None:
+            template_model = self.template_models.get(canonical)
+            if model is None or template_model is None:
                 continue
             raw_label = str(model.label)
             status = feature_quality.get(raw_label)
@@ -507,13 +692,14 @@ class ShortLineCandidateEvaluator:
                     {},
                 )
             output[raw_label] = self._evaluate_feature(
-                model, canonical, target, target_grad, measurements, status
+                model, template_model, canonical, target, target_grad, measurements, status
             )
         return output
 
     def _evaluate_feature(
         self,
         model: Any,
+        template_model: Any,
         canonical: str,
         target_gray: np.ndarray,
         target_grad: np.ndarray,
@@ -559,6 +745,14 @@ class ShortLineCandidateEvaluator:
         ))
 
         candidate_search: dict[str, Any] = {
+            "templateReference": {
+                "mode": self.provenance["referenceMode"],
+                "rawLabel": str(template_model.label),
+                "annotatedLengthPx": math.hypot(
+                    template_model.points[1][0] - template_model.points[0][0],
+                    template_model.points[1][1] - template_model.points[0][1],
+                ),
+            },
             "searchBounds": {
                 "angleCorrectionDeg": [-float(self.config["search"]["coarse"]["angleRadiusDeg"]), float(self.config["search"]["coarse"]["angleRadiusDeg"])],
                 "longitudinalOffsetPx": [-float(self.config["search"]["coarse"]["longitudinalRadiusPx"]), float(self.config["search"]["coarse"]["longitudinalRadiusPx"])],
@@ -581,13 +775,13 @@ class ShortLineCandidateEvaluator:
             p2 = np.array([core_target["x2"], core_target["y2"]], dtype=np.float64)
             base_midpoint = (p1 + p2) * 0.5
             base_theta = math.atan2(float(p2[1] - p1[1]), float(p2[0] - p1[0]))
-            ref_p1 = np.asarray(model.points[0], dtype=np.float64)
-            ref_p2 = np.asarray(model.points[1], dtype=np.float64)
+            ref_p1 = np.asarray(template_model.points[0], dtype=np.float64)
+            ref_p2 = np.asarray(template_model.points[1], dtype=np.float64)
             ref_midpoint = (ref_p1 + ref_p2) * 0.5
             ref_theta = math.atan2(float(ref_p2[1] - ref_p1[1]), float(ref_p2[0] - ref_p1[0]))
             along_grid, across_grid = _oriented_coordinates(length, self.config["template"])
             template_patch = _sample_patch(
-                np.asarray(self.reference_model.reference_grad, dtype=np.float64),
+                self.template_gradient,
                 ref_midpoint,
                 ref_theta,
                 along_grid,

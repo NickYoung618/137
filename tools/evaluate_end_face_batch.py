@@ -187,6 +187,7 @@ def detect_batch(args: argparse.Namespace) -> int:
         args.quality_policy,
         args.pixel_size,
         args.short_line_candidate_config,
+        args.short_line_labelme_reference,
     )
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -240,6 +241,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     detect_parser.add_argument("--quality-policy", type=Path, default=DEFAULT_POLICY)
     detect_parser.add_argument("--pixel-size", type=float, default=1.0)
     detect_parser.add_argument("--short-line-candidate-config", type=Path, default=DEFAULT_CANDIDATE)
+    detect_parser.add_argument("--short-line-labelme-reference", type=Path)
     detect_parser.add_argument("--output-dir", required=True, type=Path)
     detect_parser.set_defaults(handler=detect_batch)
 

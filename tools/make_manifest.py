@@ -36,12 +36,15 @@ def build_manifest(
     default_sample: str,
     default_position: str,
     reference_image: Path | None = None,
+    forced_split: str | None = None,
 ) -> dict:
     input_root = input_root.resolve()
     if not input_root.is_dir():
         raise ValueError(f"input root is not a directory: {input_root}")
     if expected_repeats <= 0:
         raise ValueError("expected repeats must be positive")
+    if forced_split is not None and forced_split not in DATASET_SPLITS:
+        raise ValueError(f"split must be one of {sorted(DATASET_SPLITS)}")
 
     paths = sorted(
         (path for path in input_root.rglob("*") if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES),
@@ -53,7 +56,8 @@ def build_manifest(
     groups: dict[tuple[str, str, str], list[Path]] = defaultdict(list)
     for path in paths:
         relative = path.relative_to(input_root)
-        groups[infer_group(relative, default_sample, default_position)].append(path)
+        sample_id, position, inferred_split = infer_group(relative, default_sample, default_position)
+        groups[(sample_id, position, forced_split or inferred_split)].append(path)
 
     images: list[dict] = []
     fingerprint = hashlib.sha256()
@@ -119,6 +123,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--default-sample", default="sample_1")
     parser.add_argument("--default-position", default="pos_1")
     parser.add_argument("--reference-image", type=Path)
+    parser.add_argument(
+        "--split",
+        choices=sorted(DATASET_SPLITS),
+        help="Force every discovered image into this split (useful when --input is already the split root).",
+    )
     return parser.parse_args()
 
 
@@ -133,6 +142,7 @@ def main() -> int:
             args.default_sample,
             args.default_position,
             args.reference_image,
+            args.split,
         )
         write_json(args.output, manifest)
     except (OSError, ValueError) as exc:

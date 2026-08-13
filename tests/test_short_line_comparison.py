@@ -14,6 +14,7 @@ from tools.compare_short_line_candidates import (
     main,
     preflight_comparison_inputs,
     summarize_comparisons,
+    validate_single_development_group,
 )
 from tools.make_manifest import build_manifest
 
@@ -48,7 +49,13 @@ def comparison_record(task_id: str, transition_19: str, transition_30: str) -> d
         "taskId": task_id,
         "technicalStatus": "compared",
         "input": {"relativePath": f"{task_id}.bmp", "sha256": "0" * 64, "width": 8, "height": 6},
-        "provenance": {"coreSourceSha256": "1" * 64, "candidateConfigSha256": "2" * 64},
+        "provenance": {
+            "coreSourceSha256": "1" * 64,
+            "candidateConfigSha256": "2" * 64,
+            "candidateReferenceMode": "desktop_core",
+            "candidateReferenceAnnotationSha256": None,
+            "candidateReferenceImageSha256": None,
+        },
         "baselineSchemaVersion": "a-end-face-result/2",
         "coreFeatureStatus": {
             "19": {"coreValid": transition_19 in {"both_valid", "regressed"}, "source": "test", "reason": None},
@@ -64,6 +71,32 @@ def comparison_record(task_id: str, transition_19: str, transition_30: str) -> d
 
 
 class ShortLineComparisonTests(unittest.TestCase):
+    def test_development_scope_requires_one_explicit_complete_twenty_frame_group(self) -> None:
+        manifest = {
+            "images": [
+                {
+                    "sampleId": "sample-dev",
+                    "position": "a2",
+                    "split": "development",
+                    "repeatIndex": index,
+                }
+                for index in range(1, 21)
+            ]
+        }
+        self.assertEqual(
+            {"sampleId": "sample-dev", "position": "a2", "imageCount": 20},
+            validate_single_development_group(manifest),
+        )
+        for mutate in (
+            lambda value: value["images"].pop(),
+            lambda value: value["images"][0].update(split="validation"),
+            lambda value: value["images"][0].update(sampleId="another-sample"),
+        ):
+            invalid = json.loads(json.dumps(manifest))
+            mutate(invalid)
+            with self.assertRaises(ComparisonInputError):
+                validate_single_development_group(invalid)
+
     def test_preflight_requires_exact_unique_manifest_task_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -143,6 +176,10 @@ class ShortLineComparisonTests(unittest.TestCase):
                         "candidateId": "reference-gradient-registration-v1",
                         "algorithmVersion": "1.0.0",
                         "configSha256": "2" * 64,
+                        "referenceMode": "desktop_core",
+                        "referenceSchemaVersion": None,
+                        "referenceAnnotationSha256": None,
+                        "referenceImageSha256": None,
                     }
 
                 def evaluate_image(self, *_args, **_kwargs):

@@ -71,6 +71,25 @@ class DataToolTests(unittest.TestCase):
             self.assertFalse(report["valid"])
             self.assertIn("SPLIT_LEAKAGE", {item["code"] for item in report["errors"]})
 
+    def test_manifest_can_force_development_split_when_input_is_the_split_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / "sample_dev" / "a2"
+            directory.mkdir(parents=True)
+            for index in range(1, 3):
+                Image.new("L", (8, 6), index).save(directory / f"image_{index:03d}.bmp")
+            manifest = build_manifest(
+                root,
+                "forced-development",
+                "a_end_face",
+                2,
+                "unused",
+                "unused",
+                forced_split="development",
+            )
+        self.assertEqual({"development"}, {item["split"] for item in manifest["images"]})
+        self.assertEqual({"sample_dev"}, {item["sampleId"] for item in manifest["images"]})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,7 +28,27 @@
         "coreSourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "candidateId": {"type": "string"},
         "candidateAlgorithmVersion": {"type": "string"},
-        "candidateConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "candidateConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "candidateReferenceMode": {"enum": ["desktop_core", "external_labelme"]},
+        "candidateReferenceSchemaVersion": {"type": ["string", "null"], "enum": ["a-end-face-labelme-short-line-reference/1", null]},
+        "candidateReferenceAnnotationSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "candidateReferenceImageSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "evaluationScope": {"enum": ["development_20", "unspecified"]},
+        "developmentGroup": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["sampleId", "position", "imageCount"],
+              "properties": {
+                "sampleId": {"type": "string", "minLength": 1},
+                "position": {"type": "string", "minLength": 1},
+                "imageCount": {"const": 20}
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
       },
       "additionalProperties": false
     },

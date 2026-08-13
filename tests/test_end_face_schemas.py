@@ -14,6 +14,8 @@ from tests.end_face_test_support import DEFAULT_CANDIDATE_CONFIG
 from tests.test_short_line_comparison import comparison_record
 from algorithms.end_face.contract import failure_result, success_result
 from algorithms.end_face.quality import evaluate_quality, load_quality_policy
+from algorithms.end_face.short_line_candidate import load_labelme_short_line_reference
+from tests.test_short_line_labelme_reference import write_labelme_reference
 from tools.compare_short_line_candidates import summarize_comparisons
 
 
@@ -29,6 +31,13 @@ class EndFaceSchemaTests(unittest.TestCase):
 
     def test_candidate_config_schema(self) -> None:
         self.validate("a-end-face-short-line-candidate-config.schema.json", DEFAULT_CANDIDATE_CONFIG)
+
+    def test_labelme_short_line_reference_catalog_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = load_labelme_short_line_reference(
+                write_labelme_reference(Path(temporary))
+            ).catalog()
+        self.validate("a-end-face-labelme-short-line-reference.schema.json", catalog)
 
     def test_result_v3_success_and_failure_schema(self) -> None:
         policy_path = ROOT / "config/end_face_quality.example.json"
