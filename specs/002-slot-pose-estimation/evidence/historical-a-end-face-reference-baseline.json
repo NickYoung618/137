@@ -1,0 +1,62 @@
+{
+  "baselineSchema": "historical-a-end-face-reference-baseline/1",
+  "createdAt": "2026-08-13",
+  "source": {
+    "path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py",
+    "sha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
+    "lines": 3051,
+    "readOnly": true
+  },
+  "annotation": {
+    "path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/annotation.json",
+    "sha256": "d949f779a309dc8d3741067e863aa8918aee103f60177dad7068f1e999302390"
+  },
+  "reference": {
+    "path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/reference.bmp",
+    "sha256": "cf8b4e0437f1e04fbd55782b1fb33e13c0693ecaf3a436786b2d38dd933053f0",
+    "shape": [3648, 5472]
+  },
+  "functions": [
+    {"name": "robust_fit_circle", "line": 372},
+    {"name": "object_bbox_center", "line": 740},
+    {"name": "polar_resample", "line": 841},
+    {"name": "find_outer_notch_angle", "line": 866},
+    {"name": "estimate_rotation_by_notch", "line": 935},
+    {"name": "estimate_rotation_by_polar", "line": 960},
+    {"name": "estimate_global_transform", "line": 1017},
+    {"name": "build_reference_model", "line": 1351},
+    {"name": "load_detection_gray", "line": 1883}
+  ],
+  "referenceModel": {
+    "shapeCount": 10,
+    "circleCount": 5,
+    "alignmentCenter": [2677.2582703455328, 1792.1856856049094],
+    "alignmentInnerRadiusPx": 1071.8427335961335,
+    "alignmentOuterRadiusPx": 1542.4577088193698,
+    "innerLabel": "��71",
+    "outerLabel": "��100",
+    "objectBboxCenter": [2681.0, 1792.0]
+  },
+  "polarResample": {
+    "shape": [240, 720],
+    "mean": 128.3627252859401,
+    "stddev": 75.16185607764854
+  },
+  "outerNotch": {
+    "angleRad": 4.314745917299744,
+    "angleDeg": 247.21673073257827,
+    "halfWidthRad": 0.20289452554434081,
+    "halfWidthDeg": 11.625,
+    "prominence": 121.53335343268986
+  },
+  "polarSelfRotation": {"rotationRad": 0.0, "rotationDeg": 0.0, "score": 26.814174635583868},
+  "notchSelfRotation": {"rotationRad": 0.0, "rotationDeg": 0.0, "prominence": 121.53335343268986},
+  "globalSelfTransform": {
+    "referenceCenter": [2677.2582703455328, 1792.1856856049094],
+    "targetCenter": [2681.38440743046, 1792.4004923300226],
+    "scale": 0.9993471464060485,
+    "rotationRad": 0.0,
+    "rotationDeg": 0.0,
+    "method": "circle-alignment center=(2681.384,1792.400), scale=0.99934715, rotation=0.00000deg, rotation_score=14.021, notch_check(Δ=-0.12deg, prom=121.5)"
+  }
+}

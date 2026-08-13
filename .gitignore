@@ -29,4 +29,11 @@ outputs/
 # Local or sensitive datasets
 data/raw/
 data/private/
+data/derived/
+data/cache/
 artifacts/
+reports/
+
+# Large local archives must stay outside the server repository
+*.rar
+*.zip

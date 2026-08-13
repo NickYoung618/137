@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-pose-annotation.schema.json",
+  "title": "A端面槽姿态真值标注",
+  "type": "object",
+  "required": ["schemaVersion", "imagePath", "imageSha256", "sampleId", "position", "repeatIndex", "face", "slotPolygon", "slotCenterline", "truthAngleDeg", "truthSource", "calibrationId", "split"],
+  "properties": {
+    "schemaVersion": {"const": "slot-pose-annotation/1"},
+    "imagePath": {"type": "string", "minLength": 1},
+    "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sampleId": {"type": "string", "minLength": 1},
+    "position": {"type": "string", "minLength": 1},
+    "repeatIndex": {"type": "integer", "minimum": 0},
+    "face": {"type": ["object", "null"]},
+    "slotPolygon": {"type": ["array", "null"]},
+    "slotCenterline": {"type": ["array", "null"]},
+    "truthAngleDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+    "truthSource": {"type": ["string", "null"]},
+    "calibrationId": {"type": ["string", "null"]},
+    "split": {"enum": ["development", "tuning", "validation", "acceptance"]}
+  }
+}

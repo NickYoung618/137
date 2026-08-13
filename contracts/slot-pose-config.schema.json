@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-pose-config.schema.json",
+  "title": "A端面槽姿态配置",
+  "type": "object",
+  "required": ["schema_version", "project", "config_id", "legacy_asset", "pose", "detector"],
+  "properties": {
+    "schema_version": {"const": "slot-pose-config/1"},
+    "project": {"const": "137-housing-slot-pose"},
+    "config_id": {"type": "string", "minLength": 1},
+    "legacy_asset": {
+      "type": "object",
+      "required": ["source_path", "source_sha256", "annotation_path", "annotation_sha256", "reference_path", "reference_sha256"],
+      "properties": {
+        "source_path": {"type": "string", "minLength": 1},
+        "source_sha256": {"$ref": "#/$defs/sha256"},
+        "annotation_path": {"type": "string", "minLength": 1},
+        "annotation_sha256": {"$ref": "#/$defs/sha256"},
+        "reference_path": {"type": "string", "minLength": 1},
+        "reference_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "pose": {
+      "type": "object",
+      "required": ["reference_frame", "target_frame", "mechanical_zero_image_deg", "positive_direction", "conventions_confirmed", "valid_range_deg", "production_plc_mapping_confirmed"],
+      "properties": {
+        "reference_frame": {"type": "string", "minLength": 1},
+        "target_frame": {"type": "string", "minLength": 1},
+        "mechanical_zero_image_deg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "positive_direction": {"type": ["string", "null"], "enum": ["cw", "ccw", null]},
+        "conventions_confirmed": {"type": "boolean"},
+        "valid_range_deg": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+        "production_plc_mapping_confirmed": {"type": "boolean"}
+      }
+    },
+    "detector": {
+      "type": "object",
+      "required": ["min_notch_prominence", "min_polar_score", "max_rotation_disagreement_deg", "min_scale", "max_scale"]
+    }
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

@@ -1,35 +1,64 @@
-# 槽姿态引导算法
+# 137壳体 A端面槽姿态引导算法
 
-本仓库用于开发槽特征识别、姿态估计与引导输出算法。
+本仓库已完成Spec Kit功能`002-slot-pose-estimation`的服务器MVP：复用历史A端面视觉核心，新增只读
+适配、角度契约、质量门控、fail-closed、合成回归、Manifest和评估工具。它不是另写的一套圆/极坐标/
+槽检测算法，也未修改孔2或`/home/ubuntu/disk/gyj`下任何文件。
 
-当前仅完成 Spec Kit 工程初始化和需求接收整理，尚未创建正式功能规格，也未选择传感器、
-技术栈或算法路线。
+## 复用代码与新写代码
 
-## 当前目标
+只读复用资产：
 
-根据现场传感器数据识别目标槽，并向下游设备提供可验证、带质量状态的姿态引导结果。
-“槽”“姿态”和“引导结果”的精确定义仍需在首个功能规格中确认。
+- `/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py`
+- SHA-256：`36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35`
+- 复用函数：`robust_fit_circle`、`object_bbox_center`、`polar_resample`、`find_outer_notch_angle`、
+  `estimate_rotation_by_notch`、`estimate_rotation_by_polar`、`estimate_global_transform`、
+  `build_reference_model`、`load_detection_gray`。
 
-## 启动正式规格前需要补齐
+本仓库新写部分：
 
-- 槽的类型、几何特征、尺寸范围、材质、表面状态及可能的遮挡或干扰。
-- 引导对象和业务流程，以及需要输出的自由度、方向、位置或轨迹信息。
-- 传感器类型、数据格式、分辨率、安装方式、视场、工作距离和采样频率。
-- 工件、相机/传感器、机器人/执行机构及工具坐标系的完整定义和标定链。
-- 姿态表示、长度/角度单位、变换方向、时间同步和输出接口契约。
-- 精度、重复性、成功率、延迟、节拍、失败处理及安全边界。
-- 代表性离线数据、标注规则、训练/验证/验收数据的隔离方式。
-- 目标运行平台、算力、操作系统、下游控制系统和部署限制。
+- `algorithms/slot_pose/legacy_adapter.py`：哈希校验、只读动态加载、既有函数编排、质量门控和角度换算。
+- `algorithms/slot_pose/contract.py`、`main.py`：v2结果契约、fail-closed和单图CLI。
+- `tools/generate_synthetic_slot_pose.py`、`evaluate_slot_pose.py`：小图回归和角度评估。
+- `tools/make_manifest.py`、`validate_dataset.py`、`evaluate_repeatability.py`：外置数据清单与重复性。
 
-## Spec Kit 工作流
+## 服务器快速验证
 
-项目已固定使用 Spec Kit `0.16.2`、Shell 脚本和 Codex Skills 集成：
+```bash
+cd '/home/ubuntu/disk/dzk/槽姿态引导算法'
+uv sync
+uv run python -m unittest discover -s tests -v
 
-1. 在本目录启动 Codex：`codex --cd '/home/ubuntu/disk/dzk/槽姿态引导算法'`。
-2. 输入和验收目标明确后用 `$speckit-specify` 创建首个功能规格。
-3. 存在歧义时运行 `$speckit-clarify`，评审通过后再运行 `$speckit-plan`。
-4. 使用 `$speckit-tasks` 拆分任务，并以 `$speckit-analyze` 检查文档一致性。
-5. 规格、方案和任务评审完成后，才使用 `$speckit-implement` 开始实现。
+uv run python tools/generate_synthetic_slot_pose.py \
+  --output-dir /tmp/slot-pose-synthetic --angles=0,30,90 --repeats 1 --seed 137
 
-项目研发原则见 [Constitution](.specify/memory/constitution.md)。首次创建正式规格后，文档将位于
-`specs/<编号>-<功能名>/`。
+uv run python algorithms/slot_pose/main.py \
+  --image /tmp/slot-pose-synthetic/synthetic/sample_synthetic/angle_pos_030p00/repeat_001.png \
+  --config /tmp/slot-pose-synthetic/synthetic-config.json \
+  --task-id synthetic-30 --out /tmp/slot-pose-synthetic/result.json --strict
+```
+
+已确认合成`+30°`冒烟输出约`+29.984°`。默认`config/inspection.example.json`故意保持机械语义未确认，
+对权威参考图返回`POSE_CONVENTION_UNCONFIRMED`、`valid=false`、正式角度`null`。
+
+Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正式规格、方案、任务和历史数值
+证据位于`specs/002-slot-pose-estimation/`。
+
+## Mac A2后续验证
+
+真实数据仍只在`/Users/daizekai/Desktop/壳体项目/A2.rar`，不上传服务器、不提交Git。同步本仓库到Mac后：
+
+1. 将配置的`legacy_asset`路径改为Mac同源源码、标注和参考图，并核对内容SHA-256。
+2. 在外置目录解压/流式读取A2，先生成Manifest，再补目标槽、机械真值、样品和split标注。
+3. 按样品隔离开发/调参/验证/验收；固定角度至少20次采集做静态重复性，至少2个换位组做动态重复性。
+4. 运行单图/批量结果与`tools/evaluate_slot_pose.py`，报告角度MAE/P95/max、成功/漏检/误检和节拍。
+
+## 生产阻塞（不能由算法默认值代替）
+
+- B-001 现场/机械负责人：确认目标槽是否就是历史`find_outer_notch_angle`检测的外缘缺口。
+- B-002 戴泽楷：确认A2与历史参考图是否同工位、同视角、同方向。
+- B-003 机械/机器人负责人：确认机械零位、正方向及图像到机械坐标映射。
+- B-004 质量负责人：确认角误差、重复性、成功率和节拍验收门限。
+- B-005 PLC/机器人工程师：确认字段、地址、缩放、握手、超时和失败动作。
+
+关闭顺序：B-001/B-002 → B-003 → 冻结Mac验证集 → B-004验收 → B-005上线。全部关闭前，本MVP
+只能用于离线诊断和验证，不能宣称生产可交付。
