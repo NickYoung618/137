@@ -1,7 +1,7 @@
 [project]
 name = "housing-inspection-a-end-face"
-version = "1.1.0"
-description = "Independent quality-aware JSON CLI around the preserved desktop A-end-face detector"
+version = "1.2.0"
+description = "Quality-aware A-end-face JSON CLI with an independently gated short-line candidate"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "numpy==2.4.4",

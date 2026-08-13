@@ -36,7 +36,7 @@ class EndFaceCliTests(unittest.TestCase):
             Image.new("L", (20, 16), 127).save(image)
             reference.write_bytes(b"reference")
             annotation.write_text(json.dumps({"imagePath": reference.name}), encoding="utf-8")
-            model = SimpleNamespace(reference_path=reference)
+            model = SimpleNamespace(reference_path=reference, shapes=[])
             measurements = {
                 "transform.target_center_x_px": 10.0,
                 "transform.target_center_y_px": 8.0,
@@ -51,9 +51,40 @@ class EndFaceCliTests(unittest.TestCase):
                 payload = run(image, annotation, task_id="cli-test")
         self.assertEqual("succeeded", payload["technicalStatus"])
         self.assertTrue(payload["result"]["valid"])
-        self.assertEqual("a-end-face-result/2", payload["schemaVersion"])
+        self.assertEqual("a-end-face-result/3", payload["schemaVersion"])
         self.assertIn("circle-alignment", payload["result"]["shiftMethod"])
         self.assertEqual(measurements, payload["result"]["measurements"])
+        self.assertEqual({}, payload["result"]["shortLineCandidates"])
+        self.assertEqual(
+            "reference-gradient-registration-v1",
+            payload["algorithm"]["shortLineCandidate"]["candidateId"],
+        )
+
+    def test_invalid_candidate_config_returns_structured_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = root / "target.bmp"
+            annotation = root / "annotation.json"
+            reference = root / "reference.bmp"
+            candidate_config = root / "candidate.json"
+            Image.new("L", (20, 16), 127).save(image)
+            reference.write_bytes(b"reference")
+            annotation.write_text(json.dumps({"imagePath": reference.name}), encoding="utf-8")
+            candidate_config.write_text(json.dumps({"schemaVersion": "unsupported"}), encoding="utf-8")
+            with patch(
+                "algorithms.end_face.adapter.core.build_reference_model",
+                return_value=SimpleNamespace(reference_path=reference, shapes=[]),
+            ):
+                payload = run(
+                    image,
+                    annotation,
+                    task_id="invalid-candidate-config",
+                    short_line_candidate_config=candidate_config,
+                )
+        self.assertEqual("failed", payload["technicalStatus"])
+        self.assertIsNone(payload["result"])
+        self.assertEqual("DETECTION_FAILED", payload["error"]["code"])
+        self.assertIn("candidate config", payload["error"]["message"])
 
     def test_missing_input_returns_structured_failure(self) -> None:
         payload = run(Path("missing-target.bmp"), Path("missing-annotation.json"), task_id="missing-input")
@@ -70,7 +101,7 @@ class EndFaceCliTests(unittest.TestCase):
             image.write_bytes(b"target")
             annotation.write_text("{}", encoding="utf-8")
             with patch("algorithms.end_face.main.run", return_value={
-                "schemaVersion": "a-end-face-result/2",
+                "schemaVersion": "a-end-face-result/3",
                 "technicalStatus": "succeeded",
                 "result": {"valid": True},
             }):
@@ -78,7 +109,7 @@ class EndFaceCliTests(unittest.TestCase):
                     "--image", str(image), "--annotation", str(annotation), "--output", str(output), "--strict"
                 ])
             self.assertEqual(0, exit_code)
-            self.assertEqual("a-end-face-result/2", json.loads(output.read_text(encoding="utf-8"))["schemaVersion"])
+            self.assertEqual("a-end-face-result/3", json.loads(output.read_text(encoding="utf-8"))["schemaVersion"])
 
     def test_script_help_is_independent(self) -> None:
         completed = subprocess.run(
@@ -92,6 +123,7 @@ class EndFaceCliTests(unittest.TestCase):
         self.assertIn("--annotation", completed.stdout)
         self.assertIn("--image", completed.stdout)
         self.assertIn("--quality-policy", completed.stdout)
+        self.assertIn("--short-line-candidate-config", completed.stdout)
 
 
 if __name__ == "__main__":

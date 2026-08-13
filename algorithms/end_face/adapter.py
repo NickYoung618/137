@@ -11,10 +11,17 @@ from algorithms.end_face import CORE_SOURCE_SHA256, core
 from algorithms.end_face.contract import failure_result, sha256_file, success_result
 from algorithms.end_face.quality import evaluate_quality, load_quality_policy
 from algorithms.end_face.quality import policy_sha256
+from algorithms.end_face.short_line_candidate import ShortLineCandidateEvaluator, load_candidate_config
 
 
 class EndFaceInspector:
-    def __init__(self, annotation: Path, quality_policy: Path, pixel_size: float = 1.0):
+    def __init__(
+        self,
+        annotation: Path,
+        quality_policy: Path,
+        pixel_size: float = 1.0,
+        short_line_candidate_config: Path | None = None,
+    ):
         self.annotation = annotation.resolve()
         self.quality_policy_path = quality_policy.resolve()
         if pixel_size <= 0:
@@ -35,6 +42,15 @@ class EndFaceInspector:
             }
         }
         self.reference_model = core.build_reference_model(self.annotation)
+        self.short_line_candidate: ShortLineCandidateEvaluator | None = None
+        if short_line_candidate_config is not None:
+            candidate_path = short_line_candidate_config.resolve()
+            candidate_config = load_candidate_config(candidate_path)
+            self.short_line_candidate = ShortLineCandidateEvaluator(
+                self.reference_model,
+                candidate_config,
+                candidate_path,
+            )
 
     def inspect(self, image: Path, task_id: str | None = None) -> dict:
         image = image.resolve()
@@ -52,6 +68,11 @@ class EndFaceInspector:
                 self.quality_policy,
                 self.quality_policy_path,
             )
+            short_line_candidates = (
+                self.short_line_candidate.evaluate_image(image, measurements, quality["featureQuality"])
+                if self.short_line_candidate is not None
+                else {}
+            )
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             return success_result(
                 task_id=resolved_task_id,
@@ -63,6 +84,10 @@ class EndFaceInspector:
                 shift_method=shift_method,
                 measurements=measurements,
                 quality=quality,
+                short_line_candidates=short_line_candidates,
+                candidate_provenance=(
+                    self.short_line_candidate.provenance if self.short_line_candidate is not None else None
+                ),
                 elapsed_ms=elapsed_ms,
             )
         except Exception as exc:
@@ -73,4 +98,7 @@ class EndFaceInspector:
                 error=exc,
                 elapsed_ms=(time.perf_counter() - started) * 1000.0,
                 quality=self.quality_provenance,
+                candidate_provenance=(
+                    self.short_line_candidate.provenance if self.short_line_candidate is not None else None
+                ),
             )

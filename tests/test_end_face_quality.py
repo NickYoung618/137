@@ -14,6 +14,7 @@ from algorithms.end_face.quality import diagnose_core_quality, evaluate_quality,
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/end_face_quality.example.json"
+CANDIDATE_PATH = ROOT / "config/end_face_short_line_candidate.v1.json"
 DESKTOP_ALGORITHM_ZIP = Path("/home/ubuntu/disk/zzx/算法/算法.zip")
 
 
@@ -113,11 +114,15 @@ class EndFaceQualityTests(unittest.TestCase):
                 for info in selected:
                     target = root / Path(info.filename).name
                     target.write_bytes(archive.read(info))
-            inspector = EndFaceInspector(root / "sample_1_label.json", POLICY_PATH)
+            inspector = EndFaceInspector(
+                root / "sample_1_label.json",
+                POLICY_PATH,
+                short_line_candidate_config=CANDIDATE_PATH,
+            )
             payload = inspector.inspect(root / "sample_1_reference.bmp", task_id="reference-quality-test")
 
         self.assertEqual("succeeded", payload["technicalStatus"])
-        self.assertEqual("a-end-face-result/2", payload["schemaVersion"])
+        self.assertEqual("a-end-face-result/3", payload["schemaVersion"])
         self.assertTrue(payload["result"]["localization"]["valid"])
         self.assertFalse(payload["result"]["measurementCompleteness"]["allValid"])
         invalid = payload["result"]["measurementCompleteness"]["invalidFeatures"]
@@ -130,6 +135,20 @@ class EndFaceQualityTests(unittest.TestCase):
         }
         self.assertTrue({"19", "30"}.issubset(canonical_invalid), canonical_invalid)
         self.assertEqual(CORE_SOURCE_SHA256, payload["algorithm"]["coreSourceSha256"])
+        candidates = payload["result"]["shortLineCandidates"]
+        canonical_candidates = {item["canonicalFeature"]: item for item in candidates.values()}
+        self.assertEqual({"19", "30"}, set(canonical_candidates))
+        for canonical in ("19", "30"):
+            comparison = canonical_candidates[canonical]
+            self.assertFalse(comparison["core"]["coreValid"])
+            self.assertEqual("short_line_lateral_edge_not_found", comparison["core"]["reason"])
+            self.assertIn("contrastP95P05", comparison["diagnostic"]["roi"])
+            self.assertIn("peak", comparison["diagnostic"]["coreSearch"])
+            self.assertIn("searchBounds", comparison["diagnostic"]["candidateSearch"])
+            self.assertEqual(
+                payload["result"]["featureQuality"][comparison["feature"]]["coreValid"],
+                comparison["core"]["coreValid"],
+            )
 
 
 if __name__ == "__main__":

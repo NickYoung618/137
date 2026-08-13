@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "a-end-face-result/2",
-  "title": "137 A-End-Face Inspection Result v2",
+  "$id": "a-end-face-result/3",
+  "title": "137 A-End-Face Inspection Result v3",
   "type": "object",
   "required": ["schemaVersion", "taskId", "technicalStatus", "execution", "input", "algorithm", "result", "error"],
   "properties": {
-    "schemaVersion": {"const": "a-end-face-result/2"},
+    "schemaVersion": {"const": "a-end-face-result/3"},
     "taskId": {"type": "string", "minLength": 1},
     "technicalStatus": {"enum": ["succeeded", "failed"]},
     "execution": {
@@ -17,10 +17,10 @@
     "input": {"type": "object"},
     "algorithm": {
       "type": "object",
-      "required": ["name", "version", "coreSourceSha256", "qualityPolicy"],
+      "required": ["name", "version", "coreSourceSha256", "qualityPolicy", "shortLineCandidate"],
       "properties": {
         "name": {"const": "desktop-a-end-face-core"},
-        "version": {"type": "string"},
+        "version": {"type": "string", "minLength": 1},
         "coreSourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "qualityPolicy": {
           "type": "object",
@@ -30,35 +30,108 @@
             "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
           },
           "additionalProperties": false
+        },
+        "shortLineCandidate": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["candidateId", "algorithmVersion", "configSha256", "configPath"],
+              "properties": {
+                "candidateId": {"const": "reference-gradient-registration-v1"},
+                "algorithmVersion": {"type": "string", "minLength": 1},
+                "configSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "configPath": {"type": ["string", "null"]}
+              },
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "additionalProperties": false
     },
-    "result": {
-      "oneOf": [
-        {"$ref": "#/$defs/successResult"},
-        {"type": "null"}
-      ]
-    },
+    "result": {"oneOf": [{"$ref": "#/$defs/successResult"}, {"type": "null"}]},
     "error": {
       "oneOf": [
         {"type": "null"},
         {
           "type": "object",
           "required": ["code", "message"],
-          "properties": {
-            "code": {"const": "DETECTION_FAILED"},
-            "message": {"type": "string"}
-          },
+          "properties": {"code": {"const": "DETECTION_FAILED"}, "message": {"type": "string"}},
           "additionalProperties": false
         }
       ]
     }
   },
   "$defs": {
+    "geometry": {
+      "type": "object",
+      "required": ["x1", "y1", "x2", "y2", "length", "angleDeg"],
+      "properties": {
+        "x1": {"type": "number"}, "y1": {"type": "number"},
+        "x2": {"type": "number"}, "y2": {"type": "number"},
+        "length": {"type": "number", "minimum": 0}, "angleDeg": {"type": "number"}
+      },
+      "additionalProperties": false
+    },
+    "featureComparison": {
+      "type": "object",
+      "required": ["feature", "canonicalFeature", "candidateId", "algorithmVersion", "configSha256", "core", "candidate", "diagnostic", "transition"],
+      "properties": {
+        "feature": {"type": "string", "minLength": 1},
+        "canonicalFeature": {"enum": ["19", "30"]},
+        "candidateId": {"const": "reference-gradient-registration-v1"},
+        "algorithmVersion": {"type": "string", "minLength": 1},
+        "configSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "core": {
+          "type": "object",
+          "required": ["coreValid", "source", "reason", "target", "reference", "fields"],
+          "properties": {
+            "coreValid": {"type": "boolean"},
+            "source": {"type": ["string", "null"]},
+            "reason": {"type": ["string", "null"]},
+            "target": {"oneOf": [{"$ref": "#/$defs/geometry"}, {"type": "null"}]},
+            "reference": {"oneOf": [{"$ref": "#/$defs/geometry"}, {"type": "null"}]},
+            "fields": {"type": "object"}
+          },
+          "additionalProperties": false
+        },
+        "candidate": {
+          "type": "object",
+          "required": ["candidateValid", "source", "target", "reference", "deltaFromCore", "elapsedMs"],
+          "properties": {
+            "candidateValid": {"type": "boolean"},
+            "source": {"const": "reference-gradient-registration-v1"},
+            "target": {"oneOf": [{"$ref": "#/$defs/geometry"}, {"type": "null"}]},
+            "reference": {"oneOf": [{"$ref": "#/$defs/geometry"}, {"type": "null"}]},
+            "deltaFromCore": {"type": ["object", "null"]},
+            "elapsedMs": {"type": "number", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "diagnostic": {
+          "type": "object",
+          "required": ["diagnosticVersion", "feature", "canonicalFeature", "roi", "coreSearch", "candidateSearch", "checks", "failedChecks", "failureCategories"],
+          "properties": {
+            "diagnosticVersion": {"const": "short-line-diagnostic/1"},
+            "feature": {"type": "string"},
+            "canonicalFeature": {"enum": ["19", "30"]},
+            "roi": {"type": "object"},
+            "coreSearch": {"type": "object"},
+            "candidateSearch": {"type": "object"},
+            "checks": {"type": "array", "items": {"type": "object"}},
+            "failedChecks": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "failureCategories": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+          },
+          "additionalProperties": false
+        },
+        "transition": {"enum": ["both_valid", "recovered", "regressed", "both_invalid"]}
+      },
+      "additionalProperties": false
+    },
     "successResult": {
       "type": "object",
-      "required": ["valid", "pixelSize", "shiftMethod", "localization", "measurementCompleteness", "featureQuality", "measurements"],
+      "required": ["valid", "pixelSize", "shiftMethod", "localization", "measurementCompleteness", "featureQuality", "measurements", "shortLineCandidates"],
       "properties": {
         "valid": {"type": "boolean"},
         "pixelSize": {"type": "number", "exclusiveMinimum": 0},
@@ -67,8 +140,7 @@
           "type": "object",
           "required": ["valid", "policyId", "policySha256", "policyPath", "checks", "failedChecks"],
           "properties": {
-            "valid": {"type": "boolean"},
-            "policyId": {"type": "string"},
+            "valid": {"type": "boolean"}, "policyId": {"type": "string"},
             "policySha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
             "policyPath": {"type": ["string", "null"]},
             "checks": {"type": "array", "items": {"type": "object"}},
@@ -80,10 +152,8 @@
           "type": "object",
           "required": ["allValid", "total", "validCount", "invalidCount", "invalidFeatures"],
           "properties": {
-            "allValid": {"type": "boolean"},
-            "total": {"type": "integer", "minimum": 0},
-            "validCount": {"type": "integer", "minimum": 0},
-            "invalidCount": {"type": "integer", "minimum": 0},
+            "allValid": {"type": "boolean"}, "total": {"type": "integer", "minimum": 0},
+            "validCount": {"type": "integer", "minimum": 0}, "invalidCount": {"type": "integer", "minimum": 0},
             "invalidFeatures": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
           },
           "additionalProperties": false
@@ -94,32 +164,23 @@
             "type": "object",
             "required": ["feature", "canonicalFeature", "classification", "coreValid", "source", "reason", "fields", "diagnostic"],
             "properties": {
-              "feature": {"type": "string"},
-              "canonicalFeature": {"type": "string", "minLength": 1},
+              "feature": {"type": "string"}, "canonicalFeature": {"type": "string", "minLength": 1},
               "classification": {"enum": ["feature_measurement", "localization_required"]},
-              "coreValid": {"type": "boolean"},
-              "source": {"type": ["string", "null"]},
-              "reason": {"type": ["string", "null"]},
-              "fields": {"type": "object"},
-              "diagnostic": {"type": "object"}
+              "coreValid": {"type": "boolean"}, "source": {"type": ["string", "null"]},
+              "reason": {"type": ["string", "null"]}, "fields": {"type": "object"}, "diagnostic": {"type": "object"}
             },
             "additionalProperties": false
           }
         },
-        "measurements": {"type": "object"}
+        "measurements": {"type": "object"},
+        "shortLineCandidates": {"type": "object", "additionalProperties": {"$ref": "#/$defs/featureComparison"}}
       },
       "additionalProperties": false
     }
   },
   "allOf": [
-    {
-      "if": {"properties": {"technicalStatus": {"const": "succeeded"}}},
-      "then": {"properties": {"result": {"$ref": "#/$defs/successResult"}, "error": {"type": "null"}}}
-    },
-    {
-      "if": {"properties": {"technicalStatus": {"const": "failed"}}},
-      "then": {"properties": {"result": {"type": "null"}, "error": {"type": "object"}}}
-    }
+    {"if": {"properties": {"technicalStatus": {"const": "succeeded"}}}, "then": {"properties": {"result": {"$ref": "#/$defs/successResult"}, "error": {"type": "null"}}}},
+    {"if": {"properties": {"technicalStatus": {"const": "failed"}}}, "then": {"properties": {"result": {"type": "null"}, "error": {"type": "object"}}}}
   ],
   "additionalProperties": false
 }

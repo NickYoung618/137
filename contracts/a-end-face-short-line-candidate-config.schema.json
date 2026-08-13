@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-short-line-candidate-config/1",
+  "title": "137 A-End-Face Short-Line Candidate Configuration v1",
+  "type": "object",
+  "required": ["schemaVersion", "candidateId", "algorithmVersion", "features", "template", "search", "gates"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-short-line-candidate-config/1"},
+    "candidateId": {"const": "reference-gradient-registration-v1"},
+    "algorithmVersion": {"type": "string", "minLength": 1},
+    "features": {"const": ["19", "30"]},
+    "template": {
+      "type": "object",
+      "required": ["alongExtensionPx", "halfWidthPx", "sampleStepPx"],
+      "properties": {
+        "alongExtensionPx": {"type": "number", "minimum": 0},
+        "halfWidthPx": {"type": "number", "exclusiveMinimum": 0},
+        "sampleStepPx": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "search": {
+      "type": "object",
+      "required": ["coarse", "fine"],
+      "properties": {
+        "coarse": {"$ref": "#/$defs/searchLevel"},
+        "fine": {"$ref": "#/$defs/searchLevel"}
+      },
+      "additionalProperties": false
+    },
+    "gates": {
+      "type": "object",
+      "required": ["minimumPredictionLengthPx", "maximumPredictionLengthPx", "minimumCoverageRatio", "minimumTemplateStd", "minimumRoiContrast", "minimumGradientP90", "minimumCorrelation", "minimumRobustZ", "minimumSeparatedPeakGap", "separationAngleDeg", "separationLongitudinalPx", "separationLateralPx", "maximumAngleCorrectionDeg"],
+      "properties": {
+        "minimumPredictionLengthPx": {"type": "number", "exclusiveMinimum": 0},
+        "maximumPredictionLengthPx": {"type": "number", "exclusiveMinimum": 0},
+        "minimumCoverageRatio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "minimumTemplateStd": {"type": "number", "minimum": 0},
+        "minimumRoiContrast": {"type": "number", "minimum": 0},
+        "minimumGradientP90": {"type": "number", "minimum": 0},
+        "minimumCorrelation": {"type": "number", "minimum": -1, "maximum": 1},
+        "minimumRobustZ": {"type": "number", "minimum": 0},
+        "minimumSeparatedPeakGap": {"type": "number", "minimum": 0},
+        "separationAngleDeg": {"type": "number", "minimum": 0},
+        "separationLongitudinalPx": {"type": "number", "minimum": 0},
+        "separationLateralPx": {"type": "number", "minimum": 0},
+        "maximumAngleCorrectionDeg": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "searchLevel": {
+      "type": "object",
+      "required": ["angleRadiusDeg", "angleStepDeg", "longitudinalRadiusPx", "longitudinalStepPx", "lateralRadiusPx", "lateralStepPx"],
+      "properties": {
+        "angleRadiusDeg": {"type": "number", "exclusiveMinimum": 0},
+        "angleStepDeg": {"type": "number", "exclusiveMinimum": 0},
+        "longitudinalRadiusPx": {"type": "number", "exclusiveMinimum": 0},
+        "longitudinalStepPx": {"type": "number", "exclusiveMinimum": 0},
+        "lateralRadiusPx": {"type": "number", "exclusiveMinimum": 0},
+        "lateralStepPx": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

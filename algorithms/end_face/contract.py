@@ -1,4 +1,4 @@
-"""Stable v2 JSON contract for one-image A-end-face inspection."""
+"""Stable v3 JSON contract for one-image A-end-face inspection."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from typing import Any
 from algorithms.end_face import CORE_SOURCE_SHA256
 
 
-SCHEMA_VERSION = "a-end-face-result/2"
+SCHEMA_VERSION = "a-end-face-result/3"
 ALGORITHM_NAME = "desktop-a-end-face-core"
-ALGORITHM_VERSION = "1.1.0"
+ALGORITHM_VERSION = "1.2.0"
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -39,7 +39,10 @@ def json_safe(value: Any) -> Any:
     return value
 
 
-def _algorithm(quality: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _algorithm(
+    quality: Mapping[str, Any] | None = None,
+    candidate_provenance: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     localization = quality.get("localization", {}) if isinstance(quality, Mapping) else {}
     return {
         "name": ALGORITHM_NAME,
@@ -49,6 +52,7 @@ def _algorithm(quality: Mapping[str, Any] | None = None) -> dict[str, Any]:
             "policyId": localization.get("policyId"),
             "sha256": localization.get("policySha256"),
         },
+        "shortLineCandidate": dict(candidate_provenance) if candidate_provenance is not None else None,
     }
 
 
@@ -63,6 +67,8 @@ def success_result(
     shift_method: str,
     measurements: Mapping[str, Any],
     quality: Mapping[str, Any],
+    short_line_candidates: Mapping[str, Any] | None = None,
+    candidate_provenance: Mapping[str, Any] | None = None,
     elapsed_ms: float,
 ) -> dict[str, Any]:
     localization = quality["localization"]
@@ -76,7 +82,7 @@ def success_result(
             "annotation": {"path": str(annotation.resolve()), "sha256": sha256_file(annotation)},
             "reference": {"path": str(reference.resolve()), "sha256": sha256_file(reference)},
         },
-        "algorithm": _algorithm(quality),
+        "algorithm": _algorithm(quality, candidate_provenance),
         "result": {
             "valid": bool(localization["valid"]),
             "pixelSize": pixel_size,
@@ -85,6 +91,7 @@ def success_result(
             "measurementCompleteness": quality["measurementCompleteness"],
             "featureQuality": quality["featureQuality"],
             "measurements": measurements,
+            "shortLineCandidates": dict(short_line_candidates or {}),
         },
         "error": None,
     }
@@ -101,6 +108,7 @@ def failure_result(
     error: Exception,
     elapsed_ms: float = 0.0,
     quality: Mapping[str, Any] | None = None,
+    candidate_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
         "schemaVersion": SCHEMA_VERSION,
@@ -111,7 +119,7 @@ def failure_result(
             "image": {"path": str(image.resolve())},
             "annotation": {"path": str(annotation.resolve())},
         },
-        "algorithm": _algorithm(quality),
+        "algorithm": _algorithm(quality, candidate_provenance),
         "result": None,
         "error": {"code": "DETECTION_FAILED", "message": str(error)},
     }
@@ -137,6 +145,7 @@ def validate_result(payload: Mapping[str, Any]) -> None:
         localization = result.get("localization")
         completeness = result.get("measurementCompleteness")
         feature_quality = result.get("featureQuality")
+        short_line_candidates = result.get("shortLineCandidates")
         if not isinstance(localization, Mapping) or not isinstance(localization.get("valid"), bool):
             raise ValueError("result.localization.valid is required")
         if result.get("valid") is not localization.get("valid"):
@@ -145,6 +154,8 @@ def validate_result(payload: Mapping[str, Any]) -> None:
             raise ValueError("result.measurementCompleteness.allValid is required")
         if not isinstance(feature_quality, Mapping) or not isinstance(result.get("measurements"), Mapping):
             raise ValueError("featureQuality and measurements are required")
+        if not isinstance(short_line_candidates, Mapping):
+            raise ValueError("result.shortLineCandidates is required")
         for label, feature in feature_quality.items():
             if (
                 not isinstance(feature, Mapping)
@@ -153,6 +164,26 @@ def validate_result(payload: Mapping[str, Any]) -> None:
                 or not isinstance(feature.get("coreValid"), bool)
             ):
                 raise ValueError("each featureQuality item requires matching feature, canonicalFeature and coreValid")
+        valid_transitions = {"both_valid", "recovered", "regressed", "both_invalid"}
+        for label, comparison in short_line_candidates.items():
+            if not isinstance(comparison, Mapping) or comparison.get("feature") != label:
+                raise ValueError("each short-line candidate requires a matching feature")
+            core_result = comparison.get("core")
+            candidate = comparison.get("candidate")
+            if not isinstance(core_result, Mapping) or not isinstance(core_result.get("coreValid"), bool):
+                raise ValueError("each short-line candidate requires core.coreValid")
+            if not isinstance(candidate, Mapping) or not isinstance(candidate.get("candidateValid"), bool):
+                raise ValueError("each short-line candidate requires candidate.candidateValid")
+            core_valid = core_result["coreValid"]
+            candidate_valid = candidate["candidateValid"]
+            expected = (
+                "both_valid" if core_valid and candidate_valid
+                else "recovered" if candidate_valid
+                else "regressed" if core_valid
+                else "both_invalid"
+            )
+            if comparison.get("transition") != expected or expected not in valid_transitions:
+                raise ValueError("short-line transition must match independent core/candidate states")
     elif status == "failed":
         error = payload.get("error")
         if payload.get("result") is not None or not isinstance(error, Mapping) or not error.get("code"):

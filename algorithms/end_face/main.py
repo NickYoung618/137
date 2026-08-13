@@ -18,6 +18,7 @@ from algorithms.end_face.contract import failure_result
 
 
 DEFAULT_QUALITY_POLICY = PROJECT_ROOT / "config/end_face_quality.example.json"
+DEFAULT_SHORT_LINE_CANDIDATE = PROJECT_ROOT / "config/end_face_short_line_candidate.v1.json"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -25,6 +26,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--annotation", required=True, type=Path, help="LabelMe JSON whose imagePath points to the reference image.")
     parser.add_argument("--image", required=True, type=Path, help="Target A-end-face image.")
     parser.add_argument("--quality-policy", type=Path, default=DEFAULT_QUALITY_POLICY, help="Versioned localization quality policy JSON.")
+    parser.add_argument(
+        "--short-line-candidate-config",
+        type=Path,
+        default=DEFAULT_SHORT_LINE_CANDIDATE,
+        help="Versioned core-external 19/30 candidate configuration JSON.",
+    )
     parser.add_argument("--output", default="-", help="Result JSON path, or '-' for stdout.")
     parser.add_argument("--pixel-size", type=float, default=1.0, help="Physical units per pixel; 1 keeps pixel units.")
     parser.add_argument("--task-id", help="Caller correlation id; defaults to the input image name.")
@@ -38,13 +45,19 @@ def run(
     pixel_size: float = 1.0,
     task_id: str | None = None,
     quality_policy: Path = DEFAULT_QUALITY_POLICY,
+    short_line_candidate_config: Path | None = DEFAULT_SHORT_LINE_CANDIDATE,
 ) -> dict:
     image = image.resolve()
     annotation = annotation.resolve()
     resolved_task_id = task_id or f"end-face:{image.stem}"
     started = time.perf_counter()
     try:
-        inspector = EndFaceInspector(annotation, quality_policy, pixel_size)
+        inspector = EndFaceInspector(
+            annotation,
+            quality_policy,
+            pixel_size,
+            short_line_candidate_config,
+        )
         return inspector.inspect(image, resolved_task_id)
     except Exception as exc:
         return failure_result(
@@ -59,7 +72,14 @@ def run(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        payload = run(args.image, args.annotation, args.pixel_size, args.task_id, args.quality_policy)
+        payload = run(
+            args.image,
+            args.annotation,
+            args.pixel_size,
+            args.task_id,
+            args.quality_policy,
+            args.short_line_candidate_config,
+        )
         content = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
         if args.output == "-":
             print(content, end="")

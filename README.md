@@ -7,8 +7,8 @@
 `algorithms/end_face/core.py` 原样来自桌面算法包
 `/home/ubuntu/disk/zzx/算法/算法.zip` 内的 `A端面/repeatability_evaluation.py`，
 SHA-256 为 `f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc`。
-本仓库没有重写圆、边缘、配准或量测逻辑；新增代码仅提供独立调用、质量分层、严格 JSON 契约、
-批量评估和来源追溯。
+权威核心没有被改写；新增代码提供独立调用、质量分层、严格 JSON 契约、批量评估，以及核心之外的
+19/30 参考梯度候选。候选有独立状态和失败保护，不会写回核心量测。
 
 LabelMe 标注、参考图、待测原图和压缩包均为外置资产，不提交 Git。
 
@@ -28,6 +28,7 @@ uv run python algorithms/end_face/main.py \
   --annotation /path/to/sample_1_label.json \
   --image /path/to/target.bmp \
   --quality-policy config/end_face_quality.example.json \
+  --short-line-candidate-config config/end_face_short_line_candidate.v1.json \
   --output /tmp/a-end-face-result.json \
   --task-id inspection-001 \
   --strict
@@ -37,7 +38,7 @@ uv run python algorithms/end_face/main.py \
 物理单位/像素比例时，核心才会增加物理量字段。JSON 中的非有限检测值统一写为 `null`，不会输出
 非标准 `NaN` 或 `Infinity`。
 
-当前契约为 `a-end-face-result/2`，三个状态不得混用：
+当前契约为 `a-end-face-result/3`，三个旧状态不得混用：
 
 - `technicalStatus`：检测程序是否执行完成；
 - `result.localization.valid`（同 `result.valid`）：端面中心、尺度、旋转和定位方法是否通过策略；
@@ -47,8 +48,13 @@ uv run python algorithms/end_face/main.py \
 19、30、46、M78、80、86 等特征测量失败当成端面定位失败；如现场确认某特征属于定位必要项，必须
 在新版本策略的 `requiredFeatureLabels` 中显式加入。
 
+v3 追加 `result.shortLineCandidates`：只为 19/30 保存核心基线、独立 `candidateValid`、候选几何、
+ROI/对比度/梯度/峰值/搜索边界诊断、失败检查和 `recovered/regressed` 对照状态。候选采用二维参考
+梯度联合配准，重新估计局部位置和方向；它不覆盖 `featureQuality`、`measurements`、定位状态或旧
+`measurementCompleteness`。
+
 接口契约见 `contracts/a-end-face-result.schema.json`，质量分层与批量评估的 Spec Kit 规格见
-`specs/004-quality-policy-batch/`。
+`specs/004-quality-policy-batch/`；短线候选增量规格见 `specs/005-short-line-candidate/`。
 
 ## 批量质量评估
 
@@ -60,11 +66,35 @@ uv run python tools/evaluate_end_face_batch.py detect \
   --data-root /external/A2 \
   --annotation /external/sample_1_label.json \
   --quality-policy config/end_face_quality.example.json \
+  --short-line-candidate-config config/end_face_short_line_candidate.v1.json \
   --output-dir outputs/a2-evaluation
 ```
 
 输出 `results.jsonl` 和 `quality-summary.json`。也可用 `summarize` 子命令只传逐图结果流，在无图片的
 服务器上重算技术成功率、定位率、测量完整率、耗时和逐特征来源/原因分布。
+
+## Mac 外置 A2 逐图候选比较
+
+既有 v2 `results.jsonl` 可直接作为不可改写基线；工具会先完整验证 Manifest 图片属性/SHA-256 和
+`imageId/taskId` 一一对应，再读取图片运行候选：
+
+```bash
+uv run python tools/compare_short_line_candidates.py compare \
+  --manifest "$HOME/Desktop/壳体项目/137/a2-manifest.json" \
+  --data-root "$HOME/Desktop/壳体项目/137/A2" \
+  --annotation "/path/to/sample_1_label.json" \
+  --results-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-v2-first-25/results.jsonl" \
+  --candidate-config config/end_face_short_line_candidate.v1.json \
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-v1-first-25"
+```
+
+输出 `short-line-comparison.jsonl` 和 `short-line-summary.json`。无图重统计：
+
+```bash
+uv run python tools/compare_short_line_candidates.py summarize \
+  --comparison-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-v1-first-25/short-line-comparison.jsonl" \
+  --output "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-v1-first-25/short-line-summary-recomputed.json"
+```
 
 ## 数据边界
 

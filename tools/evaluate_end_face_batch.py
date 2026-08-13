@@ -24,6 +24,7 @@ from tools.validate_dataset import validate_manifest
 
 BATCH_SCHEMA_VERSION = "a-end-face-batch-quality-summary/1"
 DEFAULT_POLICY = PROJECT_ROOT / "config/end_face_quality.example.json"
+DEFAULT_CANDIDATE = PROJECT_ROOT / "config/end_face_short_line_candidate.v1.json"
 
 
 class BatchInputError(ValueError):
@@ -181,7 +182,12 @@ def detect_batch(args: argparse.Namespace) -> int:
     manifest_path = args.manifest.resolve()
     data_root = args.data_root.resolve()
     manifest = load_validated_manifest(manifest_path, data_root)
-    inspector = EndFaceInspector(args.annotation, args.quality_policy, args.pixel_size)
+    inspector = EndFaceInspector(
+        args.annotation,
+        args.quality_policy,
+        args.pixel_size,
+        args.short_line_candidate_config,
+    )
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "results.jsonl"
@@ -233,6 +239,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     detect_parser.add_argument("--annotation", required=True, type=Path)
     detect_parser.add_argument("--quality-policy", type=Path, default=DEFAULT_POLICY)
     detect_parser.add_argument("--pixel-size", type=float, default=1.0)
+    detect_parser.add_argument("--short-line-candidate-config", type=Path, default=DEFAULT_CANDIDATE)
     detect_parser.add_argument("--output-dir", required=True, type=Path)
     detect_parser.set_defaults(handler=detect_batch)
 

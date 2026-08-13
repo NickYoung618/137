@@ -75,6 +75,53 @@ class EndFaceContractTests(unittest.TestCase):
         self.assertIsNone(payload["result"])
         self.assertEqual("DETECTION_FAILED", payload["error"]["code"])
 
+    def test_v3_candidate_transition_cannot_contradict_independent_states(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = root / "target.bin"
+            annotation = root / "annotation.json"
+            reference = root / "reference.bin"
+            image.write_bytes(b"image")
+            annotation.write_text("{}", encoding="utf-8")
+            reference.write_bytes(b"reference")
+            measurements = {
+                "transform.target_center_x_px": 4.0,
+                "transform.target_center_y_px": 3.0,
+                "transform.scale": 1.0,
+                "transform.rotation_deg": 0.0,
+            }
+            quality = evaluate_quality(
+                measurements,
+                "circle-alignment rotation_score=10.0, notch_check(Δ=0deg, prom=20.0)",
+                (8, 6),
+                load_quality_policy(POLICY_PATH),
+                POLICY_PATH,
+            )
+            payload = success_result(
+                task_id="candidate-transition",
+                image=image,
+                image_info={"bytes": 5, "sha256": "0" * 64, "format": "BIN", "width": 8, "height": 6, "mode": "L"},
+                annotation=annotation,
+                reference=reference,
+                pixel_size=1.0,
+                shift_method="circle-alignment rotation_score=10.0, notch_check(Δ=0deg, prom=20.0)",
+                measurements=measurements,
+                quality=quality,
+                short_line_candidates={
+                    "19��": {
+                        "feature": "19��",
+                        "core": {"coreValid": False},
+                        "candidate": {"candidateValid": True},
+                        "transition": "recovered",
+                    }
+                },
+                elapsed_ms=1.0,
+            )
+        validate_result(payload)
+        payload["result"]["shortLineCandidates"]["19��"]["transition"] = "both_invalid"
+        with self.assertRaises(ValueError):
+            validate_result(payload)
+
 
 if __name__ == "__main__":
     unittest.main()
