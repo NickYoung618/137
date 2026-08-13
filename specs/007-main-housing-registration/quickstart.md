@@ -1,37 +1,40 @@
 # Quickstart: Main Housing Registration v2
 
-## Verify the pinned anchor
+Feature 008 withdrew the earlier A2 endpoint annotation. Do not run a
+short-line acceptance comparison until a corrected LabelMe file has been
+manually verified. Registration itself is annotation-independent.
+
+## Run one registration diagnostic
 
 ```bash
-.venv/bin/python tools/inspect_short_line_labelme.py \
-  --labelme /home/ubuntu/disk/dzk/a2-labelme-development-20/a2-short-lines.json
-```
-
-## Run the representative anchor
-
-```bash
-.venv/bin/python algorithms/end_face/main.py \
-  --annotation /path/to/desktop/sample_1_label.json \
-  --image /home/ubuntu/disk/dzk/a2-labelme-development-20/representative.bmp \
-  --short-line-candidate-config config/end_face_short_line_candidate.v2.json \
-  --short-line-labelme-reference /home/ubuntu/disk/dzk/a2-labelme-development-20/a2-short-lines.json \
-  --output /tmp/a2-anchor-v2.json
-```
-
-This is an anchor result, not evidence for 25-frame improvement.
-
-## Mac external 25-frame comparison
-
-```bash
-.venv/bin/python tools/compare_short_line_candidates.py compare \
-  --manifest '/Users/daizekai/Desktop/壳体项目/137/manifests/a2-first-25.json' \
-  --data-root '/Users/daizekai/Desktop/壳体项目/A2-extracted' \
-  --annotation '/Users/daizekai/Desktop/算法/sample_1_label.json' \
-  --results-jsonl '/Users/daizekai/Desktop/壳体项目/137/outputs/a2-v2-first-25/results.jsonl' \
+.venv/bin/python tools/diagnose_main_housing_registration.py single \
+  --reference-image /external/A2/reference/representative.bmp \
+  --target-image /external/A2/targets/frame-001.bmp \
   --candidate-config config/end_face_short_line_candidate.v2.json \
-  --short-line-labelme-reference '/Users/daizekai/Desktop/壳体项目/137/a2-labelme-development-20/a2-short-lines.json' \
-  --output-dir '/Users/daizekai/Desktop/壳体项目/137/outputs/a2-v3-first-25'
+  --output /external/A2/outputs/frame-001-registration.json
 ```
 
-Adjust only external paths to match the Mac checkout and manifest. Do not copy
-the images or generated JSONL into the repository.
+The JSON contains only reference/target provenance, housing hypotheses,
+center/scale/angle registration and gates. It has no measurement or recovery
+status.
+
+## Run the external Mac Manifest
+
+```bash
+.venv/bin/python tools/diagnose_main_housing_registration.py batch \
+  --reference-image "$HOME/Desktop/壳体项目/137/a2-labelme-development-20/representative.bmp" \
+  --manifest "$HOME/Desktop/壳体项目/137/manifests/a2-first-25.json" \
+  --data-root "$HOME/Desktop/壳体项目/A2-extracted" \
+  --candidate-config config/end_face_short_line_candidate.v2.json \
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-registration-v2-first-25"
+```
+
+Images and generated JSON/JSONL remain outside Git.
+
+## Deferred corrected-truth comparison
+
+The existing comparison CLI remains fail-closed, but its
+`--short-line-labelme-reference` argument must point to a future
+`<CORRECTED_AND_MANUALLY_VERIFIED_A2_LABELME.json>`. Do not substitute old core
+predictions or the withdrawn annotation. Only a complete Mac run may support a
+25-frame short-line claim.

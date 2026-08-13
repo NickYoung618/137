@@ -35,6 +35,10 @@ CANDIDATE_SOURCE_V2 = "main-housing-registration-v2"
 CANDIDATE_SOURCES = {CANDIDATE_SOURCE, CANDIDATE_SOURCE_V2}
 SUPPORTED_FEATURES = {"19", "30"}
 LABELME_REFERENCE_SCHEMA_VERSION = "a-end-face-labelme-short-line-reference/1"
+REVOKED_LABELME_REFERENCE_SHA256 = {
+    "a175dd831fbc94913f9b9c69a04f81b0be7b58c0355118551c4447b967b3271c":
+        "a2_short_line_endpoints_not_snapped_to_step_boundaries",
+}
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,13 @@ def load_labelme_short_line_reference(path: Path) -> LabelMeShortLineReference:
     annotation_path = path.resolve()
     if not annotation_path.is_file():
         raise ValueError(f"short-line LabelMe annotation does not exist: {annotation_path}")
+    annotation_sha256 = _sha256_file(annotation_path)
+    revoked_reason = REVOKED_LABELME_REFERENCE_SHA256.get(annotation_sha256)
+    if revoked_reason is not None:
+        raise ValueError(
+            "short-line LabelMe reference is revoked and cannot be used as truth, tuning, template, "
+            f"or acceptance input (sha256={annotation_sha256}, reason={revoked_reason})"
+        )
     try:
         annotation = core.read_labelme(annotation_path)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -185,7 +196,7 @@ def load_labelme_short_line_reference(path: Path) -> LabelMeShortLineReference:
         raise ValueError(f"short-line LabelMe annotation is missing canonical features: {missing}")
     return LabelMeShortLineReference(
         annotation_path=annotation_path,
-        annotation_sha256=_sha256_file(annotation_path),
+        annotation_sha256=annotation_sha256,
         image_path=image_path,
         image_sha256=_sha256_file(image_path),
         width=actual_width,
@@ -648,10 +659,6 @@ class ShortLineCandidateEvaluator:
                 )
             self.main_housing_registrar = MainHousingRegistrar(
                 self.labelme_reference.reference_gray,
-                {
-                    canonical: model.points
-                    for canonical, model in self.labelme_reference.models.items()
-                },
                 self.config["registration"],
             )
         self.template_models = (

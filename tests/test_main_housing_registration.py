@@ -15,7 +15,6 @@ from algorithms.end_face.main_housing_registration import MainHousingRegistrar
 from algorithms.end_face.short_line_candidate import (
     ShortLineCandidateEvaluator,
     load_candidate_config,
-    load_labelme_short_line_reference,
 )
 
 
@@ -32,8 +31,7 @@ REGISTRATION_CONFIG = {
     "maximumCircularResidualRatio": 0.035,
     "minimumScale": 0.75,
     "maximumScale": 1.25,
-    "minimumAnchorRadiusRatio": 0.55,
-    "maximumAnchorRadiusRatio": 0.98,
+    "minimumReferenceRadiusMarginRatio": 0.15,
     "angularSamples": 360,
     "radialSamples": 72,
     "minimumRotationScore": 0.20,
@@ -79,11 +77,7 @@ def housing_image(
 class MainHousingRegistrationTests(unittest.TestCase):
     def test_selects_main_instance_instead_of_smaller_neighbor(self) -> None:
         reference = housing_image((190.0, 210.0), 140.0)
-        lines = {
-            "19": ((68.0, 205.0), (102.0, 205.0)),
-            "30": ((84.0, 244.0), (110.0, 244.0)),
-        }
-        registrar = MainHousingRegistrar(reference, lines, REGISTRATION_CONFIG)
+        registrar = MainHousingRegistrar(reference, REGISTRATION_CONFIG)
         target = housing_image(
             (245.0, 205.0),
             140.0,
@@ -99,11 +93,7 @@ class MainHousingRegistrationTests(unittest.TestCase):
 
     def test_recovers_nonzero_scale_and_rotation(self) -> None:
         reference = housing_image((190.0, 210.0), 140.0)
-        lines = {
-            "19": ((68.0, 205.0), (102.0, 205.0)),
-            "30": ((84.0, 244.0), (110.0, 244.0)),
-        }
-        registrar = MainHousingRegistrar(reference, lines, REGISTRATION_CONFIG)
+        registrar = MainHousingRegistrar(reference, REGISTRATION_CONFIG)
         target = housing_image(
             (270.0, 205.0),
             154.0,
@@ -120,11 +110,7 @@ class MainHousingRegistrationTests(unittest.TestCase):
 
     def test_blank_and_ambiguous_targets_fail_closed(self) -> None:
         reference = housing_image((190.0, 210.0), 140.0)
-        lines = {
-            "19": ((68.0, 205.0), (102.0, 205.0)),
-            "30": ((84.0, 244.0), (110.0, 244.0)),
-        }
-        registrar = MainHousingRegistrar(reference, lines, REGISTRATION_CONFIG)
+        registrar = MainHousingRegistrar(reference, REGISTRATION_CONFIG)
         blank = registrar.register(np.zeros_like(reference))
         self.assertFalse(blank.valid)
         self.assertIsNotNone(blank.failure_reason)
@@ -138,6 +124,16 @@ class MainHousingRegistrationTests(unittest.TestCase):
         result = registrar.register(np.asarray(ambiguous, dtype=np.float64))
         self.assertFalse(result.valid, result.to_dict())
         self.assertEqual("instance_ambiguous", result.failure_reason)
+
+    def test_ambiguous_reference_instances_are_rejected_without_annotations(self) -> None:
+        reference = housing_image(
+            (190.0, 210.0),
+            140.0,
+            size=(760, 420),
+            neighbors=((570.0, 210.0, 140.0),),
+        )
+        with self.assertRaisesRegex(ValueError, "reference instance ambiguous"):
+            MainHousingRegistrar(reference, REGISTRATION_CONFIG)
 
     def test_v2_projection_ignores_wrong_legacy_short_line_geometry(self) -> None:
         reference_pixels = housing_image((190.0, 210.0), 140.0)
@@ -234,29 +230,6 @@ class MainHousingRegistrationTests(unittest.TestCase):
         model = SimpleNamespace(shapes=[], reference_grad=np.zeros((16, 16)), alignment_center=(8.0, 8.0))
         with self.assertRaisesRegex(ValueError, "blocked without an external"):
             ShortLineCandidateEvaluator(model, config)
-
-    @unittest.skipUnless(
-        Path("/home/ubuntu/disk/dzk/a2-labelme-development-20/a2-short-lines.json").is_file()
-        and Path("/home/ubuntu/disk/dzk/a2-labelme-development-20/representative.bmp").is_file(),
-        "external A2 anchor is not available",
-    )
-    def test_external_a2_representative_is_a_stable_self_anchor(self) -> None:
-        reference = load_labelme_short_line_reference(
-            Path("/home/ubuntu/disk/dzk/a2-labelme-development-20/a2-short-lines.json")
-        )
-        lines = {key: model.points for key, model in reference.models.items()}
-        registrar = MainHousingRegistrar(reference.reference_gray, lines, REGISTRATION_CONFIG)
-        result = registrar.register(reference.reference_gray)
-
-        self.assertTrue(result.valid, result.to_dict())
-        self.assertAlmostEqual(1.0, result.scale, delta=0.01)
-        self.assertAlmostEqual(0.0, result.rotation_deg, delta=0.5)
-        for label, points in lines.items():
-            projected = result.project_points(points)
-            for expected, observed in zip(points, projected, strict=True):
-                self.assertAlmostEqual(expected[0], observed[0], delta=2.0, msg=label)
-                self.assertAlmostEqual(expected[1], observed[1], delta=2.0, msg=label)
-
 
 if __name__ == "__main__":
     unittest.main()

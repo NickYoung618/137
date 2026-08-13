@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-main-housing-registration-diagnostic/1",
+  "title": "137 A-End-Face Main-Housing Registration Diagnostic",
+  "type": "object",
+  "required": ["schemaVersion", "technicalStatus", "input", "algorithm", "registration", "error"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-main-housing-registration-diagnostic/1"},
+    "technicalStatus": {"enum": ["succeeded", "failed"]},
+    "input": {
+      "type": "object",
+      "required": ["referenceImage", "targetImage"],
+      "properties": {
+        "referenceImage": {"$ref": "#/$defs/image"},
+        "targetImage": {"$ref": "#/$defs/imageInput"},
+        "imageId": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "algorithm": {"$ref": "#/$defs/algorithm"},
+    "registration": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/registration"}
+      ]
+    },
+    "error": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": {"const": "REGISTRATION_DIAGNOSTIC_FAILED"},
+            "message": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "object",
+      "required": ["path", "bytes", "sha256", "format", "width", "height", "mode"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "format": {"type": "string", "minLength": 1},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "mode": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "imageInput": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "format": {"type": "string", "minLength": 1},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "mode": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "algorithm": {
+      "type": "object",
+      "required": ["registrationVersion", "coreSourceSha256", "candidateConfigPath", "candidateConfigSha256"],
+      "properties": {
+        "registrationVersion": {"const": "main-housing-registration/2"},
+        "coreSourceSha256": {"const": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc"},
+        "candidateConfigPath": {"type": "string", "minLength": 1},
+        "candidateConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "registration": {
+      "type": "object",
+      "required": ["registrationVersion", "valid", "failureReason", "reference", "hypotheses", "selectedIndex", "runnerUpIndex", "selectionMargin", "transform", "rotationScore", "rotationSecondScore", "rotationMargin", "checks"],
+      "properties": {
+        "registrationVersion": {"const": "main-housing-registration/2"},
+        "valid": {"type": "boolean"},
+        "failureReason": {"type": ["string", "null"]},
+        "reference": {
+          "type": "object",
+          "required": ["centerPx", "radiusPx", "selection"],
+          "properties": {
+            "centerPx": {"$ref": "#/$defs/point"},
+            "radiusPx": {"type": "number", "exclusiveMinimum": 0},
+            "selection": {"type": "object"}
+          },
+          "additionalProperties": false
+        },
+        "hypotheses": {"type": "array", "items": {"type": "object"}},
+        "selectedIndex": {"type": ["integer", "null"], "minimum": 0},
+        "runnerUpIndex": {"type": ["integer", "null"], "minimum": 0},
+        "selectionMargin": {"type": ["number", "null"]},
+        "transform": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["referenceCenterPx", "targetCenterPx", "scale", "rotationDeg", "method"],
+              "properties": {
+                "referenceCenterPx": {"$ref": "#/$defs/point"},
+                "targetCenterPx": {"$ref": "#/$defs/point"},
+                "scale": {"type": "number", "exclusiveMinimum": 0},
+                "rotationDeg": {"type": "number"},
+                "method": {"const": "main-housing-registration/2"}
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "rotationScore": {"type": ["number", "null"]},
+        "rotationSecondScore": {"type": ["number", "null"]},
+        "rotationMargin": {"type": ["number", "null"]},
+        "checks": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "point": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"technicalStatus": {"const": "succeeded"}}},
+      "then": {
+        "properties": {
+          "input": {
+            "properties": {
+              "targetImage": {"$ref": "#/$defs/image"}
+            }
+          },
+          "registration": {"$ref": "#/$defs/registration"},
+          "error": {"type": "null"}
+        }
+      },
+      "else": {
+        "properties": {
+          "registration": {"type": "null"},
+          "error": {"type": "object"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
 
+from algorithms.end_face import short_line_candidate as short_line_module
 from algorithms.end_face.short_line_candidate import (
     LABELME_REFERENCE_SCHEMA_VERSION,
     ShortLineCandidateEvaluator,
@@ -45,6 +49,32 @@ def write_labelme_reference(
 
 
 class ShortLineLabelMeReferenceTests(unittest.TestCase):
+    def test_revoked_annotation_fingerprint_is_rejected_before_use(self) -> None:
+        revoked_sha = "a175dd831fbc94913f9b9c69a04f81b0be7b58c0355118551c4447b967b3271c"
+        with tempfile.TemporaryDirectory() as temporary:
+            annotation = write_labelme_reference(Path(temporary))
+            annotation_resolved = annotation.resolve()
+            real_sha = short_line_module._sha256_file
+
+            def fingerprint(path: Path, chunk_size: int = 1024 * 1024) -> str:
+                if path.resolve() == annotation_resolved:
+                    return revoked_sha
+                return real_sha(path, chunk_size)
+
+            with patch.object(short_line_module, "_sha256_file", side_effect=fingerprint):
+                with self.assertRaisesRegex(ValueError, "revoked"):
+                    load_labelme_short_line_reference(annotation)
+                with redirect_stderr(io.StringIO()) as stderr:
+                    self.assertEqual(2, inspect_main(["--annotation", str(annotation)]))
+                self.assertIn("revoked", stderr.getvalue())
+                model, _, _, _ = synthetic_candidate_case()
+                with self.assertRaisesRegex(ValueError, "revoked"):
+                    ShortLineCandidateEvaluator(
+                        model,
+                        DEFAULT_CANDIDATE_CONFIG,
+                        labelme_reference_path=annotation,
+                    )
+
     def test_valid_reference_catalog_is_image_free_and_hash_traceable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

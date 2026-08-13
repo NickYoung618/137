@@ -1,9 +1,9 @@
 """Core-external main-housing instance selection and similarity registration.
 
-The legacy detector remains authoritative for its own measurements.  This
-module deliberately accepts only an image and an external 19/30 reference; it
-has no input for legacy target endpoints, so they cannot accidentally become a
-search seed.
+The legacy detector remains authoritative for its own measurements. This
+module deliberately accepts only reference and target images. It has no input
+for 19/30 labels or endpoints, so neither legacy predictions nor a measurement
+annotation can accidentally become a registration seed.
 """
 
 from __future__ import annotations
@@ -52,8 +52,7 @@ def validate_registration_config(config: Mapping[str, Any]) -> None:
         "maximumCircularResidualRatio",
         "minimumScale",
         "maximumScale",
-        "minimumAnchorRadiusRatio",
-        "maximumAnchorRadiusRatio",
+        "minimumReferenceRadiusMarginRatio",
         "angularSamples",
         "radialSamples",
         "minimumRotationScore",
@@ -77,13 +76,14 @@ def validate_registration_config(config: Mapping[str, Any]) -> None:
     ordered_pairs = (
         ("minimumComponentFillRatio", "maximumComponentFillRatio"),
         ("minimumScale", "maximumScale"),
-        ("minimumAnchorRadiusRatio", "maximumAnchorRadiusRatio"),
     )
     for lower, upper in ordered_pairs:
         if not 0.0 <= float(config[lower]) < float(config[upper]):
             raise ValueError(f"registration {lower}/{upper} must be ordered and non-negative")
     if float(config["minimumScale"]) <= 0.0:
         raise ValueError("registration.minimumScale must be positive")
+    if not 0.0 <= float(config["minimumReferenceRadiusMarginRatio"]) < 1.0:
+        raise ValueError("registration.minimumReferenceRadiusMarginRatio must be in [0, 1)")
     for name in (
         "maximumAspectError",
         "minimumEdgeCoverageRatio",
@@ -154,6 +154,7 @@ class RegistrationResult:
     reference_center: tuple[float, float]
     reference_radius: float
     hypotheses: list[HousingHypothesis]
+    reference_selection: dict[str, Any] = field(default_factory=dict)
     selected_index: int | None = None
     runner_up_index: int | None = None
     selection_margin: float | None = None
@@ -213,6 +214,7 @@ class RegistrationResult:
             "reference": {
                 "centerPx": list(self.reference_center),
                 "radiusPx": self.reference_radius,
+                "selection": self.reference_selection,
             },
             "hypotheses": [hypothesis.to_dict() for hypothesis in self.hypotheses],
             "selectedIndex": self.selected_index,
@@ -296,46 +298,50 @@ def _estimate_rotation(
 
 
 class MainHousingRegistrar:
-    """Register an external short-line reference to an independently selected target instance."""
+    """Register an image-only reference to an independently selected target instance."""
 
     def __init__(
         self,
         reference_gray: np.ndarray,
-        reference_lines: Mapping[str, Sequence[Sequence[float]]],
         config: Mapping[str, Any],
     ):
         validate_registration_config(config)
         reference = np.asarray(reference_gray, dtype=np.float64)
         if reference.ndim != 2 or not reference.size:
             raise ValueError("main-housing reference must be a non-empty grayscale image")
-        if set(reference_lines) != {"19", "30"}:
-            raise ValueError("main-housing reference requires canonical 19 and 30 lines")
         self.reference_gray = reference
-        self.reference_lines = {
-            label: tuple((float(point[0]), float(point[1])) for point in points)
-            for label, points in reference_lines.items()
-        }
         self.config = dict(config)
-        reference_hypotheses = self._enumerate(reference)
-        anchored: list[HousingHypothesis] = []
-        minimum_ratio = float(config["minimumAnchorRadiusRatio"])
-        maximum_ratio = float(config["maximumAnchorRadiusRatio"])
-        for hypothesis in reference_hypotheses:
-            if not all(gate["passed"] for gate in hypothesis.gates):
-                continue
-            ratios = []
-            for points in self.reference_lines.values():
-                midpoint = np.mean(np.asarray(points, dtype=np.float64), axis=0)
-                ratios.append(float(np.linalg.norm(midpoint - np.asarray(hypothesis.center))) / hypothesis.radius)
-            if all(minimum_ratio <= ratio <= maximum_ratio for ratio in ratios):
-                anchored.append(hypothesis)
-        if not anchored:
-            raise ValueError("external 19/30 lines do not identify a supported main-housing instance")
-        anchored.sort(
-            key=lambda item: (item.radius, item.edge_coverage_ratio, -item.circular_residual_ratio),
-            reverse=True,
+        supported = [
+            hypothesis
+            for hypothesis in self._enumerate(reference)
+            if all(gate["passed"] for gate in hypothesis.gates)
+        ]
+        supported.sort(key=lambda item: item.radius, reverse=True)
+        if not supported:
+            raise ValueError("reference image has no supported main-housing instance")
+        selected = supported[0]
+        runner = supported[1] if len(supported) > 1 else None
+        radius_margin_ratio = (
+            (selected.radius - runner.radius) / selected.radius
+            if runner is not None and selected.radius > 0
+            else 1.0
         )
-        self.reference_hypothesis = anchored[0]
+        minimum_margin = float(config["minimumReferenceRadiusMarginRatio"])
+        if radius_margin_ratio < minimum_margin:
+            raise ValueError(
+                "reference instance ambiguous: dominant radius margin "
+                f"{radius_margin_ratio:.6f} is below {minimum_margin:.6f}"
+            )
+        self.reference_hypothesis = selected
+        self.reference_selection = {
+            "hypothesisCount": len(supported),
+            "selectedComponentIndex": selected.component_index,
+            "runnerUpComponentIndex": runner.component_index if runner is not None else None,
+            "runnerUpRadiusPx": runner.radius if runner is not None else None,
+            "radiusMarginRatio": radius_margin_ratio,
+            "minimumRadiusMarginRatio": minimum_margin,
+            "source": "image_circle_dominance",
+        }
         self.reference_signature = _rotation_signature(
             reference,
             self.reference_hypothesis.center,
@@ -487,6 +493,7 @@ class MainHousingRegistrar:
                 reference_center=reference.center,
                 reference_radius=reference.radius,
                 hypotheses=hypotheses,
+                reference_selection=self.reference_selection,
                 checks=[_gate("supported_instance", False, "at least one gated instance", 0)],
             )
         selected = qualified[0]
@@ -504,6 +511,7 @@ class MainHousingRegistrar:
                 reference_center=reference.center,
                 reference_radius=reference.radius,
                 hypotheses=hypotheses,
+                reference_selection=self.reference_selection,
                 selected_index=selected.component_index,
                 runner_up_index=runner.component_index if runner is not None else None,
                 selection_margin=margin,
@@ -515,6 +523,7 @@ class MainHousingRegistrar:
             reference_center=reference.center,
             reference_radius=reference.radius,
             hypotheses=hypotheses,
+            reference_selection=self.reference_selection,
             selected_index=selected.component_index,
             runner_up_index=runner.component_index if runner is not None else None,
             selection_margin=margin,

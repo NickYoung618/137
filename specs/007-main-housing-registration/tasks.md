@@ -5,7 +5,7 @@
 
 ## Phase 1 — Setup and immutable evidence
 
-- [x] T001 Record external annotation/image hashes and old-transform root cause in `spec.md` and `research.md`.
+- [x] T001 Record the old-transform root cause; the later-invalidated endpoint evidence is withdrawn by feature 008.
 - [x] T002 Confirm clean starting worktree and immutable `algorithms/end_face/core.py` SHA-256.
 - [x] T003 Create v2 diagnostic contract in `specs/007-main-housing-registration/contracts/`.
 
@@ -15,13 +15,13 @@
 
 - [x] T004 [US1] Add failing component enumeration, distractor selection, ambiguity, and no-support tests in `tests/test_main_housing_registration.py`.
 - [x] T005 [US1] Implement housing hypotheses and robust circle refinement in `algorithms/end_face/main_housing_registration.py`.
-- [x] T006 [US1] Implement external-reference instance selection using manual 19/30 anchor annulus membership.
+- [x] T006 [US1] Implement reference instance selection; feature 008 replaces endpoint-annulus membership with image-only circle dominance.
 
 ## Phase 3 — User Story 2: center/scale/angle registration and local search (P1)
 
-**Independent test**: known synthetic similarity transform is recovered and the pinned representative self-anchor projects both lines within two pixels.
+**Independent test**: known synthetic similarity transforms recover center, scale and angle with no measurement-annotation input.
 
-- [x] T007 [US2] Extend failing tests for transform recovery, rotation ambiguity, and the external representative anchor.
+- [x] T007 [US2] Extend failing tests for synthetic transform recovery and rotation ambiguity; feature 008 removes the invalid external endpoint test.
 - [x] T008 [US2] Implement annular rotation correlation, transform gates, and serializable registration diagnostics.
 - [x] T009 [US2] Add strict `config/end_face_short_line_candidate.v2.json` validation without weakening v1 thresholds.
 - [x] T010 [US2] Project external 19/30 lines and wire v2 registration into `algorithms/end_face/short_line_candidate.py` before bounded local refinement.
@@ -39,7 +39,7 @@
 **Independent test**: server synthetic manifest exercises the same compare path and the documented Mac command keeps outputs external.
 
 - [x] T014 [US4] Verify compare/batch tools accept v2 config plus external LabelMe and aggregate independent transitions.
-- [x] T015 [US4] Document representative-anchor and Mac 25-frame commands in `quickstart.md` and `README.md` without a recovery claim.
+- [x] T015 [US4] Document registration-only Mac commands and defer 25-frame candidate acceptance pending corrected truth.
 
 ## Phase 6 — Verification and audit
 

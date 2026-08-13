@@ -66,7 +66,7 @@
     },
     "registration": {
       "type": "object",
-      "required": ["downsampleFactor", "foregroundThreshold", "minimumComponentPixels", "minimumDiameterPx", "maximumAspectError", "minimumComponentFillRatio", "maximumComponentFillRatio", "radialRayCount", "minimumEdgeCoverageRatio", "maximumCircularResidualRatio", "minimumScale", "maximumScale", "minimumAnchorRadiusRatio", "maximumAnchorRadiusRatio", "angularSamples", "radialSamples", "minimumRotationScore", "minimumRotationMargin", "rotationSeparationDeg", "minimumInstanceScore", "minimumInstanceMargin"],
+      "required": ["downsampleFactor", "foregroundThreshold", "minimumComponentPixels", "minimumDiameterPx", "maximumAspectError", "minimumComponentFillRatio", "maximumComponentFillRatio", "radialRayCount", "minimumEdgeCoverageRatio", "maximumCircularResidualRatio", "minimumScale", "maximumScale", "minimumReferenceRadiusMarginRatio", "angularSamples", "radialSamples", "minimumRotationScore", "minimumRotationMargin", "rotationSeparationDeg", "minimumInstanceScore", "minimumInstanceMargin"],
       "properties": {
         "downsampleFactor": {"type": "integer", "minimum": 1},
         "foregroundThreshold": {"type": "number"},
@@ -80,8 +80,7 @@
         "maximumCircularResidualRatio": {"type": "number", "minimum": 0},
         "minimumScale": {"type": "number", "exclusiveMinimum": 0},
         "maximumScale": {"type": "number", "exclusiveMinimum": 0},
-        "minimumAnchorRadiusRatio": {"type": "number", "minimum": 0},
-        "maximumAnchorRadiusRatio": {"type": "number", "minimum": 0},
+        "minimumReferenceRadiusMarginRatio": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
         "angularSamples": {"type": "integer", "minimum": 1},
         "radialSamples": {"type": "integer", "minimum": 1},
         "minimumRotationScore": {"type": "number"},

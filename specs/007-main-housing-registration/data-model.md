@@ -14,7 +14,7 @@
 ## HousingRegistration
 
 - `registrationVersion`, `valid`, `failureReason`
-- `reference`: selected reference housing geometry and anchor annulus ratios
+- `reference`: selected reference housing geometry and image-only dominance diagnostics
 - `hypotheses`: bounded target hypothesis diagnostics
 - `selectedIndex`, `runnerUpIndex`, `selectionMargin`
 - `transform`: reference/target centers, scale, rotation degrees
@@ -23,7 +23,7 @@
 
 ## ProjectedShortLine
 
-- `reference`: external LabelMe line geometry
+- `reference`: corrected, non-revoked external LabelMe line geometry
 - `projected`: transform-projected target geometry
 - `candidate`: optional locally refined geometry
 - `candidateValid`: true only when registration and every local gate pass
@@ -32,6 +32,7 @@
 ## Invariants
 
 - Registration inputs never include legacy target 19/30 geometry.
+- Registration inputs never include reference 19/30 labels or endpoints.
 - Candidate evaluation may read legacy values for comparison but never mutate them.
 - Invalid registration implies invalid candidates with null candidate geometry.
 - Every finite numeric output remains JSON-compatible; images are never embedded.

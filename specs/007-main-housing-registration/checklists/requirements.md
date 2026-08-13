@@ -7,7 +7,7 @@
 ## Content quality
 
 - [x] User-visible instance selection, registration, candidate, and Mac workflows are stated.
-- [x] The single-image anchor is explicitly separated from any 25-frame claim.
+- [x] The withdrawn single-image endpoint result is explicitly excluded from all claims.
 - [x] No implementation placeholders or unresolved clarification markers remain.
 - [x] External raw images and result JSONL are excluded from Git scope.
 
@@ -21,7 +21,7 @@
 
 ## Readiness
 
-- [x] Acceptance criteria cover the anchor, synthetic multi-instance, failure, and schema paths.
+- [x] Acceptance criteria cover synthetic multi-instance, failure, schema, and corrected-truth deferral paths.
 - [x] The Mac 25-frame command is required without assuming its result.
 - [x] Core SHA and large-file/raw-image audit gates are identified.
 

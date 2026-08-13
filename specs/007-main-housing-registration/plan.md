@@ -7,16 +7,17 @@
 Add a versioned core-external v2 candidate. It discovers circular foreground
 instances from a downsampled target, robustly fits each outer boundary, selects
 the main housing against the external A2 reference model, estimates rotation
-from annular appearance, and projects the manually labeled 19/30 lines before
-the existing gated local gradient refinement. Legacy core output remains
-read-only. Missing or ambiguous registration fails closed.
+from annular appearance. Registration is image-only. A later corrected 19/30
+annotation may be projected before the existing gated local gradient
+refinement; no current A2 endpoints are acceptance truth. Legacy core output
+remains read-only. Missing or ambiguous registration fails closed.
 
 ## Technical context
 
 **Language/Version**: Python 3.12 (locked by `pyproject.toml`)  
 **Primary Dependencies**: NumPy, Pillow; immutable desktop A-end-face core helpers  
 **Storage**: External image/manifest files plus JSON/JSONL outputs  
-**Testing**: Python `unittest`, jsonschema, synthetic raster fixtures, pinned external anchor smoke  
+**Testing**: Python `unittest`, jsonschema, synthetic raster fixtures, external registration-only diagnostics
 **Target Platform**: Linux server and macOS CLI  
 **Project Type**: Library plus standalone CLI tools  
 **Performance Goals**: Registration adds no more than one downsampled component pass and bounded radial/polar sampling per image  
@@ -35,10 +36,9 @@ Post-design re-check: PASS. No constitution exception is required.
 
 ## Technical design
 
-1. Build the reference housing model once from the external LabelMe image.
-   Downsample, threshold, enumerate connected foreground components, and select
-   the component whose robust outer circle contains both manual line anchors in
-   the expected annulus.
+1. Build the reference housing model once from an external image. Downsample,
+   threshold, enumerate connected foreground components, and select a supported
+   dominant robust outer circle without reading any measurement annotation.
 2. On each target enumerate all plausible components, refine every component
    bbox circle with radial outer-boundary points, and score only candidates
    passing diameter, aspect, coverage, support, residual, and scale gates.
@@ -46,10 +46,11 @@ Post-design re-check: PASS. No constitution exception is required.
    reference. Select only when the best total score and its margin over the
    separated runner-up pass configuration.
 4. Form a similarity transform from reference/target circle centers, scale,
-   and angular shift. Project the external 19/30 endpoints.
-5. Run the existing correlation/prominence/competing-peak local refinement
-   around those projected endpoints. The old core target geometry is retained
-   only under `core` and `deltaFromCore` diagnostics.
+   and angular shift. Emit registration-only diagnostics while A2 truth is
+   unavailable.
+5. Only after corrected manual verification, project external 19/30 endpoints
+   and run the existing correlation/prominence/competing-peak local refinement.
+   The old core target geometry remains comparison-only diagnostics.
 
 ## Project structure
 

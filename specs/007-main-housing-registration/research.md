@@ -28,13 +28,13 @@ treating a component bbox as final geometry.
 
 ## R3 — Reference instance selection
 
-**Decision**: require both manual 19/30 midpoints to lie within a configured
-annular fraction of a refined reference circle. Rank qualifying proposals by
-circular support and residual.
+**Decision**: select the dominant supported refined circle from the reference
+image and require a configured radius margin over the runner-up.
 
-**Rationale**: the manual coordinates identify which physical instance is the
-main housing without inventing additional labels. Target selection never uses
-target core geometry.
+**Rationale**: measurement coordinates cannot safely select the registration
+instance when their physical boundary meaning is unverified. Image-only circle
+dominance keeps registration independent of both LabelMe and target core
+geometry; ambiguous references fail closed.
 
 ## R4 — Rotation
 
@@ -47,9 +47,9 @@ repeated ring patterns.
 
 ## R5 — Local feature recovery
 
-**Decision**: transform the true external 19/30 endpoints, then reuse the
-existing v1 bounded template correlation, texture, gradient, prominence,
-competing-peak, boundary and angle gates.
+**Decision**: once corrected truth exists, transform the verified external
+19/30 endpoints, then reuse the existing v1 bounded template correlation,
+texture, gradient, prominence, competing-peak, boundary and angle gates.
 
 **Rationale**: the failure is primarily global instance registration. Reusing
 strict local gates changes the search origin without lowering acceptance
@@ -57,6 +57,8 @@ thresholds or declaring every projected edge valid.
 
 ## R6 — Real-data claims
 
-The external representative is an anchor/identity smoke test only. The Mac
-must run the frozen v2 configuration over all 25 external frames before any
-recovery-rate claim. JSONL and images remain outside Git.
+The previously used external endpoint annotation was withdrawn after
+radial-gradient review. It supplies no identity, projection, recovery, or
+acceptance evidence. Registration-only diagnostics may run on external images;
+the Mac must provide corrected truth and run all 25 frames before any
+short-line recovery-rate claim. JSONL and images remain outside Git.

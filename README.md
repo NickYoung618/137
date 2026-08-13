@@ -75,9 +75,13 @@ Mac A2 可从一个物理样品、一个位置的完整 20 张中选一张代表
 
 ```bash
 uv run python tools/inspect_short_line_labelme.py \
-  --annotation "/external/A2/development/sample_001/a2-short-lines.json" \
-  --output "/external/A2/outputs/a2-short-lines-catalog.json"
+  --annotation "/external/A2/development/sample_001/CORRECTED-a2-short-lines.json" \
+  --output "/external/A2/outputs/corrected-a2-short-lines-catalog.json"
 ```
+
+当前先前提供的 A2 端点标注已因未吸附到真实阶梯强边而撤销，并由共享加载器按文件 SHA-256
+拒绝。它不得用于模板、调参、真值或验收；真实 19/30 比较等待新的人工复核 LabelMe。重命名或
+移动撤销文件不会绕过门禁。
 
 传入 `--short-line-labelme-reference` 后，候选局部模板来自该外置 A2 标注图；桌面核心仍使用原参考，
 其 SHA、旧量测和 `coreValid` 均不改变。`main-housing-registration-v2` 还会先枚举圆形实例、独立选择
@@ -99,14 +103,28 @@ uv run python tools/evaluate_end_face_batch.py detect \
   --annotation /external/sample_1_label.json \
   --quality-policy config/end_face_quality.example.json \
   --short-line-candidate-config config/end_face_short_line_candidate.v1.json \
-  --short-line-labelme-reference /external/A2/development/sample_001/a2-short-lines.json \
+  --short-line-labelme-reference /external/A2/development/sample_001/CORRECTED-a2-short-lines.json \
   --output-dir outputs/a2-evaluation
 ```
 
 输出 `results.jsonl` 和 `quality-summary.json`。也可用 `summarize` 子命令只传逐图结果流，在无图片的
 服务器上重算技术成功率、定位率、测量完整率、耗时和逐特征来源/原因分布。
 
-## Mac 外置 A2 逐图候选比较
+## Mac 外置 A2 注册诊断与候选比较
+
+在更正的 19/30 真值到位前，只运行无标注主壳体注册诊断：
+
+```bash
+uv run python tools/diagnose_main_housing_registration.py batch \
+  --reference-image "$HOME/Desktop/壳体项目/137/a2-labelme-development-20/representative.bmp" \
+  --manifest "$HOME/Desktop/壳体项目/137/a2-development-20-manifest.json" \
+  --data-root "$HOME/Desktop/壳体项目/137/A2" \
+  --candidate-config config/end_face_short_line_candidate.v2.json \
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-registration-v2-development-20"
+```
+
+输出只含主壳体假设、圆心/尺度/角度和门限诊断，不含候选恢复语义。以下候选比较命令仅在
+`CORRECTED-a2-short-lines.json` 经人工强边核对及严格 inspect 后才可运行。
 
 既有 v2 `results.jsonl` 可直接作为不可改写基线；工具会先完整验证 Manifest 图片属性/SHA-256 和
 `imageId/taskId` 一一对应，再读取图片运行候选：
@@ -118,7 +136,7 @@ uv run python tools/compare_short_line_candidates.py compare \
   --annotation "/path/to/sample_1_label.json" \
   --results-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-v2-development-20/results.jsonl" \
   --candidate-config config/end_face_short_line_candidate.v2.json \
-  --short-line-labelme-reference "$HOME/Desktop/壳体项目/137/A2/development/sample_001/a2-short-lines.json" \
+  --short-line-labelme-reference "$HOME/Desktop/壳体项目/137/A2/development/sample_001/CORRECTED-a2-short-lines.json" \
   --development-group \
   --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-main-housing-v2-development-20"
 ```
@@ -133,9 +151,9 @@ uv run python tools/compare_short_line_candidates.py summarize \
 
 开发时同一样品/位置的 20 张必须全部留在 development Manifest；冻结标注 SHA 和配置 SHA 后，使用
 不含该物理样品的全样品 Manifest 做 validation/acceptance。不得把同一组 20 帧随机拆到两个集合。
-单张外置代表图只用于锚点/几何来源校验，不能据此宣称 25 张改善。25 张必须用冻结后的 v2 配置、
-同一标注/图片 SHA 在 Mac 外置数据上完整运行。增量规格和命令见
-`specs/007-main-housing-registration/`。
+单张外置代表图只可用于注册诊断，不能据此宣称短线恢复或 25 张改善。25 张候选验收必须等更正
+标注到位，再用冻结后的 v2 配置、同一标注/图片 SHA 在 Mac 外置数据上完整运行。撤销与注册诊断
+增量规格见 `specs/008-revoke-invalid-anchor/`。
 
 ## 数据边界
 
