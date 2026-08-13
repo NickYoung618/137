@@ -1,5 +1,8 @@
 # Quickstart: A 端面独立检测 CLI
 
+> Historical v1 validation guide. Current quality semantics and CLI usage are defined in
+> `specs/004-quality-policy-batch/quickstart.md`.
+
 ## Prerequisites
 
 - Python 3.12 与 uv

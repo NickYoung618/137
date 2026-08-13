@@ -1,38 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "a-end-face-result/1",
-  "title": "137 A-End-Face Inspection Result",
+  "$id": "a-end-face-result/2",
+  "title": "137 A-End-Face Inspection Result v2",
   "type": "object",
-  "required": ["schemaVersion", "taskId", "technicalStatus", "input", "algorithm", "result", "error"],
+  "required": ["schemaVersion", "taskId", "technicalStatus", "execution", "input", "algorithm", "result", "error"],
   "properties": {
-    "schemaVersion": {"const": "a-end-face-result/1"},
+    "schemaVersion": {"const": "a-end-face-result/2"},
     "taskId": {"type": "string", "minLength": 1},
     "technicalStatus": {"enum": ["succeeded", "failed"]},
+    "execution": {
+      "type": "object",
+      "required": ["elapsedMs"],
+      "properties": {"elapsedMs": {"type": "number", "minimum": 0}},
+      "additionalProperties": false
+    },
     "input": {"type": "object"},
     "algorithm": {
       "type": "object",
-      "required": ["name", "version", "coreSourceSha256"],
+      "required": ["name", "version", "coreSourceSha256", "qualityPolicy"],
       "properties": {
         "name": {"const": "desktop-a-end-face-core"},
         "version": {"type": "string"},
-        "coreSourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "coreSourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "qualityPolicy": {
+          "type": "object",
+          "required": ["policyId", "sha256"],
+          "properties": {
+            "policyId": {"type": ["string", "null"]},
+            "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
     "result": {
       "oneOf": [
-        {
-          "type": "object",
-          "required": ["valid", "pixelSize", "shiftMethod", "invalidFeatures", "measurements"],
-          "properties": {
-            "valid": {"type": "boolean"},
-            "pixelSize": {"type": "number", "exclusiveMinimum": 0},
-            "shiftMethod": {"type": "string"},
-            "invalidFeatures": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-            "measurements": {"type": "object"}
-          },
-          "additionalProperties": false
-        },
+        {"$ref": "#/$defs/successResult"},
         {"type": "null"}
       ]
     },
@@ -51,10 +55,66 @@
       ]
     }
   },
+  "$defs": {
+    "successResult": {
+      "type": "object",
+      "required": ["valid", "pixelSize", "shiftMethod", "localization", "measurementCompleteness", "featureQuality", "measurements"],
+      "properties": {
+        "valid": {"type": "boolean"},
+        "pixelSize": {"type": "number", "exclusiveMinimum": 0},
+        "shiftMethod": {"type": "string"},
+        "localization": {
+          "type": "object",
+          "required": ["valid", "policyId", "policySha256", "policyPath", "checks", "failedChecks"],
+          "properties": {
+            "valid": {"type": "boolean"},
+            "policyId": {"type": "string"},
+            "policySha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "policyPath": {"type": ["string", "null"]},
+            "checks": {"type": "array", "items": {"type": "object"}},
+            "failedChecks": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+          },
+          "additionalProperties": false
+        },
+        "measurementCompleteness": {
+          "type": "object",
+          "required": ["allValid", "total", "validCount", "invalidCount", "invalidFeatures"],
+          "properties": {
+            "allValid": {"type": "boolean"},
+            "total": {"type": "integer", "minimum": 0},
+            "validCount": {"type": "integer", "minimum": 0},
+            "invalidCount": {"type": "integer", "minimum": 0},
+            "invalidFeatures": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+          },
+          "additionalProperties": false
+        },
+        "featureQuality": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["feature", "canonicalFeature", "classification", "coreValid", "source", "reason", "fields", "diagnostic"],
+            "properties": {
+              "feature": {"type": "string"},
+              "canonicalFeature": {"type": "string", "minLength": 1},
+              "classification": {"enum": ["feature_measurement", "localization_required"]},
+              "coreValid": {"type": "boolean"},
+              "source": {"type": ["string", "null"]},
+              "reason": {"type": ["string", "null"]},
+              "fields": {"type": "object"},
+              "diagnostic": {"type": "object"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "measurements": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
   "allOf": [
     {
       "if": {"properties": {"technicalStatus": {"const": "succeeded"}}},
-      "then": {"properties": {"result": {"type": "object"}, "error": {"type": "null"}}}
+      "then": {"properties": {"result": {"$ref": "#/$defs/successResult"}, "error": {"type": "null"}}}
     },
     {
       "if": {"properties": {"technicalStatus": {"const": "failed"}}},

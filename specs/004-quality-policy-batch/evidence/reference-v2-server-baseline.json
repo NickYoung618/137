@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "a-end-face-reference-quality-baseline/1",
+  "observedAt": "2026-08-13",
+  "environment": "linux-server-accessible-desktop-archive",
+  "rawAssetsCommitted": false,
+  "archiveSha256": "99532f032b54350f3d4451495ebbdce898a7fb7db93191215e0dcc1a860b01cf",
+  "annotationSha256": "63a0b7b28da162ebb586feaf3cb6204662c42fb844595102468c8433eab81910",
+  "referenceSha256": "cf8b4e0437f1e04fbd55782b1fb33e13c0693ecaf3a436786b2d38dd933053f0",
+  "coreSourceSha256": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc",
+  "qualityPolicyId": "a-end-face-localization-default-v1",
+  "qualityPolicySha256": "01dd68af31fc985955e2640d975e1efd65e134521dfdf955c28fbd58c7455f98",
+  "resultSchemaVersion": "a-end-face-result/2",
+  "technicalStatus": "succeeded",
+  "elapsedMsObserved": 13068.29025503248,
+  "localizationValid": true,
+  "localizationFailedChecks": [],
+  "measurementCompletenessAllValid": false,
+  "measurementFieldCount": 192,
+  "featureQualityCount": 9,
+  "invalidFeatures": [
+    {
+      "rawLabel": "19��",
+      "canonicalFeature": "19",
+      "source": "short_line_transform_fallback",
+      "reason": "short_line_lateral_edge_not_found",
+      "coreValid": false
+    },
+    {
+      "rawLabel": "30��",
+      "canonicalFeature": "30",
+      "source": "short_line_transform_fallback",
+      "reason": "short_line_lateral_edge_not_found",
+      "coreValid": false
+    }
+  ],
+  "interpretation": "Reference localization succeeds. Feature 19 and 30 failures are preserved as measurement-quality failures and do not veto localization."
+}

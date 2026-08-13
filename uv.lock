@@ -4,7 +4,7 @@ requires-python = "==3.12.*"
 
 [[package]]
 name = "housing-inspection-a-end-face"
-version = "1.0.0"
+version = "1.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "numpy" },

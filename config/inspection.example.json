@@ -5,5 +5,6 @@
   "pixel_size_unit": "px",
   "core_source_sha256": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc",
   "annotation_path": "/path/to/sample_1_label.json",
+  "quality_policy_path": "config/end_face_quality.example.json",
   "note": "CLI parameters are authoritative; this file documents deploy-time values only."
 }

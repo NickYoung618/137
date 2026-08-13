@@ -1,3 +1,4 @@
 {
+  "$comment": "Historical feature pointer; current schema is v2 and specified by 004-quality-policy-batch.",
   "$ref": "../../../contracts/a-end-face-result.schema.json"
 }

@@ -1,4 +1,4 @@
-"""Stable JSON contract for one-image A-end-face inspection."""
+"""Stable v2 JSON contract for one-image A-end-face inspection."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from typing import Any
 from algorithms.end_face import CORE_SOURCE_SHA256
 
 
-SCHEMA_VERSION = "a-end-face-result/1"
+SCHEMA_VERSION = "a-end-face-result/2"
 ALGORITHM_NAME = "desktop-a-end-face-core"
-ALGORITHM_VERSION = "1.0.0"
+ALGORITHM_VERSION = "1.1.0"
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -39,74 +39,79 @@ def json_safe(value: Any) -> Any:
     return value
 
 
-def invalid_features(measurements: Mapping[str, Any]) -> list[str]:
-    suffix = ".quality.measurement_valid"
-    invalid: list[str] = []
-    for key, value in measurements.items():
-        if not key.endswith(suffix):
-            continue
-        try:
-            valid = float(value) > 0.5
-        except (TypeError, ValueError):
-            valid = False
-        if not valid:
-            invalid.append(key[: -len(suffix)])
-    return sorted(invalid)
+def _algorithm(quality: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    localization = quality.get("localization", {}) if isinstance(quality, Mapping) else {}
+    return {
+        "name": ALGORITHM_NAME,
+        "version": ALGORITHM_VERSION,
+        "coreSourceSha256": CORE_SOURCE_SHA256,
+        "qualityPolicy": {
+            "policyId": localization.get("policyId"),
+            "sha256": localization.get("policySha256"),
+        },
+    }
 
 
 def success_result(
     *,
     task_id: str,
     image: Path,
+    image_info: Mapping[str, Any],
     annotation: Path,
     reference: Path,
     pixel_size: float,
     shift_method: str,
     measurements: Mapping[str, Any],
+    quality: Mapping[str, Any],
+    elapsed_ms: float,
 ) -> dict[str, Any]:
-    rejected = invalid_features(measurements)
-    valid = not rejected
+    localization = quality["localization"]
     payload = {
         "schemaVersion": SCHEMA_VERSION,
         "taskId": task_id,
         "technicalStatus": "succeeded",
+        "execution": {"elapsedMs": elapsed_ms},
         "input": {
-            "image": {"path": str(image.resolve()), "sha256": sha256_file(image)},
+            "image": {"path": str(image.resolve()), **dict(image_info)},
             "annotation": {"path": str(annotation.resolve()), "sha256": sha256_file(annotation)},
             "reference": {"path": str(reference.resolve()), "sha256": sha256_file(reference)},
         },
-        "algorithm": {
-            "name": ALGORITHM_NAME,
-            "version": ALGORITHM_VERSION,
-            "coreSourceSha256": CORE_SOURCE_SHA256,
-        },
+        "algorithm": _algorithm(quality),
         "result": {
-            "valid": valid,
+            "valid": bool(localization["valid"]),
             "pixelSize": pixel_size,
             "shiftMethod": shift_method,
-            "invalidFeatures": rejected,
-            "measurements": json_safe(measurements),
+            "localization": quality["localization"],
+            "measurementCompleteness": quality["measurementCompleteness"],
+            "featureQuality": quality["featureQuality"],
+            "measurements": measurements,
         },
         "error": None,
     }
+    payload = json_safe(payload)
     validate_result(payload)
     return payload
 
 
-def failure_result(*, task_id: str, image: Path, annotation: Path, error: Exception) -> dict[str, Any]:
+def failure_result(
+    *,
+    task_id: str,
+    image: Path,
+    annotation: Path,
+    error: Exception,
+    elapsed_ms: float = 0.0,
+    quality: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     payload = {
         "schemaVersion": SCHEMA_VERSION,
         "taskId": task_id,
         "technicalStatus": "failed",
+        "execution": {"elapsedMs": max(0.0, float(elapsed_ms))},
         "input": {
             "image": {"path": str(image.resolve())},
             "annotation": {"path": str(annotation.resolve())},
         },
-        "algorithm": {
-            "name": ALGORITHM_NAME,
-            "version": ALGORITHM_VERSION,
-            "coreSourceSha256": CORE_SOURCE_SHA256,
-        },
+        "algorithm": _algorithm(quality),
         "result": None,
         "error": {"code": "DETECTION_FAILED", "message": str(error)},
     }
@@ -119,13 +124,35 @@ def validate_result(payload: Mapping[str, Any]) -> None:
         raise ValueError("unsupported end-face result schema")
     if not payload.get("taskId"):
         raise ValueError("taskId is required")
+    execution = payload.get("execution")
+    if not isinstance(execution, Mapping) or (elapsed := execution.get("elapsedMs")) is None:
+        raise ValueError("execution.elapsedMs is required")
+    if not isinstance(elapsed, (int, float)) or isinstance(elapsed, bool) or not math.isfinite(float(elapsed)) or elapsed < 0:
+        raise ValueError("execution.elapsedMs must be a finite non-negative number")
     status = payload.get("technicalStatus")
     if status == "succeeded":
         result = payload.get("result")
         if not isinstance(result, Mapping) or payload.get("error") is not None:
             raise ValueError("succeeded result requires result and null error")
-        if not isinstance(result.get("valid"), bool) or not isinstance(result.get("measurements"), Mapping):
-            raise ValueError("result.valid and result.measurements are required")
+        localization = result.get("localization")
+        completeness = result.get("measurementCompleteness")
+        feature_quality = result.get("featureQuality")
+        if not isinstance(localization, Mapping) or not isinstance(localization.get("valid"), bool):
+            raise ValueError("result.localization.valid is required")
+        if result.get("valid") is not localization.get("valid"):
+            raise ValueError("result.valid must equal result.localization.valid")
+        if not isinstance(completeness, Mapping) or not isinstance(completeness.get("allValid"), bool):
+            raise ValueError("result.measurementCompleteness.allValid is required")
+        if not isinstance(feature_quality, Mapping) or not isinstance(result.get("measurements"), Mapping):
+            raise ValueError("featureQuality and measurements are required")
+        for label, feature in feature_quality.items():
+            if (
+                not isinstance(feature, Mapping)
+                or feature.get("feature") != label
+                or not feature.get("canonicalFeature")
+                or not isinstance(feature.get("coreValid"), bool)
+            ):
+                raise ValueError("each featureQuality item requires matching feature, canonicalFeature and coreValid")
     elif status == "failed":
         error = payload.get("error")
         if payload.get("result") is not None or not isinstance(error, Mapping) or not error.get("code"):

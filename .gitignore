@@ -33,6 +33,7 @@ data/derived/
 data/cache/
 artifacts/
 reports/
+*.jsonl
 
 # Large local archives must stay outside the server repository
 *.rar

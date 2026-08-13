@@ -2,7 +2,7 @@
 
 **Feature Branch**: `main`
 **Created**: 2026-08-13
-**Status**: Implemented
+**Status**: Superseded by `004-quality-policy-batch` for quality semantics and result contract v2
 
 ## User Scenarios & Testing
 

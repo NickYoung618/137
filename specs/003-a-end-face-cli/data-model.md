@@ -1,5 +1,7 @@
 # Data Model: A 端面独立检测 CLI
 
+> Historical v1 model, superseded by `004-quality-policy-batch/data-model.md`.
+
 ## InspectionInput
 
 | Field | Type | Rules |

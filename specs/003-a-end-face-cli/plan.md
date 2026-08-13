@@ -1,5 +1,7 @@
 # Implementation Plan: A 端面独立检测 CLI
 
+> Historical v1 plan, superseded by `004-quality-policy-batch/plan.md` for quality and contract semantics.
+
 ## Summary
 
 移除现有姿态引导业务，将桌面算法包的 A 端面核心按原始字节纳入独立模块，在其外增加单图 CLI、

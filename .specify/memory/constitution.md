@@ -1,9 +1,9 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 2.0.0
-- Scope change: slot-pose guidance -> independent A-end-face measurement
-- Removed concepts: pose frames, mechanical angle mapping, PLC guidance
-- Added constraint: preserve the desktop A-end-face core byte-for-byte
+- Version change: 2.0.0 -> 2.0.1
+- Clarified principle IV: localization validity and measurement completeness are independent
+- Required preservation: every core-invalid feature remains invalid and traceable
+- No principle removed
 -->
 # 137 壳体 A 端面算法 Constitution
 
@@ -26,8 +26,9 @@ JSON MUST 使用版本化契约和标准有限数值；不可表示的数值 MUS
 
 ### IV. 安全失败与边界验证
 输入缺失、标注无效、参考图不可解析或检测异常时，系统 MUST 返回结构化失败，不得伪造量测值。
-核心返回的无效质量字段 MUST 反映到结果有效性。测试 MUST 覆盖成功、失败、非有限数值、CLI
-输出和来源指纹。
+核心返回的无效质量字段 MUST 在逐特征质量和测量完整性中保持无效，不得被适配层改写。端面定位
+有效性 MUST 与特征测量完整性独立表达；只有受控策略明确列为定位必要项的特征才可否决定位。
+测试 MUST 覆盖成功、失败、非有限数值、CLI 输出和来源指纹。
 
 ### V. 数据最小化
 原始图像、参考图、大型 LabelMe 标注、压缩包和运行输出 MUST 留在 Git 之外。仓库只保存代码、
@@ -53,4 +54,4 @@ JSON MUST 使用版本化契约和标准有限数值；不可表示的数值 MUS
 本 Constitution 优先于项目内其他开发约定。修改原则或质量门禁 MUST 更新顶部影响报告并按
 语义化版本管理。每个规格和代码评审 MUST 检查合规性；发现冲突时先修订规格或方案再实现。
 
-**Version**: 2.0.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13
+**Version**: 2.0.1 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13
