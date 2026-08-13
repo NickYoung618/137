@@ -123,8 +123,12 @@ uv run python tools/diagnose_main_housing_registration.py batch \
   --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-registration-v2-development-20"
 ```
 
-输出只含主壳体假设、圆心/尺度/角度和门限诊断，不含候选恢复语义。以下候选比较命令仅在
-`CORRECTED-a2-short-lines.json` 经人工强边核对及严格 inspect 后才可运行。
+逐帧输出只含主壳体假设、圆心/尺度/角度和门限诊断，不含候选恢复语义。批量
+`registration-summary.json` 使用 `a-end-face-main-housing-registration-summary/2`：对所有注册有效帧
+汇总圆心/半径（像素及按每帧尺寸归一化）、尺度、旋转置信度/裕量、实例选择裕量、边缘覆盖与圆拟合
+残差；线性量提供 count/min/max/mean/median/p05/p95/MAD，角度使用跨 ±180° 连续的环形统计。统计
+只用于观察漂移，不参与有效判定。以下候选比较命令仅在 `CORRECTED-a2-short-lines.json` 经人工强边
+核对及严格 inspect 后才可运行。
 
 既有 v2 `results.jsonl` 可直接作为不可改写基线；工具会先完整验证 Manifest 图片属性/SHA-256 和
 `imageId/taskId` 一一对应，再读取图片运行候选：
@@ -153,7 +157,8 @@ uv run python tools/compare_short_line_candidates.py summarize \
 不含该物理样品的全样品 Manifest 做 validation/acceptance。不得把同一组 20 帧随机拆到两个集合。
 单张外置代表图只可用于注册诊断，不能据此宣称短线恢复或 25 张改善。25 张候选验收必须等更正
 标注到位，再用冻结后的 v2 配置、同一标注/图片 SHA 在 Mac 外置数据上完整运行。撤销与注册诊断
-增量规格见 `specs/008-revoke-invalid-anchor/`。
+撤销门禁见 `specs/008-revoke-invalid-anchor/`，注册稳定性统计见
+`specs/009-registration-stability/`。
 
 ## 数据边界
 
