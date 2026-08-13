@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://137.local/contracts/main-housing-registration-v2.schema.json",
+  "title": "Main housing registration v2 diagnostic",
+  "type": "object",
+  "required": ["registrationVersion", "valid", "failureReason", "reference", "hypotheses", "checks"],
+  "properties": {
+    "registrationVersion": {"const": "main-housing-registration/2"},
+    "valid": {"type": "boolean"},
+    "failureReason": {"type": ["string", "null"]},
+    "reference": {"type": "object"},
+    "hypotheses": {"type": "array", "items": {"type": "object"}},
+    "selectedIndex": {"type": ["integer", "null"]},
+    "runnerUpIndex": {"type": ["integer", "null"]},
+    "selectionMargin": {"type": ["number", "null"]},
+    "transform": {"type": ["object", "null"]},
+    "rotationScore": {"type": ["number", "null"]},
+    "rotationSecondScore": {"type": ["number", "null"]},
+    "rotationMargin": {"type": ["number", "null"]},
+    "checks": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

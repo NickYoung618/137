@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "a-end-face-short-line-candidate-config/1",
-  "title": "137 A-End-Face Short-Line Candidate Configuration v1",
+  "title": "137 A-End-Face Short-Line Candidate Configuration v1/v2",
   "type": "object",
   "required": ["schemaVersion", "candidateId", "algorithmVersion", "features", "template", "search", "gates"],
   "properties": {
-    "schemaVersion": {"const": "a-end-face-short-line-candidate-config/1"},
-    "candidateId": {"const": "reference-gradient-registration-v1"},
+    "schemaVersion": {"enum": ["a-end-face-short-line-candidate-config/1", "a-end-face-short-line-candidate-config/2"]},
+    "candidateId": {"enum": ["reference-gradient-registration-v1", "main-housing-registration-v2"]},
     "algorithmVersion": {"type": "string", "minLength": 1},
     "features": {"const": ["19", "30"]},
     "template": {
@@ -47,7 +47,8 @@
         "maximumAngleCorrectionDeg": {"type": "number", "minimum": 0}
       },
       "additionalProperties": false
-    }
+    },
+    "registration": {"$ref": "#/$defs/registration"}
   },
   "$defs": {
     "searchLevel": {
@@ -62,7 +63,48 @@
         "lateralStepPx": {"type": "number", "exclusiveMinimum": 0}
       },
       "additionalProperties": false
+    },
+    "registration": {
+      "type": "object",
+      "required": ["downsampleFactor", "foregroundThreshold", "minimumComponentPixels", "minimumDiameterPx", "maximumAspectError", "minimumComponentFillRatio", "maximumComponentFillRatio", "radialRayCount", "minimumEdgeCoverageRatio", "maximumCircularResidualRatio", "minimumScale", "maximumScale", "minimumAnchorRadiusRatio", "maximumAnchorRadiusRatio", "angularSamples", "radialSamples", "minimumRotationScore", "minimumRotationMargin", "rotationSeparationDeg", "minimumInstanceScore", "minimumInstanceMargin"],
+      "properties": {
+        "downsampleFactor": {"type": "integer", "minimum": 1},
+        "foregroundThreshold": {"type": "number"},
+        "minimumComponentPixels": {"type": "integer", "minimum": 1},
+        "minimumDiameterPx": {"type": "number", "exclusiveMinimum": 0},
+        "maximumAspectError": {"type": "number", "minimum": 0},
+        "minimumComponentFillRatio": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximumComponentFillRatio": {"type": "number", "minimum": 0, "maximum": 1},
+        "radialRayCount": {"type": "integer", "minimum": 1},
+        "minimumEdgeCoverageRatio": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximumCircularResidualRatio": {"type": "number", "minimum": 0},
+        "minimumScale": {"type": "number", "exclusiveMinimum": 0},
+        "maximumScale": {"type": "number", "exclusiveMinimum": 0},
+        "minimumAnchorRadiusRatio": {"type": "number", "minimum": 0},
+        "maximumAnchorRadiusRatio": {"type": "number", "minimum": 0},
+        "angularSamples": {"type": "integer", "minimum": 1},
+        "radialSamples": {"type": "integer", "minimum": 1},
+        "minimumRotationScore": {"type": "number"},
+        "minimumRotationMargin": {"type": "number", "minimum": 0},
+        "rotationSeparationDeg": {"type": "number", "exclusiveMinimum": 0},
+        "minimumInstanceScore": {"type": "number"},
+        "minimumInstanceMargin": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {"properties": {"candidateId": {"const": "main-housing-registration-v2"}}},
+      "then": {
+        "required": ["registration"],
+        "properties": {"schemaVersion": {"const": "a-end-face-short-line-candidate-config/2"}}
+      },
+      "else": {
+        "not": {"required": ["registration"]},
+        "properties": {"schemaVersion": {"const": "a-end-face-short-line-candidate-config/1"}}
+      }
+    }
+  ],
   "additionalProperties": false
 }

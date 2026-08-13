@@ -19,12 +19,20 @@ from typing import Any
 import numpy as np
 
 from algorithms.end_face import core
+from algorithms.end_face.main_housing_registration import (
+    MainHousingRegistrar,
+    RegistrationResult,
+    validate_registration_config,
+)
 from algorithms.end_face.quality import canonical_feature_label
 
 
 CANDIDATE_CONFIG_SCHEMA_VERSION = "a-end-face-short-line-candidate-config/1"
+CANDIDATE_CONFIG_SCHEMA_VERSION_V2 = "a-end-face-short-line-candidate-config/2"
 DIAGNOSTIC_VERSION = "short-line-diagnostic/1"
 CANDIDATE_SOURCE = "reference-gradient-registration-v1"
+CANDIDATE_SOURCE_V2 = "main-housing-registration-v2"
+CANDIDATE_SOURCES = {CANDIDATE_SOURCE, CANDIDATE_SOURCE_V2}
 SUPPORTED_FEATURES = {"19", "30"}
 LABELME_REFERENCE_SCHEMA_VERSION = "a-end-face-labelme-short-line-reference/1"
 
@@ -46,6 +54,7 @@ class LabelMeShortLineReference:
     height: int
     image_data_ignored: bool
     models: dict[str, ShortLineTemplateModel]
+    reference_gray: np.ndarray
     reference_grad: np.ndarray
 
     def catalog(self) -> dict[str, Any]:
@@ -183,6 +192,7 @@ def load_labelme_short_line_reference(path: Path) -> LabelMeShortLineReference:
         height=actual_height,
         image_data_ignored=annotation.get("imageData") is not None,
         models=models,
+        reference_gray=reference_gray,
         reference_grad=core.gradient_magnitude(reference_gray),
     )
 
@@ -212,18 +222,24 @@ def _positive(value: Any, name: str, *, allow_zero: bool = False) -> float:
 def validate_candidate_config(config: Mapping[str, Any]) -> None:
     if not isinstance(config, Mapping):
         raise ValueError("candidate config must be an object")
+    candidate_id = config.get("candidateId")
+    if candidate_id not in CANDIDATE_SOURCES:
+        raise ValueError(f"candidate config has unsupported candidateId: {candidate_id!r}")
+    is_v2 = candidate_id == CANDIDATE_SOURCE_V2
+    required_keys = {"schemaVersion", "candidateId", "algorithmVersion", "features", "template", "search", "gates"}
+    if is_v2:
+        required_keys.add("registration")
     _require_exact_keys(
         config,
-        {"schemaVersion", "candidateId", "algorithmVersion", "features", "template", "search", "gates"},
+        required_keys,
         "candidate config",
     )
-    if config.get("schemaVersion") != CANDIDATE_CONFIG_SCHEMA_VERSION:
+    expected_schema = CANDIDATE_CONFIG_SCHEMA_VERSION_V2 if is_v2 else CANDIDATE_CONFIG_SCHEMA_VERSION
+    if config.get("schemaVersion") != expected_schema:
         raise ValueError("unsupported short-line candidate config schemaVersion")
     for field in ("candidateId", "algorithmVersion"):
         if not isinstance(config.get(field), str) or not str(config[field]).strip():
             raise ValueError(f"candidate config {field} is required")
-    if config.get("candidateId") != CANDIDATE_SOURCE:
-        raise ValueError(f"unsupported candidateId: {config.get('candidateId')!r}")
     features = config.get("features")
     if (
         not isinstance(features, Sequence)
@@ -300,6 +316,8 @@ def validate_candidate_config(config: Mapping[str, Any]) -> None:
         raise ValueError("gates.minimumCorrelation must be in [-1, 1]")
     if numbers["maximumAngleCorrectionDeg"] > float(search["coarse"]["angleRadiusDeg"]):
         raise ValueError("maximumAngleCorrectionDeg cannot exceed coarse angle radius")
+    if is_v2:
+        validate_registration_config(config["registration"])
 
 
 def load_candidate_config(path: Path) -> dict[str, Any]:
@@ -571,6 +589,8 @@ def _transition(core_valid: bool, candidate_valid: bool) -> str:
 
 
 FAILURE_CATEGORY_BY_CHECK = {
+    "registration_valid": "registration_failed",
+    "projected_geometry": "invalid_prediction",
     "prediction_fields": "invalid_prediction",
     "prediction_length": "invalid_prediction",
     "core_path_consistency": "core_path_inconsistent",
@@ -620,6 +640,20 @@ class ShortLineCandidateEvaluator:
             if labelme_reference_path is not None
             else None
         )
+        self.main_housing_registrar: MainHousingRegistrar | None = None
+        if self.config["candidateId"] == CANDIDATE_SOURCE_V2:
+            if self.labelme_reference is None:
+                raise ValueError(
+                    "main-housing-registration-v2 is blocked without an external 19/30 LabelMe reference"
+                )
+            self.main_housing_registrar = MainHousingRegistrar(
+                self.labelme_reference.reference_gray,
+                {
+                    canonical: model.points
+                    for canonical, model in self.labelme_reference.models.items()
+                },
+                self.config["registration"],
+            )
         self.template_models = (
             self.labelme_reference.models if self.labelme_reference is not None else self.models
         )
@@ -675,6 +709,11 @@ class ShortLineCandidateEvaluator:
         if target.ndim != 2 or not target.size:
             raise ValueError("short-line candidate target must be a non-empty grayscale array")
         target_grad = core.gradient_magnitude(target)
+        registration = (
+            self.main_housing_registrar.register(target)
+            if self.main_housing_registrar is not None
+            else None
+        )
         output: dict[str, Any] = {}
         for canonical in self.config["features"]:
             model = self.models.get(canonical)
@@ -692,7 +731,14 @@ class ShortLineCandidateEvaluator:
                     {},
                 )
             output[raw_label] = self._evaluate_feature(
-                model, template_model, canonical, target, target_grad, measurements, status
+                model,
+                template_model,
+                canonical,
+                target,
+                target_grad,
+                measurements,
+                status,
+                registration,
             )
         return output
 
@@ -705,6 +751,7 @@ class ShortLineCandidateEvaluator:
         target_grad: np.ndarray,
         measurements: Mapping[str, Any],
         status: Mapping[str, Any],
+        registration: RegistrationResult | None,
     ) -> dict[str, Any]:
         started = time.perf_counter()
         label = str(model.label)
@@ -722,11 +769,35 @@ class ShortLineCandidateEvaluator:
         core_search = _core_profile(target_grad, core_target)
         core_search["coreSource"] = status.get("source")
         core_search["coreFallbackReason"] = status.get("reason")
-        roi = _roi_statistics(target_gray, target_grad, core_target, self.config)
+        is_v2 = self.config["candidateId"] == CANDIDATE_SOURCE_V2
+        projected_geometry: dict[str, float] | None = None
+        if is_v2 and registration is not None and registration.valid:
+            projected_points = registration.project_points(template_model.points)
+            projected_geometry = _geometry(
+                (np.asarray(projected_points[0], dtype=np.float64), np.asarray(projected_points[1], dtype=np.float64))
+            )
+        candidate_base = projected_geometry if is_v2 else core_target
+        roi = _roi_statistics(target_gray, target_grad, candidate_base, self.config)
         checks: list[dict[str, Any]] = []
-        checks.append(_check("prediction_fields", core_target is not None, "finite baseline x1/y1/x2/y2", core_target))
         gates = self.config["gates"]
-        length = core_target["length"] if core_target is not None else None
+        if is_v2:
+            checks.extend([
+                _check(
+                    "registration_valid",
+                    registration is not None and registration.valid,
+                    "independent main-housing registration passes all required gates",
+                    registration.to_dict() if registration is not None else None,
+                ),
+                _check(
+                    "projected_geometry",
+                    projected_geometry is not None,
+                    "external 19/30 endpoints projected through accepted registration",
+                    projected_geometry,
+                ),
+            ])
+        else:
+            checks.append(_check("prediction_fields", core_target is not None, "finite baseline x1/y1/x2/y2", core_target))
+        length = candidate_base["length"] if candidate_base is not None else None
         checks.append(_check(
             "prediction_length",
             length is not None and float(gates["minimumPredictionLengthPx"]) <= length <= float(gates["maximumPredictionLengthPx"]),
@@ -742,6 +813,7 @@ class ShortLineCandidateEvaluator:
             consistency,
             "coreValid agrees with reconstructed fixed short-line rule for known short-line sources",
             {"coreValid": core_valid, "reconstructedPass": expected_core_pass, "source": source},
+            required=not is_v2,
         ))
 
         candidate_search: dict[str, Any] = {
@@ -753,6 +825,8 @@ class ShortLineCandidateEvaluator:
                     template_model.points[1][1] - template_model.points[0][1],
                 ),
             },
+            "registration": registration.to_dict() if registration is not None else None,
+            "projectedGeometry": projected_geometry,
             "searchBounds": {
                 "angleCorrectionDeg": [-float(self.config["search"]["coarse"]["angleRadiusDeg"]), float(self.config["search"]["coarse"]["angleRadiusDeg"])],
                 "longitudinalOffsetPx": [-float(self.config["search"]["coarse"]["longitudinalRadiusPx"]), float(self.config["search"]["coarse"]["longitudinalRadiusPx"])],
@@ -770,9 +844,9 @@ class ShortLineCandidateEvaluator:
         candidate_reference: dict[str, float] | None = None
         delta: dict[str, float] | None = None
 
-        if core_target is not None and length is not None and length > 1e-9:
-            p1 = np.array([core_target["x1"], core_target["y1"]], dtype=np.float64)
-            p2 = np.array([core_target["x2"], core_target["y2"]], dtype=np.float64)
+        if candidate_base is not None and length is not None and length > 1e-9:
+            p1 = np.array([candidate_base["x1"], candidate_base["y1"]], dtype=np.float64)
+            p2 = np.array([candidate_base["x2"], candidate_base["y2"]], dtype=np.float64)
             base_midpoint = (p1 + p2) * 0.5
             base_theta = math.atan2(float(p2[1] - p1[1]), float(p2[0] - p1[0]))
             ref_p1 = np.asarray(template_model.points[0], dtype=np.float64)
@@ -780,12 +854,17 @@ class ShortLineCandidateEvaluator:
             ref_midpoint = (ref_p1 + ref_p2) * 0.5
             ref_theta = math.atan2(float(ref_p2[1] - ref_p1[1]), float(ref_p2[0] - ref_p1[0]))
             along_grid, across_grid = _oriented_coordinates(length, self.config["template"])
+            template_scale = (
+                float(registration.scale)
+                if is_v2 and registration is not None and registration.scale is not None
+                else 1.0
+            )
             template_patch = _sample_patch(
                 self.template_gradient,
                 ref_midpoint,
                 ref_theta,
-                along_grid,
-                across_grid,
+                along_grid / template_scale,
+                across_grid / template_scale,
             )
             template_finite = np.isfinite(template_patch)
             template_coverage = float(template_finite.mean())
@@ -930,41 +1009,51 @@ class ShortLineCandidateEvaluator:
             required_failed = [item["id"] for item in checks if item["required"] and not item["passed"]]
             if not required_failed:
                 candidate_target = raw_candidate_target
-                transform_values = {
-                    "target_center_x": _finite_number(measurements.get("transform.target_center_x_px")),
-                    "target_center_y": _finite_number(measurements.get("transform.target_center_y_px")),
-                    "scale": _finite_number(measurements.get("transform.scale")),
-                    "rotation_deg": _finite_number(measurements.get("transform.rotation_deg")),
-                }
-                if all(value is not None for value in transform_values.values()) and transform_values["scale"] > 0:
-                    transform = core.SimilarityTransform(
-                        tuple(self.reference_model.alignment_center),
-                        (transform_values["target_center_x"], transform_values["target_center_y"]),
-                        transform_values["scale"],
-                        math.radians(transform_values["rotation_deg"]),
-                        "candidate-inverse",
-                    )
-                    ref_candidate_p1 = np.asarray(transform.inverse_point((candidate_target["x1"], candidate_target["y1"])))
-                    ref_candidate_p2 = np.asarray(transform.inverse_point((candidate_target["x2"], candidate_target["y2"])))
+                if is_v2 and registration is not None and registration.valid:
+                    inverse = registration.inverse_points((
+                        (candidate_target["x1"], candidate_target["y1"]),
+                        (candidate_target["x2"], candidate_target["y2"]),
+                    ))
+                    ref_candidate_p1 = np.asarray(inverse[0])
+                    ref_candidate_p2 = np.asarray(inverse[1])
                     candidate_reference = _geometry((ref_candidate_p1, ref_candidate_p2))
-                core_midpoint = np.array([
-                    (core_target["x1"] + core_target["x2"]) * 0.5,
-                    (core_target["y1"] + core_target["y2"]) * 0.5,
-                ])
-                candidate_midpoint = np.array([
-                    (candidate_target["x1"] + candidate_target["x2"]) * 0.5,
-                    (candidate_target["y1"] + candidate_target["y2"]) * 0.5,
-                ])
-                endpoint_delta = np.array([
-                    math.hypot(candidate_target["x1"] - core_target["x1"], candidate_target["y1"] - core_target["y1"]),
-                    math.hypot(candidate_target["x2"] - core_target["x2"], candidate_target["y2"] - core_target["y2"]),
-                ])
-                delta = {
-                    "midpointDistancePx": float(np.linalg.norm(candidate_midpoint - core_midpoint)),
-                    "angleDeg": _angle_delta_deg(candidate_target["angleDeg"], core_target["angleDeg"]),
-                    "endpointRmsPx": float(np.sqrt(np.mean(endpoint_delta * endpoint_delta))),
-                    "lengthPx": candidate_target["length"] - core_target["length"],
-                }
+                else:
+                    transform_values = {
+                        "target_center_x": _finite_number(measurements.get("transform.target_center_x_px")),
+                        "target_center_y": _finite_number(measurements.get("transform.target_center_y_px")),
+                        "scale": _finite_number(measurements.get("transform.scale")),
+                        "rotation_deg": _finite_number(measurements.get("transform.rotation_deg")),
+                    }
+                    if all(value is not None for value in transform_values.values()) and transform_values["scale"] > 0:
+                        transform = core.SimilarityTransform(
+                            tuple(self.reference_model.alignment_center),
+                            (transform_values["target_center_x"], transform_values["target_center_y"]),
+                            transform_values["scale"],
+                            math.radians(transform_values["rotation_deg"]),
+                            "candidate-inverse",
+                        )
+                        ref_candidate_p1 = np.asarray(transform.inverse_point((candidate_target["x1"], candidate_target["y1"])))
+                        ref_candidate_p2 = np.asarray(transform.inverse_point((candidate_target["x2"], candidate_target["y2"])))
+                        candidate_reference = _geometry((ref_candidate_p1, ref_candidate_p2))
+                if core_target is not None:
+                    core_midpoint = np.array([
+                        (core_target["x1"] + core_target["x2"]) * 0.5,
+                        (core_target["y1"] + core_target["y2"]) * 0.5,
+                    ])
+                    candidate_midpoint = np.array([
+                        (candidate_target["x1"] + candidate_target["x2"]) * 0.5,
+                        (candidate_target["y1"] + candidate_target["y2"]) * 0.5,
+                    ])
+                    endpoint_delta = np.array([
+                        math.hypot(candidate_target["x1"] - core_target["x1"], candidate_target["y1"] - core_target["y1"]),
+                        math.hypot(candidate_target["x2"] - core_target["x2"], candidate_target["y2"] - core_target["y2"]),
+                    ])
+                    delta = {
+                        "midpointDistancePx": float(np.linalg.norm(candidate_midpoint - core_midpoint)),
+                        "angleDeg": _angle_delta_deg(candidate_target["angleDeg"], core_target["angleDeg"]),
+                        "endpointRmsPx": float(np.sqrt(np.mean(endpoint_delta * endpoint_delta))),
+                        "lengthPx": candidate_target["length"] - core_target["length"],
+                    }
         else:
             checks.extend([
                 _check("reference_template_coverage", False, gates["minimumCoverageRatio"], None),
@@ -993,7 +1082,7 @@ class ShortLineCandidateEvaluator:
         }
         candidate = {
             "candidateValid": candidate_valid,
-            "source": CANDIDATE_SOURCE,
+            "source": self.config["candidateId"],
             "target": candidate_target,
             "reference": candidate_reference,
             "deltaFromCore": delta,

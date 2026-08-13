@@ -80,11 +80,13 @@ uv run python tools/inspect_short_line_labelme.py \
 ```
 
 传入 `--short-line-labelme-reference` 后，候选局部模板来自该外置 A2 标注图；桌面核心仍使用原参考，
-其 SHA、旧量测和 `coreValid` 均不改变。候选输出 provenance 会记录 `external_labelme` 以及标注/图片
-SHA-256。未传该参数时保持原 v1 桌面参考行为。
+其 SHA、旧量测和 `coreValid` 均不改变。`main-housing-registration-v2` 还会先枚举圆形实例、独立选择
+主壳体、稳健拟合圆心/尺度并用环形外观估计角度，再投影真实 19/30 标注做局部搜索。旧 core 端点
+只保留在对照诊断中，不参与 v2 搜索中心。候选输出 provenance 会记录 `external_labelme` 以及标注/
+图片 SHA-256。v2 缺少外置 19/30 标注时严格拒绝；v1 仍可显式选择以保持兼容。
 
 接口契约见 `contracts/a-end-face-result.schema.json`，质量分层与批量评估的 Spec Kit 规格见
-`specs/004-quality-policy-batch/`；短线候选增量规格见 `specs/005-short-line-candidate/`。
+`specs/004-quality-policy-batch/`；主壳体配准增量规格见 `specs/007-main-housing-registration/`。
 
 ## 批量质量评估
 
@@ -115,10 +117,10 @@ uv run python tools/compare_short_line_candidates.py compare \
   --data-root "$HOME/Desktop/壳体项目/137/A2" \
   --annotation "/path/to/sample_1_label.json" \
   --results-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-v2-development-20/results.jsonl" \
-  --candidate-config config/end_face_short_line_candidate.v1.json \
+  --candidate-config config/end_face_short_line_candidate.v2.json \
   --short-line-labelme-reference "$HOME/Desktop/壳体项目/137/A2/development/sample_001/a2-short-lines.json" \
   --development-group \
-  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-labelme-development-20"
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-main-housing-v2-development-20"
 ```
 
 输出 `short-line-comparison.jsonl` 和 `short-line-summary.json`。无图重统计：
@@ -131,7 +133,9 @@ uv run python tools/compare_short_line_candidates.py summarize \
 
 开发时同一样品/位置的 20 张必须全部留在 development Manifest；冻结标注 SHA 和配置 SHA 后，使用
 不含该物理样品的全样品 Manifest 做 validation/acceptance。不得把同一组 20 帧随机拆到两个集合。
-增量规格和 Mac 命令见 `specs/006-a2-labelme-short-line-reference/`。
+单张外置代表图只用于锚点/几何来源校验，不能据此宣称 25 张改善。25 张必须用冻结后的 v2 配置、
+同一标注/图片 SHA 在 Mac 外置数据上完整运行。增量规格和命令见
+`specs/007-main-housing-registration/`。
 
 ## 数据边界
 

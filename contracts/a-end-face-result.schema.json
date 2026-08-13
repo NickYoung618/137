@@ -38,7 +38,7 @@
               "type": "object",
               "required": ["candidateId", "algorithmVersion", "configSha256", "configPath"],
               "properties": {
-                "candidateId": {"const": "reference-gradient-registration-v1"},
+                "candidateId": {"enum": ["reference-gradient-registration-v1", "main-housing-registration-v2"]},
                 "algorithmVersion": {"type": "string", "minLength": 1},
                 "configSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
                 "configPath": {"type": ["string", "null"]},
@@ -86,7 +86,7 @@
       "properties": {
         "feature": {"type": "string", "minLength": 1},
         "canonicalFeature": {"enum": ["19", "30"]},
-        "candidateId": {"const": "reference-gradient-registration-v1"},
+        "candidateId": {"enum": ["reference-gradient-registration-v1", "main-housing-registration-v2"]},
         "algorithmVersion": {"type": "string", "minLength": 1},
         "configSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "core": {
@@ -107,7 +107,7 @@
           "required": ["candidateValid", "source", "target", "reference", "deltaFromCore", "elapsedMs"],
           "properties": {
             "candidateValid": {"type": "boolean"},
-            "source": {"const": "reference-gradient-registration-v1"},
+            "source": {"enum": ["reference-gradient-registration-v1", "main-housing-registration-v2"]},
             "target": {"oneOf": [{"$ref": "#/$defs/geometry"}, {"type": "null"}]},
             "reference": {"oneOf": [{"$ref": "#/$defs/geometry"}, {"type": "null"}]},
             "deltaFromCore": {"type": ["object", "null"]},

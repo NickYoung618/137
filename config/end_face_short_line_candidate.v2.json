@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "a-end-face-short-line-candidate-config/2",
+  "candidateId": "main-housing-registration-v2",
+  "algorithmVersion": "2.0.0",
+  "features": ["19", "30"],
+  "template": {
+    "alongExtensionPx": 6.0,
+    "halfWidthPx": 12.0,
+    "sampleStepPx": 1.0
+  },
+  "search": {
+    "coarse": {
+      "angleRadiusDeg": 8.0,
+      "angleStepDeg": 1.0,
+      "longitudinalRadiusPx": 8.0,
+      "longitudinalStepPx": 2.0,
+      "lateralRadiusPx": 24.0,
+      "lateralStepPx": 2.0
+    },
+    "fine": {
+      "angleRadiusDeg": 1.0,
+      "angleStepDeg": 0.25,
+      "longitudinalRadiusPx": 2.0,
+      "longitudinalStepPx": 0.5,
+      "lateralRadiusPx": 2.0,
+      "lateralStepPx": 0.5
+    }
+  },
+  "gates": {
+    "minimumPredictionLengthPx": 4.0,
+    "maximumPredictionLengthPx": 80.0,
+    "minimumCoverageRatio": 0.98,
+    "minimumTemplateStd": 2.0,
+    "minimumRoiContrast": 8.0,
+    "minimumGradientP90": 2.0,
+    "minimumCorrelation": 0.45,
+    "minimumRobustZ": 2.0,
+    "minimumSeparatedPeakGap": 0.015,
+    "separationAngleDeg": 4.0,
+    "separationLongitudinalPx": 6.0,
+    "separationLateralPx": 6.0,
+    "maximumAngleCorrectionDeg": 7.75
+  },
+  "registration": {
+    "downsampleFactor": 8,
+    "foregroundThreshold": 50.0,
+    "minimumComponentPixels": 24,
+    "minimumDiameterPx": 600.0,
+    "maximumAspectError": 0.22,
+    "minimumComponentFillRatio": 0.03,
+    "maximumComponentFillRatio": 0.82,
+    "radialRayCount": 180,
+    "minimumEdgeCoverageRatio": 0.48,
+    "maximumCircularResidualRatio": 0.035,
+    "minimumScale": 0.75,
+    "maximumScale": 1.25,
+    "minimumAnchorRadiusRatio": 0.55,
+    "maximumAnchorRadiusRatio": 0.98,
+    "angularSamples": 360,
+    "radialSamples": 72,
+    "minimumRotationScore": 0.20,
+    "minimumRotationMargin": 0.01,
+    "rotationSeparationDeg": 12.0,
+    "minimumInstanceScore": 0.35,
+    "minimumInstanceMargin": 0.04
+  }
+}

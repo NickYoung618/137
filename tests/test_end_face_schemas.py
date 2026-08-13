@@ -31,6 +31,10 @@ class EndFaceSchemaTests(unittest.TestCase):
 
     def test_candidate_config_schema(self) -> None:
         self.validate("a-end-face-short-line-candidate-config.schema.json", DEFAULT_CANDIDATE_CONFIG)
+        self.validate(
+            "a-end-face-short-line-candidate-config.schema.json",
+            json.loads((ROOT / "config/end_face_short_line_candidate.v2.json").read_text(encoding="utf-8")),
+        )
 
     def test_labelme_short_line_reference_catalog_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
