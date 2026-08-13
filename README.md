@@ -52,6 +52,22 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
 3. 按样品隔离开发/调参/验证/验收；固定角度至少20次采集做静态重复性，至少2个换位组做动态重复性。
 4. 运行单图/批量结果与`tools/evaluate_slot_pose.py`，报告角度MAE/P95/max、成功/漏检/误检和节拍。
 
+无需A2即可先在Mac验证历史源码适配链（标注和参考图由工具生成的小图提供）：
+
+```bash
+uv sync
+uv run python -m unittest discover -s tests -v
+uv run python tools/generate_synthetic_slot_pose.py \
+  --output-dir /tmp/slot-pose-synthetic --angles=0,30,90 --repeats 1 --seed 137 \
+  --legacy-source '/Users/daizekai/Desktop/壳体项目/work/算法原始/A端面/repeatability_evaluation.py'
+uv run python algorithms/slot_pose/main.py \
+  --image /tmp/slot-pose-synthetic/synthetic/sample_synthetic/angle_pos_030p00/repeat_001.png \
+  --config /tmp/slot-pose-synthetic/synthetic-config.json --task-id mac-smoke --strict
+```
+
+Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skipped`；这与算法失败不同。完整A2验证需要
+另建本机配置，不能直接修改并提交服务器默认模板。
+
 ## 生产阻塞（不能由算法默认值代替）
 
 - B-001 现场/机械负责人：确认目标槽是否就是历史`find_outer_notch_angle`检测的外缘缺口。

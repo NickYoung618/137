@@ -19,6 +19,13 @@ class LegacyAdapterTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.config = load_config(CONFIG)
+        missing = [
+            cls.config["legacy_asset"][key]
+            for key in ("source_path", "annotation_path", "reference_path")
+            if not Path(cls.config["legacy_asset"][key]).is_file()
+        ]
+        if missing:
+            raise unittest.SkipTest(f"server historical assets are unavailable on this host: {missing}")
 
     def test_asset_hash_mismatch_fails_before_import(self) -> None:
         config = copy.deepcopy(self.config)

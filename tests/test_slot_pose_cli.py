@@ -15,6 +15,8 @@ class SlotPoseCliTests(unittest.TestCase):
     def test_default_reference_is_diagnostic_only(self) -> None:
         config = ROOT / "config/inspection.example.json"
         image = Path(json.loads(config.read_text(encoding="utf-8"))["legacy_asset"]["reference_path"])
+        if not image.is_file():
+            self.skipTest(f"server historical reference is unavailable on this host: {image}")
         payload = run(image, config, "reference-fail-closed-test")
         self.assertFalse(payload["result"]["valid"])
         self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
