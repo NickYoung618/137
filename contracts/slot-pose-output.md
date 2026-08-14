@@ -13,6 +13,11 @@
 
 稳定错误码：`INPUT_INVALID`、`ASSET_MISMATCH`、`FACE_NOT_FOUND`、`SLOT_NOT_FOUND`、
 `SLOT_ROTATION_INCONSISTENT`、`SLOT_FIT_FAILED`、`QUALITY_REJECTED`、
+`SLOT_PAIR_NOT_FOUND`、`SLOT_PAIR_AMBIGUOUS`、`RING_TRUNCATED`、`TARGET_SEMANTICS_UNCONFIRMED`、
 `POSE_CONVENTION_UNCONFIRMED`、`ANGLE_OUT_OF_RANGE`、`INTERNAL_ERROR`。
+
+多候选与paired数据仅增加在开放的`diagnostics`对象中，`schemaVersion`仍为`slot-pose-result/2`。
+旧消费者可忽略`diagnosticMode`、`angularProfile`、`candidates`、`candidateSummary`和`pairing`；
+任何诊断角均不是隐式PLC指令。
 
 下游必须先检查`taskId`和`result.valid`，失败或超时立即清除上一任务角度并走现场确认的安全动作。

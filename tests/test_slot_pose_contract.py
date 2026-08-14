@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from algorithms.slot_pose.contract import ERROR_CODES, build_result, signed_relative_angle, validate_result
+from algorithms.slot_pose.contract import ERROR_CODES, build_result, load_config, signed_relative_angle, validate_result
 
 
 def minimal_config() -> dict:
@@ -22,6 +22,7 @@ def minimal_config() -> dict:
         "pose": {
             "reference_frame": "IMAGE", "target_frame": "MACHINE",
             "mechanical_zero_image_deg": 0.0, "positive_direction": "cw", "conventions_confirmed": True,
+            "target_semantics_confirmed": True,
             "valid_range_deg": [-180, 179.999], "production_plc_mapping_confirmed": False,
         },
         "detector": {},
@@ -78,7 +79,40 @@ class SlotPoseContractTests(unittest.TestCase):
             "INPUT_INVALID", "ASSET_MISMATCH", "FACE_NOT_FOUND", "SLOT_NOT_FOUND",
             "SLOT_ROTATION_INCONSISTENT", "QUALITY_REJECTED", "POSE_CONVENTION_UNCONFIRMED",
             "ANGLE_OUT_OF_RANGE",
+            "SLOT_PAIR_NOT_FOUND", "SLOT_PAIR_AMBIGUOUS", "RING_TRUNCATED",
+            "TARGET_SEMANTICS_UNCONFIRMED",
         }.issubset(ERROR_CODES))
+
+    def test_old_config_defaults_to_legacy_but_unconfirmed_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["pose"].pop("target_semantics_confirmed")
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertEqual("legacy_single_notch", loaded["detector"]["diagnostic_mode"])
+            self.assertFalse(loaded["pose"]["target_semantics_confirmed"])
+
+    def test_invalid_diagnostic_mode_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["detector"]["diagnostic_mode"] = "automatic_guess"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "diagnostic_mode"):
+                load_config(path)
+
+    def test_valid_result_requires_confirmed_target_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = root / "a.png"
+            Image.new("L", (8, 8), 1).save(image)
+            config = minimal_config()
+            config["pose"]["target_semantics_confirmed"] = False
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "target semantics"):
+                build_result(image, config_path, config, "task", {}, angle_deg=1.0, confidence=0.8)
 
 
 if __name__ == "__main__":

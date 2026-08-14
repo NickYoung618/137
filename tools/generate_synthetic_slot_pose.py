@@ -18,7 +18,8 @@ except ImportError:
     from dataset_common import sha256_file, write_json
 
 
-DEFAULT_SOURCE = Path("/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py")
+DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config/inspection.example.json"
+DEFAULT_SOURCE = Path(json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))["legacy_asset"]["source_path"])
 
 
 def circle_points(cx: float, cy: float, radius: float, count: int = 180) -> list[list[float]]:
@@ -134,9 +135,11 @@ def build_dataset(output_dir: Path, angles: list[float], repeats: int, seed: int
         "pose": {
             "reference_frame": "SYNTHETIC_IMAGE", "target_frame": "SYNTHETIC_MECHANICAL",
             "mechanical_zero_image_deg": 0.0, "positive_direction": "cw", "conventions_confirmed": True,
+            "target_semantics_confirmed": True,
             "valid_range_deg": [-180.0, 179.999999], "production_plc_mapping_confirmed": False,
         },
         "detector": {
+            "diagnostic_mode": "legacy_single_notch",
             "min_notch_prominence": 12.0, "min_polar_score": 2.0,
             "max_rotation_disagreement_deg": 8.0, "min_scale": 0.8, "max_scale": 1.2,
         },

@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 
 
@@ -109,6 +110,61 @@ class LegacyAEndFaceAdapter:
         if missing:
             raise LegacyAdapterError("ASSET_MISMATCH", "function_inventory", f"missing functions: {missing}")
 
+    def _paired_profile(
+        self,
+        gray: Any,
+        center: tuple[float, float],
+        outer_radius: float,
+        shell_scale: float,
+        label: str,
+    ) -> dict[str, Any]:
+        profile_config = self.config["detector"]["profile"]
+        height, width = gray.shape
+        if not all(math.isfinite(value) for value in (*center, outer_radius)) or outer_radius <= 0.0:
+            raise LegacyAdapterError("FACE_NOT_FOUND", "face_quality", f"{label} center/radius is invalid")
+        edge_clearance = min(center[0], center[1], width - 1.0 - center[0], height - 1.0 - center[1])
+        shell_width = float(profile_config["shell_width_px"]) * float(shell_scale)
+        profile_diagnostics = {
+            "sampleCount": int(profile_config["n_angles"]),
+            "radialSampleCount": int(profile_config["n_radii"]),
+            "shellInnerRadiusPx": outer_radius - shell_width,
+            "shellOuterRadiusPx": outer_radius,
+            "completeRing": outer_radius <= edge_clearance,
+        }
+        if outer_radius > edge_clearance:
+            raise LegacyAdapterError(
+                "RING_TRUNCATED",
+                "profile_extraction",
+                f"{label} outer ring exceeds image boundary by {outer_radius - edge_clearance:.3f}px",
+                {"angularProfile": profile_diagnostics},
+            )
+        if outer_radius - shell_width <= 0.0:
+            raise LegacyAdapterError(
+                "QUALITY_REJECTED", "profile_extraction", f"{label} shell width exceeds outer radius",
+                {"angularProfile": profile_diagnostics},
+            )
+        polar = self.module.polar_resample(
+            gray,
+            center,
+            outer_radius - shell_width,
+            outer_radius,
+            int(profile_config["n_radii"]),
+            int(profile_config["n_angles"]),
+        )
+        candidates, summary = extract_dark_candidates(polar.mean(axis=0), profile_config)
+        pairing = assess_pairs(candidates, self.config["detector"]["pairing"])
+        profile_diagnostics.update({
+            "medianIntensity": summary["medianIntensity"],
+            "madIntensity": summary["madIntensity"],
+            "darkThreshold": summary["darkThreshold"],
+        })
+        return {
+            "angularProfile": profile_diagnostics,
+            "candidates": [candidate.to_dict() for candidate in candidates],
+            "candidateSummary": summary,
+            "pairing": pairing,
+        }
+
     def estimate(self, image_path: Path) -> dict[str, Any]:
         started = time.perf_counter()
         try:
@@ -160,19 +216,17 @@ class LegacyAEndFaceAdapter:
             notch_pair_prominence = float(notch_rotation_result[1])
             agreement_deg = _circular_difference_deg(math.degrees(float(polar_rotation)), notch_rotation_deg)
 
-        candidate_deg = math.degrees(float(notch_angle)) % 360.0
         detector = self.config["detector"]
+        mode = str(detector.get("diagnostic_mode", "legacy_single_notch"))
+        candidate_deg = math.degrees(float(notch_angle)) % 360.0
         failures: list[str] = []
-        if float(notch_prominence) < float(detector["min_notch_prominence"]):
-            failures.append("notch_prominence")
         if float(polar_score) < float(detector["min_polar_score"]):
             failures.append("polar_score")
         if not float(detector["min_scale"]) <= scale <= float(detector["max_scale"]):
             failures.append("scale")
-        if agreement_deg is None:
-            failures.append("notch_rotation_missing")
 
         diagnostics = {
+            "diagnosticMode": mode,
             "candidateAzimuthImageDeg": candidate_deg,
             "referenceNotch": {
                 "azimuthImageDeg": math.degrees(float(reference_notch[0])) % 360.0,
@@ -200,8 +254,72 @@ class LegacyAEndFaceAdapter:
             "elapsedMs": (time.perf_counter() - started) * 1000.0,
             "functionInventory": list(REQUIRED_FUNCTIONS),
         }
+        if mode == "legacy_single_notch":
+            if float(notch_prominence) < float(detector["min_notch_prominence"]):
+                failures.append("notch_prominence")
+            if agreement_deg is None:
+                failures.append("notch_rotation_missing")
+        elif mode == "paired_notches_centerline":
+            try:
+                reference_paired = self._paired_profile(
+                    self.reference_model.reference_gray,
+                    self.reference_model.alignment_center,
+                    float(self.reference_model.alignment_outer_radius),
+                    1.0,
+                    "reference",
+                )
+                target_paired = self._paired_profile(target_gray, center, outer_radius, scale, "target")
+            except LegacyAdapterError as exc:
+                diagnostics.update(exc.diagnostics)
+                exc.diagnostics = diagnostics
+                raise
+            diagnostics.update({
+                "angularProfile": target_paired["angularProfile"],
+                "candidates": target_paired["candidates"],
+                "candidateSummary": target_paired["candidateSummary"],
+                "pairing": target_paired["pairing"],
+                "referencePairing": {
+                    "candidateSummary": reference_paired["candidateSummary"],
+                    "pairing": reference_paired["pairing"],
+                },
+            })
+            reference_pair = reference_paired["pairing"]
+            target_pair = target_paired["pairing"]
+            if not reference_pair["unique"]:
+                code = "SLOT_PAIR_AMBIGUOUS" if "pair_not_unique" in reference_pair["failedChecks"] else "SLOT_PAIR_NOT_FOUND"
+                raise LegacyAdapterError(
+                    code, "reference_pairing", f"reference notch pair failed: {reference_pair['failedChecks']}", diagnostics,
+                )
+            if not target_pair["unique"]:
+                code = "SLOT_PAIR_AMBIGUOUS" if "pair_not_unique" in target_pair["failedChecks"] else "SLOT_PAIR_NOT_FOUND"
+                raise LegacyAdapterError(
+                    code, "slot_pairing", f"target notch pair failed: {target_pair['failedChecks']}", diagnostics,
+                )
+            candidate_deg = float(target_pair["centerlineDeg"])
+            paired_rotation_deg = circular_delta_deg(candidate_deg, float(reference_pair["centerlineDeg"]))
+            pair_agreement_deg = _circular_difference_deg(math.degrees(float(polar_rotation)), paired_rotation_deg)
+            diagnostics["candidateAzimuthImageDeg"] = candidate_deg
+            diagnostics["pairing"].update({
+                "pairedRotationDeg": paired_rotation_deg,
+                "polarPairAgreementDeg": pair_agreement_deg,
+            })
+            diagnostics["slot"].update({
+                "pairedCenterlineDeg": candidate_deg,
+                "pairedRotationDeg": paired_rotation_deg,
+                "polarPairAgreementDeg": pair_agreement_deg,
+            })
+            if pair_agreement_deg > float(detector["max_polar_pair_disagreement_deg"]):
+                raise LegacyAdapterError(
+                    "SLOT_ROTATION_INCONSISTENT",
+                    "quality_gate",
+                    f"polar/paired disagreement {pair_agreement_deg:.3f}deg exceeds threshold",
+                    diagnostics,
+                )
+        else:  # load_config prevents this; retain a local guard for direct construction.
+            raise LegacyAdapterError("QUALITY_REJECTED", "configuration", f"unsupported diagnostic mode: {mode}")
+
         self._verify_assets()
-        if agreement_deg is not None and agreement_deg > float(detector["max_rotation_disagreement_deg"]):
+        if mode == "legacy_single_notch" and agreement_deg is not None and agreement_deg > float(detector["max_rotation_disagreement_deg"]):
             raise LegacyAdapterError(
                 "SLOT_ROTATION_INCONSISTENT", "quality_gate",
                 f"polar/notch disagreement {agreement_deg:.3f}deg exceeds threshold",
@@ -212,17 +330,31 @@ class LegacyAEndFaceAdapter:
                 "QUALITY_REJECTED", "quality_gate", f"failed quality checks: {', '.join(failures)}", diagnostics,
             )
 
-        confidence_parts = [
-            min(1.0, float(notch_prominence) / max(1.0, 2.0 * float(detector["min_notch_prominence"]))),
-            min(1.0, float(polar_score) / max(1.0, 2.0 * float(detector["min_polar_score"]))),
-            max(0.0, 1.0 - float(agreement_deg or 0.0) / max(1e-6, float(detector["max_rotation_disagreement_deg"]))),
-        ]
+        if mode == "paired_notches_centerline":
+            pairing = diagnostics["pairing"]
+            confidence_parts = [
+                min(1.0, float(polar_score) / max(1.0, 2.0 * float(detector["min_polar_score"]))),
+                float(pairing["bestScore"]),
+                min(1.0, float(pairing["scoreMargin"]) / max(1e-6, float(detector["pairing"]["min_score_margin"]))),
+                max(0.0, 1.0 - float(pairing["polarPairAgreementDeg"]) / float(detector["max_polar_pair_disagreement_deg"])),
+            ]
+        else:
+            confidence_parts = [
+                min(1.0, float(notch_prominence) / max(1.0, 2.0 * float(detector["min_notch_prominence"]))),
+                min(1.0, float(polar_score) / max(1.0, 2.0 * float(detector["min_polar_score"]))),
+                max(0.0, 1.0 - float(agreement_deg or 0.0) / max(1e-6, float(detector["max_rotation_disagreement_deg"]))),
+            ]
         diagnostics["quality"]["confidenceComponents"] = confidence_parts
         diagnostics["quality"]["passed"] = True
         return {"candidate_image_deg": candidate_deg, "confidence": min(confidence_parts), "diagnostics": diagnostics}
 
     def mechanical_angle(self, candidate_image_deg: float) -> float:
         pose = self.config["pose"]
+        if not pose.get("target_semantics_confirmed"):
+            raise LegacyAdapterError(
+                "TARGET_SEMANTICS_UNCONFIRMED", "pose_mapping",
+                "diagnostic target has not been confirmed as the production mechanical target",
+            )
         if not pose.get("conventions_confirmed"):
             raise LegacyAdapterError(
                 "POSE_CONVENTION_UNCONFIRMED", "pose_mapping",

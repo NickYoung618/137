@@ -29,13 +29,52 @@
         "mechanical_zero_image_deg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
         "positive_direction": {"type": ["string", "null"], "enum": ["cw", "ccw", null]},
         "conventions_confirmed": {"type": "boolean"},
+        "target_semantics_confirmed": {"type": "boolean", "default": false},
         "valid_range_deg": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
         "production_plc_mapping_confirmed": {"type": "boolean"}
       }
     },
     "detector": {
       "type": "object",
-      "required": ["min_notch_prominence", "min_polar_score", "max_rotation_disagreement_deg", "min_scale", "max_scale"]
+      "required": ["min_notch_prominence", "min_polar_score", "max_rotation_disagreement_deg", "min_scale", "max_scale"],
+      "properties": {
+        "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline"], "default": "legacy_single_notch"},
+        "min_notch_prominence": {"type": "number", "minimum": 0},
+        "min_polar_score": {"type": "number", "minimum": 0},
+        "max_rotation_disagreement_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+        "min_scale": {"type": "number", "exclusiveMinimum": 0},
+        "max_scale": {"type": "number", "exclusiveMinimum": 0},
+        "max_polar_pair_disagreement_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+        "profile": {
+          "type": "object",
+          "required": ["n_angles", "n_radii", "shell_width_px", "smoothing_window", "mad_multiplier", "min_prominence", "min_half_width_deg", "max_half_width_deg"],
+          "properties": {
+            "n_angles": {"type": "integer", "minimum": 36},
+            "n_radii": {"type": "integer", "minimum": 2},
+            "shell_width_px": {"type": "number", "exclusiveMinimum": 0},
+            "smoothing_window": {"type": "integer", "minimum": 1},
+            "mad_multiplier": {"type": "number", "exclusiveMinimum": 0},
+            "min_prominence": {"type": "number", "exclusiveMinimum": 0},
+            "min_half_width_deg": {"type": "number", "exclusiveMinimum": 0},
+            "max_half_width_deg": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
+        "pairing": {
+          "type": "object",
+          "required": ["min_candidates", "max_candidates", "min_separation_deg", "max_separation_deg", "expected_separation_deg", "min_width_ratio", "min_prominence_ratio", "min_pair_score", "min_score_margin"],
+          "properties": {
+            "min_candidates": {"type": "integer", "minimum": 2},
+            "max_candidates": {"type": "integer", "minimum": 2},
+            "min_separation_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+            "max_separation_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+            "expected_separation_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+            "min_width_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_prominence_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_pair_score": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_score_margin": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
     }
   },
   "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}

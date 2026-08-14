@@ -13,7 +13,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.2.0"
+ALGORITHM_VERSION = "0.3.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -21,7 +21,11 @@ ERROR_CODES = {
     "SLOT_NOT_FOUND",
     "SLOT_ROTATION_INCONSISTENT",
     "SLOT_FIT_FAILED",
+    "SLOT_PAIR_NOT_FOUND",
+    "SLOT_PAIR_AMBIGUOUS",
+    "RING_TRUNCATED",
     "QUALITY_REJECTED",
+    "TARGET_SEMANTICS_UNCONFIRMED",
     "POSE_CONVENTION_UNCONFIRMED",
     "ANGLE_OUT_OF_RANGE",
     "INTERNAL_ERROR",
@@ -49,6 +53,26 @@ def load_config(config_path: Path) -> dict[str, Any]:
     for key in ("config_id", "legacy_asset", "pose", "detector"):
         if key not in config:
             raise ValueError(f"configuration field is required: {key}")
+    pose = config["pose"]
+    if not isinstance(pose, dict):
+        raise ValueError("pose configuration must be an object")
+    pose.setdefault("target_semantics_confirmed", False)
+    detector = config["detector"]
+    if not isinstance(detector, dict):
+        raise ValueError("detector configuration must be an object")
+    mode = detector.setdefault("diagnostic_mode", "legacy_single_notch")
+    if mode not in {"legacy_single_notch", "paired_notches_centerline"}:
+        raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
+    if mode == "paired_notches_centerline":
+        from algorithms.slot_pose.angular_profile import validate_pairing_config, validate_profile_config
+
+        if not isinstance(detector.get("profile"), dict) or not isinstance(detector.get("pairing"), dict):
+            raise ValueError("paired mode requires detector.profile and detector.pairing objects")
+        validate_profile_config(detector["profile"])
+        validate_pairing_config(detector["pairing"])
+        disagreement = detector.get("max_polar_pair_disagreement_deg")
+        if not isinstance(disagreement, (int, float)) or not 0.0 < float(disagreement) <= 180.0:
+            raise ValueError("max_polar_pair_disagreement_deg must be in (0, 180]")
     return config
 
 
@@ -85,6 +109,10 @@ def build_result(
     task_id = task_id or f"offline:{image['sha256'][:16]}"
     valid = error_code is None
     pose = config["pose"]
+    if valid and not bool(pose.get("conventions_confirmed", False)):
+        raise ValueError("valid pose requires confirmed mechanical conventions")
+    if valid and not bool(pose.get("target_semantics_confirmed", False)):
+        raise ValueError("valid pose requires confirmed target semantics")
     if not valid:
         angle_deg = None
         confidence = None
@@ -123,6 +151,7 @@ def build_result(
         "diagnostics": {
             **diagnostics,
             "poseConventionsConfirmed": bool(pose.get("conventions_confirmed", False)),
+            "targetSemanticsConfirmed": bool(pose.get("target_semantics_confirmed", False)),
             "productionPlcMappingConfirmed": bool(pose.get("production_plc_mapping_confirmed", False)),
             "failClosed": True,
         },

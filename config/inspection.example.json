@@ -22,15 +22,39 @@
     "mechanical_zero_image_deg": null,
     "positive_direction": null,
     "conventions_confirmed": false,
+    "target_semantics_confirmed": false,
     "valid_range_deg": null,
     "production_plc_mapping_confirmed": false
   },
   "detector": {
+    "diagnostic_mode": "legacy_single_notch",
     "min_notch_prominence": 12.0,
     "min_polar_score": 3.0,
     "max_rotation_disagreement_deg": 5.0,
     "min_scale": 0.75,
-    "max_scale": 1.25
+    "max_scale": 1.25,
+    "max_polar_pair_disagreement_deg": 5.0,
+    "profile": {
+      "n_angles": 1440,
+      "n_radii": 10,
+      "shell_width_px": 30.0,
+      "smoothing_window": 7,
+      "mad_multiplier": 3.0,
+      "min_prominence": 12.0,
+      "min_half_width_deg": 1.0,
+      "max_half_width_deg": 30.0
+    },
+    "pairing": {
+      "min_candidates": 2,
+      "max_candidates": 6,
+      "min_separation_deg": 8.0,
+      "max_separation_deg": 90.0,
+      "expected_separation_deg": 40.0,
+      "min_width_ratio": 0.4,
+      "min_prominence_ratio": 0.4,
+      "min_pair_score": 0.5,
+      "min_score_margin": 0.1
+    }
   },
   "feature_mappings": [
     {
