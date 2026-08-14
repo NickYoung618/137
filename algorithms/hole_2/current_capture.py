@@ -353,7 +353,14 @@ def _score_support(
         float(offset_y * downsample),
     )
     saturation_limit = search_radius_px * float(support_config["offset_saturation_fraction"])
-    saturated = max(abs(offset_target[0]), abs(offset_target[1])) >= saturation_limit
+    boundary = {
+        "xLower": offset_target[0] <= -saturation_limit,
+        "xUpper": offset_target[0] >= saturation_limit,
+        "yLower": offset_target[1] <= -saturation_limit,
+        "yUpper": offset_target[1] >= saturation_limit,
+        "limitPx": float(saturation_limit),
+    }
+    saturated = any(boundary[name] for name in ("xLower", "xUpper", "yLower", "yUpper"))
     predicted = transform.forward(*group.reference_point)
     target_point = (predicted[0] + offset_target[0], predicted[1] + offset_target[1])
     valid = (
@@ -380,6 +387,20 @@ def _score_support(
         "edgePeakNormalized": peak_normalized,
         "edgeProminenceNormalized": prominence,
         "visibleFraction": visibility,
+        "searchBoundary": boundary,
+        "gateDiagnostics": {
+            "visibility": {"value": visibility, "minimum": min_visible,
+                           "passed": visibility >= min_visible},
+            "edgePeak": {"value": peak_normalized,
+                         "minimum": float(support_config["min_edge_peak_normalized"]),
+                         "passed": peak_normalized >= float(support_config["min_edge_peak_normalized"])},
+            "edgeProminence": {"value": prominence,
+                               "minimum": float(support_config["min_edge_prominence_normalized"]),
+                               "passed": prominence >= float(support_config["min_edge_prominence_normalized"])},
+            "searchBoundary": {"passed": not saturated, "hitDimensions": [
+                name for name in ("xLower", "xUpper", "yLower", "yUpper") if boundary[name]
+            ]},
+        },
         "valid": bool(valid),
         "failureReason": None if valid else ",".join(reasons),
     }
@@ -529,6 +550,36 @@ def _candidate(
     )
     if math.isfinite(median_residual):
         score -= median_residual / max(1.0, float(quality["max_median_residual_px"]))
+    fine_angle_delta = None if transform is None else abs(
+        _angle_difference_degrees(transform.theta_deg, orientation_deg)
+    )
+    scale_value = None if transform is None else float(transform.scale)
+    scale_change = None if transform is None else abs(
+        transform.scale / hypothesis["scale"] - 1.0
+    )
+    gate_diagnostics = {
+        "supportCount": {"value": support_count,
+                         "minimum": int(quality["min_support_groups"]),
+                         "passed": support_count >= int(quality["min_support_groups"])},
+        "spatialCoverage": {"value": coverage,
+                            "minimum": float(quality["min_spatial_coverage"]),
+                            "passed": coverage >= float(quality["min_spatial_coverage"])},
+        "medianResidualPx": {"value": None if not math.isfinite(median_residual) else median_residual,
+                             "maximum": float(quality["max_median_residual_px"]),
+                             "passed": median_residual <= float(quality["max_median_residual_px"])},
+        "maxResidualPx": {"value": None if not math.isfinite(max_residual) else max_residual,
+                          "maximum": float(quality["max_residual_px"]),
+                          "passed": max_residual <= float(quality["max_residual_px"])},
+        "fineAngleDeltaDeg": {"value": fine_angle_delta,
+                              "maximum": float(quality["max_fine_angle_deg"]),
+                              "passed": fine_angle_delta is not None and fine_angle_delta <= float(quality["max_fine_angle_deg"])},
+        "scale": {"value": scale_value, "minimum": float(quality["min_scale"]),
+                  "maximum": float(quality["max_scale"]),
+                  "passed": scale_value is not None and float(quality["min_scale"]) <= scale_value <= float(quality["max_scale"])},
+        "scaleChangeFromCoarse": {"value": scale_change,
+                                  "maximum": float(quality["max_scale_change_from_coarse_fraction"]),
+                                  "passed": scale_change is not None and scale_change <= float(quality["max_scale_change_from_coarse_fraction"])},
+    }
     return {
         "orientationDeg": int(orientation_deg),
         "coarse": dict(hypothesis),
@@ -539,6 +590,7 @@ def _candidate(
         "medianResidualPx": None if not math.isfinite(median_residual) else median_residual,
         "maxResidualPx": None if not math.isfinite(max_residual) else max_residual,
         "supports": final_supports,
+        "gateDiagnostics": gate_diagnostics,
         "valid": not failure_reasons and transform is not None,
         "failureReasons": sorted(set(failure_reasons)),
     }
@@ -839,8 +891,18 @@ def _phi_radius_search_pass(
     if not refined:
         return None
     peak, target_cx, target_cy, target_radius = max(refined, key=lambda item: item[0])
-    center_offset = math.hypot(target_cx - predicted_center[0], target_cy - predicted_center[1])
+    center_offset_x = float(target_cx - predicted_center[0])
+    center_offset_y = float(target_cy - predicted_center[1])
+    center_offset = math.hypot(center_offset_x, center_offset_y)
     bound_tolerance = 0.5 * refine_step + 1e-9
+    center_limit = search_radius * float(phi_config["boundary_saturation_fraction"])
+    center_boundary = {
+        "xLower": center_offset_x <= -center_limit,
+        "xUpper": center_offset_x >= center_limit,
+        "yLower": center_offset_y <= -center_limit,
+        "yUpper": center_offset_y >= center_limit,
+        "limitPx": center_limit,
+    }
     return {
         "peak": float(peak),
         "target_cx": target_cx,
@@ -848,11 +910,16 @@ def _phi_radius_search_pass(
         "target_radius": target_radius,
         "radius_scale_ratio": float(target_radius / predicted_radius),
         "center_offset": center_offset,
+        "center_offset_x": center_offset_x,
+        "center_offset_y": center_offset_y,
+        "center_boundary": center_boundary,
+        "radius_lower_bound": float(radius_min),
+        "radius_upper_bound": float(radius_max),
         "prominence": float((peak - np.median([item[0] for item in scored])) / normalizer),
         "edge_peak": float(peak / normalizer),
         "lower_radius_saturated": target_radius <= radius_min + bound_tolerance,
         "upper_radius_saturated": target_radius >= radius_max - bound_tolerance,
-        "center_saturated": center_offset >= search_radius * float(phi_config["boundary_saturation_fraction"]),
+        "center_saturated": any(center_boundary[name] for name in ("xLower", "xUpper", "yLower", "yUpper")),
     }
 
 
@@ -878,6 +945,9 @@ def _detect_phi12_2(
         dtype=np.float64,
     )
     cosines, sines = np.cos(angles), np.sin(angles)
+    polarity = float(shape.polarity)
+    polarity_name = "positive" if polarity > 0.0 else ("negative" if polarity < 0.0 else "unsigned")
+    angle_coverage_deg = float(math.degrees(abs(shape.angle_end - shape.angle_start)))
     main_min = float(phi_config["min_radius_scale_ratio"])
     main = _phi_radius_search_pass(
         gradient, normalizer, predicted_center, predicted_radius,
@@ -968,6 +1038,24 @@ def _detect_phi12_2(
         "candidate_edge_points": float(point_count),
         "candidate_fit_residual_target_px": fit_residual,
         "candidate_center_offset_target_px": float(selected["center_offset"]),
+        "candidate_center_offset_x_target_px": float(selected["center_offset_x"]),
+        "candidate_center_offset_y_target_px": float(selected["center_offset_y"]),
+        "candidate_center_x_boundary": {
+            "lower": bool(selected["center_boundary"]["xLower"]),
+            "upper": bool(selected["center_boundary"]["xUpper"]),
+            "limitPx": float(selected["center_boundary"]["limitPx"]),
+        },
+        "candidate_center_y_boundary": {
+            "lower": bool(selected["center_boundary"]["yLower"]),
+            "upper": bool(selected["center_boundary"]["yUpper"]),
+            "limitPx": float(selected["center_boundary"]["limitPx"]),
+        },
+        "candidate_radius_lower_bound_target_px": float(selected["radius_lower_bound"]),
+        "candidate_radius_upper_bound_target_px": float(selected["radius_upper_bound"]),
+        "candidate_upper_radius_boundary_saturated": bool(selected["upper_radius_saturated"]),
+        "candidate_edge_polarity": polarity_name,
+        "candidate_edge_polarity_reference_delta": polarity,
+        "candidate_angle_coverage_deg": angle_coverage_deg,
         "candidate_edge_peak_normalized": float(selected["edge_peak"]),
         "candidate_edge_prominence_normalized": float(selected["prominence"]),
         "candidate_median_edge_score": float(np.median(edge_scores)) if edge_scores else float("nan"),
@@ -1055,17 +1143,28 @@ def _detect_d7_tangent(
                   p2_target[1] + axis_shift * normal_target[1])
     polarities = d7_shape.endpoint_polarities or (0.0, 0.0)
     image = contrast_stretch(target)
+    first_diagnostic: dict[str, Any] = {}
+    second_diagnostic: dict[str, Any] = {}
     first = detect_dimension_boundary(
-        image, p1_shifted, p2_shifted, "p1", polarity=polarities[0]
+        image, p1_shifted, p2_shifted, "p1", polarity=polarities[0],
+        diagnostics=first_diagnostic,
     )
     second = detect_dimension_boundary(
-        image, p1_shifted, p2_shifted, "p2", polarity=polarities[1]
+        image, p1_shifted, p2_shifted, "p2", polarity=polarities[1],
+        diagnostics=second_diagnostic,
     )
     if first is None or second is None:
+        failed_sides = [
+            side for side, boundary in (("p1", first), ("p2", second))
+            if boundary is None
+        ]
         return None, {
             "candidate_failure": "tangent_boundary_fit_failed",
             "candidate_reference_tangent_error_px": tangent_error_ref,
             "candidate_axis_shift_target_px": axis_shift,
+            "candidate_failed_sides": failed_sides,
+            "candidate_p1_strip": first_diagnostic,
+            "candidate_p2_strip": second_diagnostic,
         }
     parallelism = boundary_parallelism_deg(first.line, second.line)
     reasons: list[str] = []
@@ -1088,6 +1187,9 @@ def _detect_d7_tangent(
         "candidate_p1_edge_score": float(first.median_edge_score),
         "candidate_p2_edge_score": float(second.median_edge_score),
         "candidate_boundary_parallelism_deg": float(parallelism),
+        "candidate_failed_sides": [],
+        "candidate_p1_strip": first_diagnostic,
+        "candidate_p2_strip": second_diagnostic,
     }
     if reasons:
         return None, quality

@@ -194,6 +194,11 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
                     self.assertTrue(result["registrationValid"], result)
                     self.assertEqual(orientation, result["selected"]["orientationDeg"])
                     self.assertGreaterEqual(result["selected"]["supportCount"], 3)
+                    self.assertIn("gateDiagnostics", result["selected"])
+                    self.assertTrue(all(
+                        "searchBoundary" in support and "gateDiagnostics" in support
+                        for support in result["selected"]["supports"]
+                    ))
                     # Raster edge localization includes a one-pixel drawing bias;
                     # the exact landmark fit above covers the stricter numeric gate.
                     self.assertLessEqual(abs(result["transform"]["scale"] - 1.0), 0.02)
@@ -281,6 +286,12 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertAlmostEqual(105.0, phi_values["Phi12_2_cx"], delta=1.0)
         self.assertAlmostEqual(107.0, phi_values["Phi12_2_cy"], delta=1.0)
         self.assertAlmostEqual(36.0, phi_values["Phi12_2_r"], delta=1.0)
+        self.assertIn("candidate_center_x_boundary", phi_quality)
+        self.assertIn("candidate_center_y_boundary", phi_quality)
+        self.assertIn("candidate_radius_lower_bound_target_px", phi_quality)
+        self.assertIn("candidate_radius_upper_bound_target_px", phi_quality)
+        self.assertIn("candidate_edge_polarity", phi_quality)
+        self.assertGreater(phi_quality["candidate_angle_coverage_deg"], 350.0)
 
         # Use a separate straight-band target so the two endpoint boundaries
         # are unambiguous; the axis must move from y=145 to the detected
@@ -296,6 +307,37 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertIsNotNone(tangent_values, tangent_quality)
         self.assertAlmostEqual(-5.0, tangent_quality["candidate_axis_shift_target_px"], delta=0.1)
         self.assertAlmostEqual(80.0, tangent_values["d7_length"], delta=1.5)
+        self.assertEqual([], tangent_quality["candidate_failed_sides"])
+        self.assertIn("candidate_p1_strip", tangent_quality)
+        self.assertIn("candidate_p2_strip", tangent_quality)
+
+    def test_d7_failed_side_keeps_strip_diagnostics(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="arc",
+            points=[(100.0 + 40.0 * math.cos(a), 100.0 + 40.0 * math.sin(a)) for a in angles],
+            circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, template_angles=angles,
+        )
+        d7 = ShapeModel(
+            index=1, label="7", sanitized="d7", kind="line",
+            points=[(60.0, 140.0), (140.0, 140.0)],
+            line_p1=(60.0, 140.0), line_p2=(140.0, 140.0),
+            endpoint_polarities=(100.0, -100.0),
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), np.zeros((220, 220)), [phi, d7], [])
+        values, quality = _detect_d7_tangent(
+            np.full((220, 220), 20.0), reference,
+            SimilarityTransform(0.0, 0.0, 1.0, 0.0),
+            {"Phi12_2_cx": 100.0, "Phi12_2_cy": 100.0, "Phi12_2_r": 40.0},
+            _test_config(),
+        )
+        self.assertIsNone(values)
+        self.assertEqual(["p1", "p2"], quality["candidate_failed_sides"])
+        for side in ("p1", "p2"):
+            strip = quality[f"candidate_{side}_strip"]
+            self.assertEqual("line_fit_failed", strip["failureStage"])
+            self.assertEqual(0, strip["acceptedEdgePoints"])
 
     def test_phi_radius_expands_only_after_main_lower_bound_saturation(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)

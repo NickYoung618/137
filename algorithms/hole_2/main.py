@@ -783,6 +783,7 @@ def detect_dimension_boundary(
     prior_sigma: float = D7_BOUNDARY_PRIOR_SIGMA,
     min_edge_score: float = D7_BOUNDARY_MIN_EDGE_SCORE,
     min_points: int = D7_BOUNDARY_MIN_POINTS,
+    diagnostics: dict[str, object] | None = None,
 ) -> BoundaryDetection | None:
     """Independently locate and fit the boundary at one dimension endpoint.
 
@@ -791,9 +792,27 @@ def detect_dimension_boundary(
     which the actual boundary line is robustly fitted. The reported feature
     point is the intersection of that fitted boundary and the dimension axis.
     """
+    if diagnostics is not None:
+        diagnostics.update({
+            "endpoint": endpoint,
+            "stripSamples": int(strip_samples),
+            "searchWindowPx": int(search_window),
+            "minEdgeScore": float(min_edge_score),
+            "minPoints": int(min_points),
+            "usableProfiles": 0,
+            "acceptedEdgePoints": 0,
+            "medianEdgePeak": None,
+            "inlierPoints": 0,
+            "medianResidualPx": None,
+            "axisCosine": None,
+            "offsetPx": None,
+            "failureStage": None,
+        })
     dx, dy = p2_pred[0] - p1_pred[0], p2_pred[1] - p1_pred[1]
     length = math.hypot(dx, dy)
     if length < 5.0:
+        if diagnostics is not None:
+            diagnostics["failureStage"] = "axis_degenerate"
         return None
     ux, uy = dx / length, dy / length
     tx, ty = -uy, ux
@@ -813,6 +832,8 @@ def detect_dimension_boundary(
         profile = bilinear_sample(target, cx + offsets * ux, cy + offsets * uy)
         if np.isnan(profile).any():
             continue
+        if diagnostics is not None:
+            diagnostics["usableProfiles"] = int(diagnostics["usableProfiles"]) + 1
         derivative = np.diff(smooth_1d(profile, 7))
         base_score = np.abs(derivative) if polarity_sign == 0.0 else derivative * polarity_sign
         score = np.maximum(base_score, 0.0) * prior
@@ -826,24 +847,48 @@ def detect_dimension_boundary(
         edge_points.append((float(cx + offset * ux), float(cy + offset * uy)))
         edge_scores.append(raw_edge_score)
 
+    if diagnostics is not None:
+        diagnostics["acceptedEdgePoints"] = len(edge_points)
+        diagnostics["medianEdgePeak"] = (
+            float(np.median(edge_scores)) if edge_scores else None
+        )
+
     fitted = robust_fit_line(edge_points, min_points=min_points)
     if fitted is None:
+        if diagnostics is not None:
+            diagnostics["failureStage"] = "line_fit_failed"
         return None
     line, inliers = fitted
     a, b, c = line
     axis_cosine = abs(a * ux + b * uy)
+    if diagnostics is not None:
+        diagnostics["inlierPoints"] = int(len(inliers))
+        diagnostics["axisCosine"] = float(axis_cosine)
     if axis_cosine < D7_BOUNDARY_MIN_AXIS_COSINE:
+        if diagnostics is not None:
+            diagnostics["failureStage"] = "axis_alignment_below_gate"
         return None
     residuals = np.abs(a * inliers[:, 0] + b * inliers[:, 1] + c)
     median_residual = float(np.median(residuals))
+    if diagnostics is not None:
+        diagnostics["medianResidualPx"] = median_residual
     if median_residual > D7_BOUNDARY_MAX_RESIDUAL_PX:
+        if diagnostics is not None:
+            diagnostics["failureStage"] = "fit_residual_above_gate"
         return None
     intersection = line_axis_intersection(line, origin, (ux, uy))
     if intersection is None:
+        if diagnostics is not None:
+            diagnostics["failureStage"] = "axis_intersection_failed"
         return None
     feature_point, offset = intersection
     if abs(offset) > search_window:
+        if diagnostics is not None:
+            diagnostics["offsetPx"] = float(offset)
+            diagnostics["failureStage"] = "offset_out_of_search_window"
         return None
+    if diagnostics is not None:
+        diagnostics["offsetPx"] = float(offset)
     return BoundaryDetection(
         feature_point=feature_point,
         line=line,
