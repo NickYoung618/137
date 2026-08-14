@@ -20,3 +20,12 @@ Mac 全量脚本；后续恢复器作为只在特定失败原因触发的独立�
 - 不降低原注册/特征质量门。
 - 恢复结果独立记录 `sourceDetector/recoveryPass/quality`。
 - 外置图片、JSONL、汇总和日志不进 Git。
+
+## Implemented components
+
+- 注册：`no_valid_candidate` 后的 `stable_multi_support`。
+- `Φ12.2`：`expanded_radius`、`center_recenter` 和极性/RANSAC
+  `robust_multicircle`。
+- 尺寸7：单带失败后的 `multi_parallel_bands`，以及原v6质量回退。
+- 几何一致性：只从旧参考标注几何导出比例，只诊断/粗错边拒绝，
+  `outputAdjustmentApplied=false`。

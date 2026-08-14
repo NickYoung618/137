@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-14
 
-**Status**: In progress
+**Status**: Implemented; pending Mac 2200-image acceptance
 
 ## Context
 
@@ -41,7 +41,7 @@ Mac 外置 2200 张回归的正常组基线为：registration `1962/2000`、尺�
 
 ## Functional requirements
 
-- **FR-001**: 诊断增量 MUST 不改变现有判定、变换或量测值。
+- **FR-001**: Phase 1 纯诊断增量 MUST 不改变现有判定、变换或量测值。
 - **FR-002**: 注册候选 MUST 为每个支持/总体门限记录值、边界与 passed。
 - **FR-003**: `Φ12.2` MUST 记录半径上/下界、中心 x/y 边界、边缘极性和角覆盖。
 - **FR-004**: 尺寸7 MUST 记录 p1/p2 扫描条带的可用 profile、边缘点、残差、峰值和失败阶段。

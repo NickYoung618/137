@@ -30,7 +30,18 @@
 
 ## Phase 5 - 一致性与最终门禁
 
-- [ ] T017 实现基于旧参考几何的排序/诊断/拒绝（FR-014/FR-015）
-- [ ] T018 运行9帧旧/新对照和外置单图精度（FR-016/FR-017）
-- [ ] T019 运行 unittest、compileall、Schema、SpecKit analyze、Git资产门禁（FR-018/SC-004）
-- [ ] T020 提交推送并给出 Mac 2200 张复跑命令（SC-005）
+- [x] T017 实现基于旧参考几何的排序/诊断/拒绝（FR-014/FR-015）
+- [x] T018 运行9帧旧/新对照和外置单图精度（FR-016/FR-017）
+- [x] T019 运行 unittest、compileall、Schema、SpecKit analyze、Git资产门禁（FR-018/SC-004）
+- [x] T020 提交推送并给出 Mac 2200 张复跑命令（SC-005）
+
+## Final verification evidence
+
+- `uv run python -m unittest discover -s tests -v`: 100 tests passed, 7 skipped;
+  SHA-locked hole-2 real E2E included and passed.
+- `uv run python -m compileall -q algorithms config scripts specs tests tools`: passed.
+- `bash -n scripts/run_hole2_full_regression.sh`: passed; system `shellcheck` unavailable.
+- External confirmed image: d7 length absolute error `1.5631 px`; `Φ12.2` diameter
+  absolute error `0.1372 px`.
+- External nine-frame result: registration `9/9`, d7 `5/9`, `Φ12.2` `8/9`,
+  technicalComplete `5/9`; 500/521/620 control transforms and measurements unchanged.

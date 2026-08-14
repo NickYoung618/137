@@ -87,6 +87,12 @@ class CurrentCaptureContractTests(unittest.TestCase):
                 "failureReasons": ["registration:test"],
                 "productionDisposition": "not_evaluated",
             },
+            "geometryConsistency": {
+                "evaluated": False, "rejected": False,
+                "failureReason": "registration_invalid",
+                "ratioSource": "old_reference_annotation_geometry",
+                "outputAdjustmentApplied": False,
+            },
             "referenceMeasurements": {}, "v6Measurements": {},
             "timingMs": {"total": 1.0},
             "evidenceScope": "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng",

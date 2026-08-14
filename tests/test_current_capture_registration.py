@@ -23,6 +23,7 @@ from algorithms.hole_2.current_capture import (
     _detect_phi12_2,
     _ransac_circle,
     _v6_d7_fallback,
+    evaluate_geometry_consistency,
     fit_similarity_transform,
     load_registration_config,
     register_current_capture,
@@ -154,10 +155,48 @@ def _test_config():
             "multicircle_ransac_inlier_residual_px": 3.0,
             "min_angle_coverage_fraction": 0.65,
         },
+        "geometry_consistency": {
+            "max_reference_ratio_absolute_deviation": 0.08,
+        },
     }
 
 
 class CurrentCaptureRegistrationTests(unittest.TestCase):
+    def test_geometry_consistency_rejects_without_pulling_output(self):
+        d7 = ShapeModel(
+            index=0, label="7", sanitized="d7", kind="line",
+            points=[(0.0, 0.0), (50.0, 0.0)], line_p1=(0.0, 0.0),
+            line_p2=(50.0, 0.0),
+        )
+        phi = ShapeModel(
+            index=1, label="Φ12.2", sanitized="Phi12_2", kind="arc",
+            points=[], circle=(0.0, 0.0, 50.0),
+        )
+        reference = ReferenceModel({}, Path("reference.bmp"), np.zeros((10, 10)), [d7, phi], [])
+        features = {
+            "7": {
+                "measurementValid": True, "qualityStatus": "valid", "failureReason": None,
+                "sourceDetector": "test", "recoveryPass": None,
+                "reference": {"lengthPx": 90.0},
+                "target": {"lengthPx": 90.0}, "quality": {},
+            },
+            "Phi12.2": {
+                "measurementValid": True, "qualityStatus": "valid", "failureReason": None,
+                "sourceDetector": "test", "recoveryPass": None,
+                "reference": {"diameterPx": 100.0},
+                "target": {"diameterPx": 100.0}, "quality": {},
+            },
+        }
+
+        report = evaluate_geometry_consistency(features, reference, _test_config())
+
+        self.assertTrue(report["rejected"])
+        self.assertEqual(0.5, report["referenceRatio"])
+        self.assertEqual(0.9, report["targetRatio"])
+        self.assertFalse(report["outputAdjustmentApplied"])
+        self.assertFalse(features["7"]["measurementValid"])
+        self.assertIsNone(features["7"]["target"])
+
     def test_d7_multiband_ignores_one_bad_parallel_strip(self):
         config = _test_config()["d7"] | {
             "band_offsets_target_px": [-24.0, -12.0, 0.0, 12.0, 24.0],

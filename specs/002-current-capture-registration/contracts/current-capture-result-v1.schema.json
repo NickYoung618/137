@@ -3,7 +3,7 @@
   "$id": "https://example.invalid/hole2/current-capture-result-v1.schema.json",
   "title": "Current Capture Registration and Measurement Result v1",
   "type": "object",
-  "required": ["schemaVersion", "algorithmVersion", "configVersion", "runtimeInputs", "registration", "features", "qualityStatus", "referenceMeasurements", "timingMs", "evidenceScope"],
+  "required": ["schemaVersion", "algorithmVersion", "configVersion", "runtimeInputs", "registration", "features", "qualityStatus", "geometryConsistency", "referenceMeasurements", "timingMs", "evidenceScope"],
   "properties": {
     "schemaVersion": {"const": "hole2-current-capture-result/1"},
     "algorithmVersion": {"type": "string", "minLength": 1},
@@ -44,6 +44,7 @@
       }, "additionalProperties": false
     },
     "qualityStatus": {"$ref": "#/$defs/qualityStatus"},
+    "geometryConsistency": {"type": "object", "required": ["evaluated", "rejected", "failureReason", "ratioSource", "outputAdjustmentApplied"], "additionalProperties": true},
     "referenceMeasurements": {"type": "object"},
     "v6Measurements": {"type": "object"},
     "timingMs": {"type": "object", "required": ["total"], "properties": {"total": {"type": "number", "minimum": 0}}, "additionalProperties": {"type": "number"}},

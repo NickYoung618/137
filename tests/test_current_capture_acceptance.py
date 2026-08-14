@@ -41,6 +41,7 @@ def _result(target_sha: str):
         ],
         "registration": {
             "registrationValid": True, "failureReason": None,
+            "primaryFailureReason": None, "registrationRecoveryPass": None,
             "candidates": [
                 {"orientationDeg": value, "score": 10.0 if value == 270 else 1.0,
                  "valid": value == 270, "failureReasons": [] if value == 270 else ["support_count_below_gate"],
@@ -60,14 +61,16 @@ def _result(target_sha: str):
             "7": {
                 "featureCode": "HOLE2-DIM-7", "measurementValid": True,
                 "qualityStatus": "valid",
-                "failureReason": None, "sourceDetector": "test", "reference": {},
+                "failureReason": None, "sourceDetector": "test", "recoveryPass": None,
+                "reference": {},
                 "target": {"pointsPx": [[70.0, 30.0], [20.0, 30.0]], "lengthPx": 50.0},
                 "quality": {},
             },
             "Phi12.2": {
                 "featureCode": "HOLE2-DIA-12_2", "measurementValid": True,
                 "qualityStatus": "valid",
-                "failureReason": None, "sourceDetector": "test", "reference": {},
+                "failureReason": None, "sourceDetector": "test", "recoveryPass": None,
+                "reference": {},
                 "target": {"centerPx": [80.0, 70.0], "radiusPx": 25.0, "diameterPx": 50.0},
                 "quality": {},
             },
@@ -76,6 +79,13 @@ def _result(target_sha: str):
         "qualityStatus": {
             "technicalValid": True, "state": "complete",
             "failureReasons": [], "productionDisposition": "not_evaluated",
+        },
+        "geometryConsistency": {
+            "evaluated": True, "rejected": False, "failureReason": None,
+            "ratioSource": "old_reference_annotation_geometry",
+            "referenceRatio": 1.0, "targetRatio": 1.0,
+            "absoluteDeviation": 0.0, "maximumAbsoluteDeviation": 0.08,
+            "outputAdjustmentApplied": False,
         },
         "timingMs": {"total": 1.0},
         "evidenceScope": "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng",

@@ -69,5 +69,8 @@
     "multicircle_ransac_trials": 96,
     "multicircle_ransac_inlier_residual_px": 3.0,
     "min_angle_coverage_fraction": 0.65
+  },
+  "geometry_consistency": {
+    "max_reference_ratio_absolute_deviation": 0.08
   }
 }

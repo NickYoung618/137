@@ -111,7 +111,10 @@ def load_registration_config(path: Path) -> dict[str, Any]:
     orientations = config.get("orientations_deg")
     if not isinstance(orientations, list) or set(orientations) != {0, 90, 180, 270}:
         raise ValueError("orientations_deg must contain exactly 0, 90, 180, 270")
-    for section in ("coarse", "supports", "quality", "registration_recovery", "d7", "phi12_2"):
+    for section in (
+        "coarse", "supports", "quality", "registration_recovery", "d7",
+        "phi12_2", "geometry_consistency",
+    ):
         if not isinstance(config.get(section), dict):
             raise ValueError(f"registration config missing object: {section}")
     coarse = config["coarse"]
@@ -152,6 +155,9 @@ def load_registration_config(path: Path) -> dict[str, Any]:
         raise ValueError("d7 band strip samples cannot undercut the original point gate")
     if float(d7["max_cross_band_length_deviation_px"]) <= 0.0:
         raise ValueError("d7 cross-band length deviation gate must be positive")
+    geometry_gate = float(config["geometry_consistency"]["max_reference_ratio_absolute_deviation"])
+    if not 0.0 < geometry_gate < 0.25:
+        raise ValueError("geometry consistency ratio gate is invalid")
     registration_recovery = config["registration_recovery"]
     recovery_refine_radius = float(registration_recovery["refine_search_radius_target_px"])
     primary_refine_radius = float(config["supports"]["refine_search_radius_target_px"])
@@ -925,6 +931,67 @@ def _invalid_features(reason: str) -> dict[str, Any]:
             "reference": None, "target": None, "quality": {},
         },
     }
+
+
+def evaluate_geometry_consistency(
+    features: dict[str, Any],
+    reference: ReferenceModel,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Diagnose/reject gross wrong-edge pairs without changing any measurement."""
+    d7_shape = next((shape for shape in reference.shapes if shape.sanitized == "d7"), None)
+    phi_shape = next((shape for shape in reference.shapes if shape.sanitized == "Phi12_2"), None)
+    if (
+        d7_shape is None or d7_shape.line_p1 is None or d7_shape.line_p2 is None
+        or phi_shape is None or phi_shape.circle is None
+    ):
+        return {
+            "evaluated": False, "rejected": False,
+            "failureReason": "reference_geometry_missing",
+            "ratioSource": "old_reference_annotation_geometry",
+        }
+    reference_ratio = math.dist(d7_shape.line_p1, d7_shape.line_p2) / (
+        2.0 * float(phi_shape.circle[2])
+    )
+    gate = float(config["geometry_consistency"]["max_reference_ratio_absolute_deviation"])
+    report: dict[str, Any] = {
+        "evaluated": False,
+        "rejected": False,
+        "failureReason": None,
+        "ratioSource": "old_reference_annotation_geometry",
+        "referenceRatio": float(reference_ratio),
+        "targetRatio": None,
+        "absoluteDeviation": None,
+        "maximumAbsoluteDeviation": gate,
+        "outputAdjustmentApplied": False,
+    }
+    d7 = features["7"]
+    phi = features["Phi12.2"]
+    if not d7["measurementValid"] or not phi["measurementValid"]:
+        report["failureReason"] = "both_features_not_valid"
+        return report
+    target_ratio = float(d7["target"]["lengthPx"]) / float(phi["target"]["diameterPx"])
+    deviation = abs(target_ratio - reference_ratio)
+    rejected = deviation > gate
+    report.update({
+        "evaluated": True,
+        "rejected": rejected,
+        "failureReason": "geometry_ratio_inconsistent" if rejected else None,
+        "targetRatio": target_ratio,
+        "absoluteDeviation": deviation,
+    })
+    for feature in (d7, phi):
+        feature["quality"]["geometryConsistency"] = dict(report)
+    if rejected:
+        # Preserve source detector, recovery audit and legacy/reference business
+        # columns, but never expose suspicious geometry as a valid new result.
+        for feature in (d7, phi):
+            feature["measurementValid"] = False
+            feature["qualityStatus"] = "invalid"
+            feature["failureReason"] = "geometry_ratio_inconsistent"
+            feature["reference"] = None
+            feature["target"] = None
+    return report
 
 
 def _phi_radius_search_pass(
@@ -1819,7 +1886,7 @@ def validate_result_contract(result: dict[str, Any]) -> None:
     required = {
         "schemaVersion", "algorithmVersion", "configVersion", "runtimeInputs",
         "registration", "features", "referenceMeasurements", "timingMs", "evidenceScope",
-        "qualityStatus",
+        "qualityStatus", "geometryConsistency",
     }
     missing = sorted(required - result.keys())
     if missing:
@@ -1905,6 +1972,12 @@ def run_current_capture(
     compatible: dict[str, Any] = {}
     if not registration["registrationValid"]:
         features = _invalid_features("registration_invalid:" + str(registration["failureReason"]))
+        geometry_consistency = {
+            "evaluated": False, "rejected": False,
+            "failureReason": "registration_invalid",
+            "ratioSource": "old_reference_annotation_geometry",
+            "outputAdjustmentApplied": False,
+        }
     else:
         transform_data = registration["transform"]
         transform = SimilarityTransform(
@@ -1962,6 +2035,7 @@ def run_current_capture(
             phi_source_detector=phi_source,
             d7_source_detector=d7_source,
         )
+        geometry_consistency = evaluate_geometry_consistency(features, reference, config)
 
     runtime_inputs = [
         {"role": "reference_annotation", "path": str(label_path), "sha256": sha256_file(label_path)},
@@ -1998,6 +2072,7 @@ def run_current_capture(
         "registration": registration,
         "features": features,
         "qualityStatus": quality_status,
+        "geometryConsistency": geometry_consistency,
         "referenceMeasurements": compatible,
         "v6Measurements": raw_measurements,
         "timingMs": {

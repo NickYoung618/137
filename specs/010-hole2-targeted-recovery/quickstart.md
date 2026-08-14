@@ -53,3 +53,7 @@ scripts/run_hole2_full_regression.sh \
 它不表示必然有效。恢复失败后只有原v6结果本身通过
 `ok:dual_boundary_fit` 时才能回退，回退会记录
 `recoveryPass=v6_original_quality`。
+
+`geometryConsistency.ratioSource=old_reference_annotation_geometry`；该检查只诊断或
+拒绝粗大错边，`outputAdjustmentApplied` 固定为 `false`。最终离群下降仍以
+Mac 2200张外置复验为准。
