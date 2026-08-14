@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "manual-groove-pose-review/1",
+  "title": "External-only manual open-groove geometry review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "status", "source", "algorithm", "circle",
+    "grooveRecognition", "measurement", "targetAssessment", "artifacts", "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "manual-groove-pose-review/1"},
+    "status": {
+      "enum": [
+        "MANUAL_GEOMETRY_ACCEPTED_TARGET_NOT_EVALUATED",
+        "MANUAL_GEOMETRY_ACCEPTED_TARGET_COMPARABLE",
+        "MANUAL_GROOVE_GEOMETRY_REJECTED"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "annotationFile", "annotationSha256", "imageFile", "imageSha256",
+        "imageWidth", "imageHeight", "imageSource", "labels", "pointCounts"
+      ],
+      "properties": {
+        "annotationFile": {"type": "string", "minLength": 1},
+        "annotationSha256": {"$ref": "#/$defs/sha256"},
+        "imageFile": {"type": "string", "minLength": 1},
+        "imageSha256": {"$ref": "#/$defs/sha256"},
+        "imageWidth": {"type": "integer", "minimum": 1},
+        "imageHeight": {"type": "integer", "minimum": 1},
+        "imageSource": {"enum": ["external_file", "labelme_imageData"]},
+        "labels": {
+          "type": "object", "additionalProperties": false,
+          "required": ["outerCircleVisibleArc", "grooveOpenBoundary"],
+          "properties": {
+            "outerCircleVisibleArc": {"type": "string", "minLength": 1},
+            "grooveOpenBoundary": {"type": "string", "minLength": 1}
+          }
+        },
+        "pointCounts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["outerCircleVisibleArc", "grooveOpenBoundary"],
+          "properties": {
+            "outerCircleVisibleArc": {"type": "integer", "minimum": 8},
+            "grooveOpenBoundary": {"type": "integer", "minimum": 6}
+          }
+        }
+      }
+    },
+    "algorithm": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "name", "version", "thresholdVersion", "circleFitSourceSha256",
+        "delegatedCircleFitFunctions", "runtimeInputAllowed"
+      ],
+      "properties": {
+        "name": {"const": "locked-gyj-manual-groove-review"},
+        "version": {"const": "1.0.0"},
+        "thresholdVersion": {"const": "manual-open-groove-v1"},
+        "circleFitSourceSha256": {"$ref": "#/$defs/sha256"},
+        "delegatedCircleFitFunctions": {
+          "const": ["fit_circle", "robust_fit_circle", "geometric_circle_fit"]
+        },
+        "runtimeInputAllowed": {"const": false}
+      }
+    },
+    "circle": {"$ref": "#/$defs/circleReview"},
+    "grooveRecognition": {"$ref": "#/$defs/grooveReview"},
+    "measurement": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/measurement"}]
+    },
+    "targetAssessment": {"$ref": "#/$defs/targetAssessment"},
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["semanticCopyFile", "semanticCopySha256", "previewFile", "previewSha256"],
+      "properties": {
+        "semanticCopyFile": {"type": "string", "minLength": 1},
+        "semanticCopySha256": {"$ref": "#/$defs/sha256"},
+        "previewFile": {"type": "string", "minLength": 1},
+        "previewSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "limitations": {"type": "array", "minItems": 3, "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "point": {
+      "type": "object", "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {"x": {"type": "number"}, "y": {"type": "number"}}
+    },
+    "circle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["centerX", "centerY", "radiusPx"],
+      "properties": {
+        "centerX": {"type": "number"}, "centerY": {"type": "number"},
+        "radiusPx": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "residual": {
+      "type": "object", "additionalProperties": false,
+      "required": ["median", "p95", "max"],
+      "properties": {
+        "median": {"type": "number", "minimum": 0},
+        "p95": {"type": "number", "minimum": 0},
+        "max": {"type": "number", "minimum": 0}
+      }
+    },
+    "circleReview": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "status", "pointCount", "angularCoverageDeg", "initialKasaCircle",
+        "initialResidualPx", "refinedRobustGeometricCircle", "refinedResidualPx", "failedChecks"
+      ],
+      "properties": {
+        "status": {"const": "accepted"},
+        "pointCount": {"type": "integer", "minimum": 8},
+        "angularCoverageDeg": {"type": "number", "minimum": 120, "maximum": 360},
+        "initialKasaCircle": {"$ref": "#/$defs/circle"},
+        "initialResidualPx": {"$ref": "#/$defs/residual"},
+        "refinedRobustGeometricCircle": {"$ref": "#/$defs/circle"},
+        "refinedResidualPx": {"$ref": "#/$defs/residual"},
+        "failedChecks": {"const": []}
+      }
+    },
+    "grooveReview": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "status", "pointCount", "endpointCircleResidualPx", "endpointAzimuthImageDeg",
+        "openingWidthDeg", "maxInwardDepthPx", "inwardDepthFromMouthPx",
+        "interiorInwardFraction", "deepestPointIndex", "deepestPointFraction",
+        "stepMedianPx", "stepMaxPx", "stepMaxToMedianRatio", "rejectionReasons"
+      ],
+      "properties": {
+        "status": {"enum": ["accepted", "rejected"]},
+        "pointCount": {"type": "integer", "minimum": 6},
+        "endpointCircleResidualPx": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0}},
+        "endpointAzimuthImageDeg": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "exclusiveMaximum": 360}},
+        "openingWidthDeg": {"type": "number", "minimum": 0, "maximum": 180},
+        "maxInwardDepthPx": {"type": "number"},
+        "inwardDepthFromMouthPx": {"type": "number"},
+        "interiorInwardFraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "deepestPointIndex": {"type": "integer", "minimum": 0},
+        "deepestPointFraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "stepMedianPx": {"type": "number", "exclusiveMinimum": 0},
+        "stepMaxPx": {"type": "number", "exclusiveMinimum": 0},
+        "stepMaxToMedianRatio": {"type": "number", "minimum": 1},
+        "rejectionReasons": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "measurement": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "schemaVersion", "coordinateConvention", "openingEndpointAzimuthsDeg",
+        "openingCenterAzimuthImageDeg", "openingWidthDeg", "openingCenterOnCircle",
+        "radialAxis", "quadrant", "geometryMeasurementValid"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "slot-groove-image-angle/1"},
+        "coordinateConvention": {
+          "const": {
+            "origin": "fitted_outer_circle_center", "xAxis": "right", "yAxis": "down",
+            "zeroDirection": "image_up", "positiveDirection": "clockwise", "rangeDeg": "[0,360)"
+          }
+        },
+        "openingEndpointAzimuthsDeg": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
+        "openingCenterAzimuthImageDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "openingWidthDeg": {"type": "number", "minimum": 0, "maximum": 180},
+        "openingCenterOnCircle": {"$ref": "#/$defs/point"},
+        "radialAxis": {
+          "type": "object", "additionalProperties": false, "required": ["from", "to"],
+          "properties": {"from": {"$ref": "#/$defs/point"}, "to": {"$ref": "#/$defs/point"}}
+        },
+        "quadrant": {"enum": ["upper_left", "upper_right", "lower_left", "lower_right", "upper_axis", "lower_axis", "left_axis", "right_axis", "center"]},
+        "geometryMeasurementValid": {"const": true}
+      }
+    },
+    "targetAssessment": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "schemaVersion", "targetContract", "status", "quadrantMatches",
+        "signedMeasurementMinusTargetDeg", "absoluteDeviationDeg", "mechanicalCorrectionDeg", "blockers"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "slot-groove-target-assessment/1"},
+        "targetContract": {
+          "type": "object", "additionalProperties": false,
+          "required": ["schemaVersion", "nominalDeg", "expectedQuadrant", "physicalDatumDefinitionId", "angleConventionId"],
+          "properties": {
+            "schemaVersion": {"const": "slot-groove-target/1"},
+            "nominalDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+            "expectedQuadrant": {"enum": ["upper_left", "upper_right", "lower_left", "lower_right"]},
+            "physicalDatumDefinitionId": {"type": ["string", "null"]},
+            "angleConventionId": {"type": ["string", "null"]}
+          }
+        },
+        "status": {"enum": ["NOT_EVALUATED", "COMPARABLE"]},
+        "quadrantMatches": {"type": ["boolean", "null"]},
+        "signedMeasurementMinusTargetDeg": {"type": ["number", "null"]},
+        "absoluteDeviationDeg": {"type": ["number", "null"], "minimum": 0},
+        "mechanicalCorrectionDeg": {"type": "null"},
+        "blockers": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

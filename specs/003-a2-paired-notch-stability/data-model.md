@@ -13,6 +13,18 @@
 它记录固定标签、标注员/复核员、truth版本、原图与LabelMe JSON的SHA-256、图像尺寸及
 人工圆心/半径。`PhysicalOuterCircle`与其他算法叠加圆都不得反填或自动确认为truth。
 
+## ManualOpenGrooveReview
+
+`ManualOpenGrooveReview`是Git外LabelMe开发样本的离线几何审阅，不进入运行时。输入通过参数将
+任意源标签映射为`outerCircleVisibleArc`和`grooveOpenBoundary`，分别要求不少于8点和6点；
+点数不是语义。它记录锁定拟圆源哈希、代数初值/稳健几何圆、残差、覆盖角、槽边界连续性、
+两端圆残差、径向内凹、槽口环形中点、圆周点、径向轴和象限。
+
+`measurement`使用`slot-groove-image-angle/1`：拟合圆心为原点，x向右、y向下、图像向上0°、
+顺时针正、范围`[0,360)`。`targetAssessment`使用独立`slot-groove-target/1`；物理datum定义ID或
+目标角约定ID为空时，偏差、判定和机械纠偏均为空。派生LabelMe副本固定
+`runtime_input_allowed=false`、`formal_truth=false`。
+
 ## AngularProfile
 
 | Field | Type | Rule |
@@ -141,3 +153,7 @@ false-positive数/率、错误码和耗时，不含伪造的0度。
 `received → alignment_circle_located → physical_outer_circle_refined → profile_extracted → raw_candidates_extracted → grooves_recognized → roles_assessed → diagnostic_ready`。
 任一阶段可进入`failed`终态。只有`diagnostic_ready`且目标语义、机械约定、质量门和角范围全部通过，
 才允许`pose_computed → succeeded`；否则仍以无角失败终止。
+
+人工审阅旁路为`external_annotation_received → open_boundary_validated → locked_circle_fit →
+groove_geometry_assessed → image_measurement_ready → target_not_evaluated/comparable`；该旁路不连接
+`pose_computed`，也不改变运行时状态机。

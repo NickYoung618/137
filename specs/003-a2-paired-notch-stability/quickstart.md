@@ -106,3 +106,23 @@ uv run python tools/build_labelme_circle_truth.py \
 
 输出只保存受控相对路径和哈希。JPEG诊断副本上的重复性不是绝对精度；圆心/半径精度比较必须回到这份
 原始BMP人工truth。
+
+## 7. 审阅人工外圆弧与开放槽边界
+
+源标注、原BMP和全部输出必须位于Git工作树外。源标签通过参数映射，不能假定固定点数：
+
+```bash
+uv run python tools/review_labelme_groove_pose.py \
+  --annotation "$MANUAL_GROOVE_DIR/manual.json" \
+  --image "$MANUAL_GROOVE_DIR/source.bmp" \
+  --config config/inspection.example.json \
+  --circle-label 1 --groove-label 2 \
+  --target-angle-deg 85 --target-quadrant lower_left \
+  --report "$MANUAL_GROOVE_DIR/manual-groove-pose-review.json" \
+  --semantic-copy "$MANUAL_GROOVE_DIR/manual-groove-semantic-copy.json" \
+  --preview "$MANUAL_GROOVE_DIR/manual-groove-pose-preview.jpg"
+```
+
+如果LabelMe确实含非空`imageData`可省略`--image`；为空时必须显式提供外置图像。未提供
+`--physical-datum-definition-id`和`--target-angle-convention-id`时，报告只给图像方位，目标状态
+固定为`NOT_EVALUATED`、机械纠偏为`null`。语义副本标记为非运行时、非正式真值，源JSON不会覆盖。

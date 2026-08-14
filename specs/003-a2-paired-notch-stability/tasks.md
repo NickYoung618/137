@@ -221,3 +221,14 @@
 - [x] T073 Run the 25-frame external JPEG diagnostic, generate overlays/contact sheet, and compare within-group/cross-group circle stability against the superseded implementation
 - [x] T074 Run full, legacy72, schema and pollution regression, record bounded evidence, and commit locally without push/merge
 - [x] T075 Add a path-safe, independently reviewed LabelMe manual-circle truth contract/exporter and focused tests
+
+---
+
+## Phase 14: Manual Open-Groove Geometry Review
+
+- [x] T076 [US1] Add failing tests for variable point counts, finite coordinates, endpoint reversal, 359/0 midpoint, endpoint-to-circle gates, continuity, inward-depth shadow rejection, quadrant and target separation (FR-037..FR-041/SC-016)
+- [x] T077 [US4] Add versioned manual-groove review JSON Schema and document image-angle/target contracts with runtime-truth isolation (FR-041..FR-043)
+- [x] T078 [US1] Implement the external-only LabelMe groove review CLI by delegating circle fitting to the locked gyj source and generating a non-runtime semantic copy/report/overlay (FR-037..FR-043)
+- [x] T079 Run the external 134-point/34-point manual sample without overwriting it; record only hashes, metrics and bounded conclusions in repository evidence (FR-043/SC-015)
+- [x] T080 Re-run the external 25-JPEG no-truth diagnostic and report only retain/reject/failure/latency distributions (FR-034/FR-044)
+- [x] T081 Run focused/full tests, Schema, legacy/paired regression, diff/pollution gates and commit locally without push or PLC/upstream changes (SC-001..SC-006/SC-016)
