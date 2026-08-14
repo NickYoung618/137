@@ -142,6 +142,9 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "opposedDatumAxisHypotheses": axis_hypotheses,
         "diagnosticConfidence": _diagnostic_confidence(diagnostics),
         "drawingAngle": assignment.get("drawingAngle"),
+        "angularProfile": diagnostics.get("angularProfile"),
+        "polarRotationDeg": (diagnostics.get("slot") or {}).get("polarRotationDeg"),
+        "elapsedMs": diagnostics.get("elapsedMs"),
         "failClosed": not bool(result.get("result", {}).get("valid", False)),
     }
 
@@ -258,6 +261,22 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                     "end_deg": candidate["endDeg"], "wraps_boundary": candidate["wrapsBoundary"],
                     "suggested_role": role_by_candidate.get(candidate["candidateId"]), "authoritative": False,
                 })
+    with (output_dir / "failures.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=[
+            "image_id", "relative_path", "error_code", "error_stage", "candidate_count", "role_status",
+        ])
+        writer.writeheader()
+        for record in records:
+            if record["result"]["valid"]:
+                continue
+            writer.writerow({
+                "image_id": record["imageId"],
+                "relative_path": record["relativePath"],
+                "error_code": record["result"]["errorCode"],
+                "error_stage": record["result"]["errorStage"],
+                "candidate_count": len(record["candidates"]),
+                "role_status": record["roleSuggestion"]["status"],
+            })
     render_contact_sheet(overlays, output_dir / "contact-sheet.jpg")
     return summary
 

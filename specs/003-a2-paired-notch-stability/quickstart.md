@@ -70,8 +70,19 @@ uv run python tools/render_slot_pose_review.py \
   --data-root "$A2_DATA_ROOT" --output-dir "$A2_REVIEW_DIR"
 ```
 
-输出含`review.json`、`candidates.csv`、`overlays/`和`contact-sheet.jpg`。其中角色组合只是现场勾选用假设，
+输出含`review.json`、`candidates.csv`、`failures.csv`、`overlays/`和`contact-sheet.jpg`。其中角色组合只是现场勾选用假设，
 `roleSuggestionsAreAuthoritative=false`固定表示它们不是业务真值。
+
+比较全画面与开发ROI的跨帧候选稳定性、门控成功率、错误码和耗时（输出仍必须在仓库外）：
+
+```bash
+uv run python tools/summarize_slot_pose_diagnostics.py \
+  --run "full-frame=$A2_FULL_REVIEW_JSON" \
+  --run "development-roi=$A2_ROI_REVIEW_JSON" \
+  --cluster-threshold-deg 8 --output "$A2_DIAGNOSTIC_COMPARISON"
+```
+
+跨帧稳定只能证明图像特征可重复；固定工装、遮挡和光照边界也可能高度稳定，不得因此自动分配datum/target角色。
 
 ## 5. 正式结论门禁
 

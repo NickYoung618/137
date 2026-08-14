@@ -1,7 +1,7 @@
 {
   "schemaVersion": "a2-paired-notch-server-validation/1",
   "createdAt": "2026-08-14",
-  "scope": "server synthetic, read-only historical assets, and one server-available real A2 development frame; full Mac A2 not evaluated",
+  "scope": "server synthetic, read-only historical assets, and 25 server-available A2 JPEG diagnostic copies; full original-BMP A2 not evaluated",
   "preChangeBaseline": {
     "unitTests": {"run": 12, "passed": 12, "skipped": 0},
     "legacySweep72": {
@@ -22,7 +22,7 @@
     }
   },
   "postChangeValidation": {
-    "unitTests": {"run": 46, "passed": 46, "skipped": 0},
+    "unitTests": {"run": 48, "passed": 48, "skipped": 0},
     "legacySweep72": {
       "manifestValid": true,
       "valid": 72,
@@ -66,14 +66,28 @@
       "failureCodes": ["DATUM_DEFINITION_UNCONFIRMED", "ROLE_ASSIGNMENT_AMBIGUOUS", "ROLE_ASSIGNMENT_FAILED"]
     },
     "realA2ServerDiagnostic": {
-      "availableImages": 1,
-      "fullFrameFailureCode": "RING_TRUNCATED",
-      "developmentRoiCandidateCount": 3,
-      "developmentRoiFailureCode": "ROLE_ASSIGNMENT_FAILED",
+      "availableJpegDiagnosticCopies": 25,
+      "decodedAtExpectedDimensions": 25,
+      "fullFrameCompleteRingAccepted": 0,
+      "fullFrameFailureCodes": {"RING_TRUNCATED": 25},
+      "developmentRoiCompleteRingAccepted": 25,
+      "developmentRoiCandidateCountDistribution": {"3": 25},
+      "developmentRoiFailureCodes": {
+        "DATUM_DEFINITION_UNCONFIRMED": 3,
+        "ROLE_ASSIGNMENT_FAILED": 22
+      },
       "formalMechanicalValid": 0,
-      "signedRelativeRotationDeg": null,
-      "elapsedMs": 3073.1053929775953,
+      "signedRelativeRotationDegAlwaysNull": true,
+      "elapsedMs": {
+        "fullFrameP50": 3604.3130038306117,
+        "fullFrameP95": 4221.652029082179,
+        "fullFrameMax": 4391.536319162697,
+        "developmentRoiP50": 3510.8498549088836,
+        "developmentRoiP95": 4106.919303955509,
+        "developmentRoiMax": 4295.790374977514
+      },
       "roleMappingConfirmed": false,
+      "originalBmpTruthAvailable": false,
       "fullNormalAndBadSetsAvailable": false
     }
   },

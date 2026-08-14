@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "a2-jpeg-diagnostic-summary/1",
+  "createdAt": "2026-08-14",
+  "input": {
+    "imageCount": 25,
+    "decodedCount": 25,
+    "formatCounts": {
+      "JPEG": 25
+    },
+    "modeCounts": {
+      "RGB": 25
+    },
+    "dimensionCounts": {
+      "5472x3648": 25
+    },
+    "providedAndVerifiedDirectoryContentSha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "manifestSha256": "e0362eb165f2ae74230672acbe46ccc015bfd4ac876a6be845060558d7f489b8",
+    "manifestDatasetFingerprint": "fe7864df6557c9348e39bcc518c818f370e664faff8d7ec1d7f127e6998711fc",
+    "groupingExplicit": false,
+    "accuracyTruthAvailable": false,
+    "limitations": [
+      "These files are high-quality JPEG diagnostic copies, not original-BMP angle truth.",
+      "The set contains 25 frames but no capture record proving condition groups or repeat counts.",
+      "Original BMP data and explicit circular-angle truth remain required for formal accuracy acceptance."
+    ]
+  },
+  "runs": {
+    "fullFrame": {
+      "circleEstimateAvailable": {"count": 25, "rate": 1.0},
+      "completeRingAccepted": {"count": 0, "rate": 0.0},
+      "candidateExtractionCompleted": {"count": 0, "rate": 0.0},
+      "candidateCountDistribution": {"0": 25},
+      "roleAssignmentUnique": {"count": 0, "rate": 0.0},
+      "formalValid": {"count": 0, "rate": 0.0},
+      "signedRelativeRotationDegAlwaysNull": true,
+      "errorCodeCounts": {"RING_TRUNCATED": 25},
+      "elapsedMs": {
+        "p50": 3604.3130038306117,
+        "p95": 4221.652029082179,
+        "max": 4391.536319162697
+      },
+      "interpretation": "A raw circle estimate was present in every result, but adjacent fixtures pulled the full-frame estimate so no complete outer ring was accepted. Raw estimate availability is not a passed circle-quality result."
+    },
+    "developmentRoi": {
+      "developmentOnly": true,
+      "enabledByDefault": false,
+      "circleEstimateAvailable": {"count": 25, "rate": 1.0},
+      "completeRingAccepted": {"count": 25, "rate": 1.0},
+      "candidateExtractionCompleted": {"count": 25, "rate": 1.0},
+      "candidateCountDistribution": {"3": 25},
+      "roleAssignmentUnique": {"count": 3, "rate": 0.12},
+      "roleStatusCounts": {
+        "ambiguous_or_rejected": 22,
+        "unique_diagnostic_hypothesis": 3
+      },
+      "selectedRoleSignatureCounts": {
+        "datum_primary=candidate-003,target_left=candidate-001": 3
+      },
+      "roleSuggestionsAreAuthoritative": false,
+      "formalValid": {"count": 0, "rate": 0.0},
+      "signedRelativeRotationDegAlwaysNull": true,
+      "errorCodeCounts": {
+        "DATUM_DEFINITION_UNCONFIRMED": 3,
+        "ROLE_ASSIGNMENT_FAILED": 22
+      },
+      "elapsedMs": {
+        "p50": 3510.8498549088836,
+        "p95": 4106.919303955509,
+        "max": 4295.790374977514
+      }
+    }
+  },
+  "developmentRoiCandidateTracks": [
+    {
+      "candidateId": "candidate-001",
+      "frameSupport": 25,
+      "rankCounts": {"2": 25},
+      "angleModes": [
+        {"observationCount": 25, "circularMeanDeg": 31.58268856767629, "circularRangeDeg": 0.10585000521385268}
+      ],
+      "prominenceMean": 139.46965584257975,
+      "prominenceStd": 1.2339452976232594,
+      "imageFrameStable": true,
+      "authoritativeRole": false
+    },
+    {
+      "candidateId": "candidate-002",
+      "frameSupport": 25,
+      "rankCounts": {"1": 25},
+      "angleModes": [
+        {"observationCount": 20, "circularMeanDeg": 291.30969493761813, "circularRangeDeg": 0.02844971620720571},
+        {"observationCount": 3, "circularMeanDeg": 113.21931367373118, "circularRangeDeg": 0.0013599843408655943},
+        {"observationCount": 2, "circularMeanDeg": 172.58991779144625, "circularRangeDeg": 0.0021146476966862338}
+      ],
+      "prominenceMean": 183.97232700124655,
+      "prominenceStd": 0.9278533317537825,
+      "imageFrameStable": false,
+      "authoritativeRole": false
+    },
+    {
+      "candidateId": "candidate-003",
+      "frameSupport": 25,
+      "rankCounts": {"3": 25},
+      "angleModes": [
+        {"observationCount": 25, "circularMeanDeg": 327.8506112098293, "circularRangeDeg": 0.44514345009270073}
+      ],
+      "prominenceMean": 136.11574147828804,
+      "prominenceStd": 1.5008098454035463,
+      "imageFrameStable": true,
+      "authoritativeRole": false
+    }
+  ],
+  "boundedFindings": {
+    "proven": [
+      "The development ROI makes the inherited circle/ring chain usable on all 25 diagnostic JPEGs without changing the default configuration.",
+      "The ROI run deterministically extracts three candidates per frame and preserves fail-closed formal output.",
+      "Candidate-002 is prominence rank 1 in every frame and occupies three very tight image-angle modes, while candidate-001 and candidate-003 remain nearly fixed in image coordinates."
+    ],
+    "diagnosticInferenceOnly": [
+      "The changing candidate-002 is more consistent with a rotating workpiece feature than the two image-frame-stable candidates.",
+      "Candidate-001 and candidate-003 are more consistent with fixed fixture, occlusion or contact boundaries than with the changing workpiece feature."
+    ],
+    "notProven": [
+      "No candidate is proven to be drawing datum_primary, datum_secondary or target_left.",
+      "The three angle modes are not proven acquisition conditions or physical rotations.",
+      "The drawing's 85 deg plus-or-minus 5 deg is not proven to be an OK/NG tolerance or a mechanical correction target.",
+      "JPEG diagnostics do not establish angle accuracy."
+    ]
+  },
+  "minimumFieldQuestions": [
+    "On the contact sheet, is the changing rank-1 candidate-002 a real housing slot in each of its three visible angle modes? If yes, label its drawing role in each mode.",
+    "Are candidate-001 near 31.58 deg and candidate-003 near 327.85 deg fixture/occlusion/contact boundaries rather than housing slots?",
+    "Is the drawing datum defined by the upper slot alone, the upper/lower slot centerline, or another reference?",
+    "Is 85 deg plus-or-minus 5 deg an inspection tolerance, a nominal used to calculate correction, or both as separate outputs?",
+    "Which capture records and original-BMP truth map the observed 20/2/3 frame modes to physical sample, condition and commanded angle?"
+  ],
+  "externalArtifactSha256": {
+    "fullFrameResultsJsonl": "8fc254ca957e5196c062b0388538d3477cab53fe81cb15e4f9b1b9c950004e25",
+    "developmentRoiResultsJsonl": "7a5cddfe7b68bbf50eb1ddb09c26c5c46320f608c8a5d3701d533051c06b4f2a",
+    "fullFrameReviewJson": "12d245a9ee37ddb7b2101971dfae8f6de84c4eef1f4caa848d2dec27319c5e20",
+    "fullFrameCandidatesCsv": "c9743291cfd1793f2a44c36c4b875bb5353647e8f2fe4387da3727dcc5ac07c8",
+    "fullFrameFailuresCsv": "2aa46ec820b32fa4a9b51e6284af1a68db42ca3a3adae55b000599687867a44f",
+    "fullFrameContactSheetJpeg": "73089e821ac407402911a5cdddfad2d2ef21128503ce9678050741f2c112d84a",
+    "developmentRoiReviewJson": "6dcda25f95207bf73932b1d9d46e598b77689b88567f17e465b6596f6df84012",
+    "developmentRoiCandidatesCsv": "c420f583fa04a4755f375d101167828ab961837ed4bc5e372e210b85e59c64c8",
+    "developmentRoiFailuresCsv": "8d3bd952ef0353075d950122b8308a6207eda04e8dec228e7023cf6a23491be9",
+    "developmentRoiContactSheetJpeg": "ccbd69234d679c624de5ba14ce115909677f715ace5831470798a2a73c053763",
+    "diagnosticComparisonJson": "b897b02b057c1c1009d8ccdaa360452926fb4b6ae88a0fb5299da3b92f4ec7e3"
+  },
+  "productionStatus": "BLOCKED_ROLE_MAPPING_TRUTH_AND_OUTPUT_SEMANTICS"
+}

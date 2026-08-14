@@ -15,13 +15,14 @@ class SlotPoseReviewTests(unittest.TestCase):
     def test_review_is_path_safe_and_marks_role_as_non_authoritative(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            image_path = root / "frame.png"
-            Image.new("L", (120, 100), 128).save(image_path)
+            image_path = root / "nested" / "frame.jpg"
+            image_path.parent.mkdir()
+            Image.new("RGB", (120, 100), 128).save(image_path, quality=95)
             image_info = inspect_image(image_path)
             manifest = {
                 "datasetId": "review-set",
                 "images": [{
-                    "imageId": "sample:unknown:0001", "relativePath": "frame.png",
+                    "imageId": "sample:unknown:0001", "relativePath": "nested/frame.jpg",
                     "datasetClass": "normal", **image_info,
                 }],
             }
@@ -53,6 +54,9 @@ class SlotPoseReviewTests(unittest.TestCase):
                         "confidenceComponents": [0.9, 0.8],
                         "thresholds": {"role_assignment": {"drawing_nominal_angle_deg": 85.0}},
                     },
+                    "angularProfile": {"completeRing": True},
+                    "slot": {"polarRotationDeg": 1.5},
+                    "elapsedMs": 123.0,
                 },
             }
             output = root / "review"
@@ -64,6 +68,8 @@ class SlotPoseReviewTests(unittest.TestCase):
             self.assertTrue(record["failClosed"])
             self.assertIsNone(record["result"]["signedRelativeRotationDeg"])
             self.assertAlmostEqual(0.8, record["diagnosticConfidence"])
+            self.assertEqual(123.0, record["elapsedMs"])
+            self.assertTrue(record["angularProfile"]["completeRing"])
             self.assertEqual(2, len(record["singleRayRoleHypotheses"]))
             self.assertAlmostEqual(0.0, record["singleRayRoleHypotheses"][0]["drawingNominalDeviationDeg"])
             self.assertFalse(record["singleRayRoleHypotheses"][0]["authoritative"])
@@ -71,6 +77,9 @@ class SlotPoseReviewTests(unittest.TestCase):
             self.assertTrue((output / "overlays/0001.jpg").is_file())
             self.assertTrue((output / "contact-sheet.jpg").is_file())
             self.assertIn("candidate-001", (output / "candidates.csv").read_text(encoding="utf-8"))
+            failures = (output / "failures.csv").read_text(encoding="utf-8")
+            self.assertIn("nested/frame.jpg", failures)
+            self.assertIn("DATUM_DEFINITION_UNCONFIRMED", failures)
 
 
 if __name__ == "__main__":

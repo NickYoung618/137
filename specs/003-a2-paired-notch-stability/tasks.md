@@ -180,3 +180,11 @@
 - [x] T052 Add a deterministic external-evidence review CLI with candidate-number overlays, candidate/role-hypothesis tables, confidence and ambiguity summaries, plus focused tests in `tools/render_slot_pose_review.py` and `tests/test_slot_pose_review.py` per FR-004 and Constitution III/IV (partial)
 - [x] T053 Run the real A2 server inventory and diagnostic workflow outside Git, then record only path-free hashes, counts, failure distribution, bounded findings and minimum field questions in `specs/003-a2-paired-notch-stability/evidence/a2-server-diagnostic-summary.json` per FR-014/FR-024/SC-009 (partial)
 - [x] T054 Add an optional normalized face-search ROI that masks adjacent fixtures before calling the unchanged historical circle/scale chain, including config validation, diagnostics and tests, while leaving it disabled by default per FR-001/FR-002/FR-027 (partial)
+
+---
+
+## Phase 10: Convergence
+
+- [x] T055 Validate the 25-frame external JPEG diagnostic set, run both full-frame and development-ROI `multi_notch_roles` batches, and record only path-free hashes, aggregate results and bounded conclusions in repository evidence per FR-014/FR-020 and Constitution IV (partial)
+- [x] T056 Extend `tools/render_slot_pose_review.py` to emit a deterministic failure-sample index and cover recursive JPEG manifests plus failed-result review artifacts in `tests/test_slot_pose_review.py` per FR-004/FR-027
+- [x] T057 Add circular cross-frame candidate clustering, angle/prominence stability, circle/ring/role success rates, error distributions and latency P50/P95/max with tests and an external full-frame-versus-ROI summary per FR-018/FR-020 and Constitution III/IV
