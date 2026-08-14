@@ -12,9 +12,9 @@
 
 ## Phase 2 - 注册恢复
 
-- [ ] T008 先增加 `no_valid_candidate` 触发与 ambiguous 禁止恢复测试（FR-008/FR-009）
-- [ ] T009 实现归一化轮廓/中心圆/侧耳多证据条件恢复（FR-008/FR-009）
-- [ ] T010 验证501/520与500/521后 commit/push main（SC-001/SC-003）
+- [x] T008 先增加 `no_valid_candidate` 触发与 ambiguous 禁止恢复测试（FR-008/FR-009）
+- [x] T009 实现中心圆/壳体轮廓/侧耳多支持局部窗条件恢复（FR-008/FR-009）
+- [x] T010 验证501/520与500/521后 commit/push main（SC-001/SC-003）
 
 ## Phase 3 - `Φ12.2` 恢复
 

@@ -35,7 +35,7 @@ from .main import (
 )
 
 
-ALGORITHM_VERSION = "hole2-current-capture-registration/1"
+ALGORITHM_VERSION = "hole2-current-capture-registration/2"
 RESULT_SCHEMA_VERSION = "hole2-current-capture-result/1"
 EVIDENCE_SCOPE = "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng"
 
@@ -106,7 +106,7 @@ def load_registration_config(path: Path) -> dict[str, Any]:
     orientations = config.get("orientations_deg")
     if not isinstance(orientations, list) or set(orientations) != {0, 90, 180, 270}:
         raise ValueError("orientations_deg must contain exactly 0, 90, 180, 270")
-    for section in ("coarse", "supports", "quality", "d7", "phi12_2"):
+    for section in ("coarse", "supports", "quality", "registration_recovery", "d7", "phi12_2"):
         if not isinstance(config.get(section), dict):
             raise ValueError(f"registration config missing object: {section}")
     coarse = config["coarse"]
@@ -126,6 +126,15 @@ def load_registration_config(path: Path) -> dict[str, Any]:
         raise ValueError("phi12_2 recovery_min_radius_scale_ratio must remain 0.84")
     if recovery_min >= main_min:
         raise ValueError("phi12_2 recovery radius lower bound must be below main bound")
+    registration_recovery = config["registration_recovery"]
+    recovery_refine_radius = float(registration_recovery["refine_search_radius_target_px"])
+    primary_refine_radius = float(config["supports"]["refine_search_radius_target_px"])
+    primary_search_radius = float(config["supports"]["search_radius_target_px"])
+    if not primary_refine_radius < recovery_refine_radius <= primary_search_radius:
+        raise ValueError(
+            "registration recovery refine radius must exceed primary refine radius "
+            "without exceeding the original support search radius"
+        )
     return config
 
 
@@ -648,6 +657,8 @@ def register_current_capture(
         return {
             "registrationValid": False,
             "failureReason": "no_global_hypothesis",
+            "primaryFailureReason": "no_global_hypothesis",
+            "registrationRecoveryPass": None,
             "candidates": _unscored_orientation_candidates(config),
             "selected": None, "transform": None,
             "candidateScoreMargin": None,
@@ -661,23 +672,64 @@ def register_current_capture(
         for hypothesis in hypotheses
         for orientation in config["orientations_deg"]
     ]
+    for candidate in candidates:
+        candidate["registrationPass"] = "primary"
     candidates.sort(key=lambda item: item["score"], reverse=True)
     valid = [item for item in candidates if item["valid"]]
     if not valid:
-        return {
-            "registrationValid": False,
-            "failureReason": "no_valid_candidate",
-            "candidates": candidates, "selected": None, "transform": None,
-            "candidateScoreMargin": None,
-            "roundtripErrorPx": None,
-            **_registration_coordinate_fields(reference, target_gray, None),
-        }
+        recovery = config.get("registration_recovery") or {}
+        if bool(recovery.get("enabled", False)):
+            recovery_config = {
+                **config,
+                "supports": {
+                    **config["supports"],
+                    "refine_search_radius_target_px": float(
+                        recovery["refine_search_radius_target_px"]
+                    ),
+                },
+            }
+            recovery_candidates = [
+                _candidate(
+                    hypothesis, int(orientation), groups, primary, gradient,
+                    recovery_config,
+                )
+                for hypothesis in hypotheses
+                for orientation in config["orientations_deg"]
+            ]
+            for candidate in recovery_candidates:
+                candidate["registrationPass"] = "recovery"
+            candidates.extend(recovery_candidates)
+            candidates.sort(key=lambda item: item["score"], reverse=True)
+            valid = sorted(
+                (item for item in recovery_candidates if item["valid"]),
+                key=lambda item: item["score"], reverse=True,
+            )
+        if not valid:
+            return {
+                "registrationValid": False,
+                "failureReason": "no_valid_candidate",
+                "primaryFailureReason": "no_valid_candidate",
+                "registrationRecoveryPass": (
+                    "stable_multi_support" if bool(recovery.get("enabled", False)) else None
+                ),
+                "candidates": candidates, "selected": None, "transform": None,
+                "candidateScoreMargin": None,
+                "roundtripErrorPx": None,
+                **_registration_coordinate_fields(reference, target_gray, None),
+            }
+        registration_recovery_pass = "stable_multi_support"
+        primary_failure_reason = "no_valid_candidate"
+    else:
+        registration_recovery_pass = None
+        primary_failure_reason = None
     best = valid[0]
     margin = None if len(valid) == 1 else float(best["score"] - valid[1]["score"])
     if margin is not None and margin < float(config["quality"]["min_candidate_score_margin"]):
         return {
             "registrationValid": False,
             "failureReason": "ambiguous_candidates",
+            "primaryFailureReason": primary_failure_reason,
+            "registrationRecoveryPass": registration_recovery_pass,
             "candidates": candidates, "selected": best, "transform": None,
             "candidateScoreMargin": margin,
             "roundtripErrorPx": None,
@@ -692,6 +744,8 @@ def register_current_capture(
         return {
             "registrationValid": False,
             "failureReason": "roundtrip_error_above_gate",
+            "primaryFailureReason": primary_failure_reason,
+            "registrationRecoveryPass": registration_recovery_pass,
             "candidates": candidates, "selected": best, "transform": None,
             "candidateScoreMargin": margin,
             "roundtripErrorPx": roundtrip,
@@ -700,6 +754,8 @@ def register_current_capture(
     return {
         "registrationValid": True,
         "failureReason": None,
+        "primaryFailureReason": primary_failure_reason,
+        "registrationRecoveryPass": registration_recovery_pass,
         "candidates": candidates,
         "selected": best,
         "transform": transform.as_dict(),

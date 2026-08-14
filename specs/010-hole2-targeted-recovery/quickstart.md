@@ -37,3 +37,9 @@ scripts/run_hole2_full_regression.sh \
 
 脚本保存 `full-regression.log`、`run-metadata.json`、`key-metrics.json`和
 `key-metrics.txt`；它不接受目标标注。输出目录必须在 Git 工作树外。
+
+## 注册恢复字段
+
+`registration.registrationRecoveryPass=stable_multi_support` 表示 primary 已明确失败为
+`no_valid_candidate`，且扩展局部精配准窗后的多支持几何候选通过了全部原门。
+`primaryFailureReason` 保留触发原因。`ambiguous_candidates` 不会触发该恢复。

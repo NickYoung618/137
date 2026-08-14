@@ -117,6 +117,10 @@ def _test_config():
             "min_candidate_score_margin": 0.25,
             "max_roundtrip_error_px": 0.001,
         },
+        "registration_recovery": {
+            "enabled": True,
+            "refine_search_radius_target_px": 32.0,
+        },
         "d7": {
             "max_reference_tangent_error_px": 4.0,
             "max_axis_shift_target_px": 20.0,
@@ -135,6 +139,67 @@ def _test_config():
 
 
 class CurrentCaptureRegistrationTests(unittest.TestCase):
+    def test_registration_recovery_runs_only_after_no_valid_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reference, _ = _synthetic_reference(Path(tmp))
+            hypothesis = {"score": 1.0, "scale": 1.0, "centerX": 210.0, "centerY": 210.0}
+
+            def candidate(_hypothesis, orientation, _groups, _primary, _gradient, config):
+                recovered = (
+                    config["supports"]["refine_search_radius_target_px"] == 32.0
+                    and orientation == 270
+                )
+                return {
+                    "orientationDeg": orientation,
+                    "coarse": hypothesis,
+                    "transform": SimilarityTransform(0.0, 0.0, 1.0, 0.0).as_dict() if recovered else None,
+                    "score": 10.0 if recovered else 1.0,
+                    "supportCount": 4 if recovered else 2,
+                    "spatialCoverage": 0.5 if recovered else 0.0,
+                    "medianResidualPx": 0.0 if recovered else None,
+                    "maxResidualPx": 0.0 if recovered else None,
+                    "supports": [], "gateDiagnostics": {},
+                    "valid": recovered,
+                    "failureReasons": [] if recovered else ["support_count_below_gate"],
+                }
+
+            with patch("algorithms.hole_2.current_capture._coarse_hypotheses", return_value=[hypothesis]), patch(
+                "algorithms.hole_2.current_capture._candidate", side_effect=candidate
+            ) as candidate_mock:
+                result = register_current_capture(reference, np.zeros((420, 420)), _test_config())
+
+        self.assertTrue(result["registrationValid"], result)
+        self.assertEqual("stable_multi_support", result["registrationRecoveryPass"])
+        self.assertEqual("no_valid_candidate", result["primaryFailureReason"])
+        self.assertEqual(8, candidate_mock.call_count)
+        self.assertEqual("recovery", result["selected"]["registrationPass"])
+
+    def test_ambiguous_primary_candidates_never_trigger_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reference, _ = _synthetic_reference(Path(tmp))
+            hypothesis = {"score": 1.0, "scale": 1.0, "centerX": 210.0, "centerY": 210.0}
+
+            def candidate(_hypothesis, orientation, *_args):
+                return {
+                    "orientationDeg": orientation, "coarse": hypothesis,
+                    "transform": SimilarityTransform(0.0, 0.0, 1.0, float(orientation)).as_dict(),
+                    "score": 10.0 - 0.001 * orientation,
+                    "supportCount": 4, "spatialCoverage": 0.5,
+                    "medianResidualPx": 0.0, "maxResidualPx": 0.0,
+                    "supports": [], "gateDiagnostics": {}, "valid": True,
+                    "failureReasons": [],
+                }
+
+            with patch("algorithms.hole_2.current_capture._coarse_hypotheses", return_value=[hypothesis]), patch(
+                "algorithms.hole_2.current_capture._candidate", side_effect=candidate
+            ) as candidate_mock:
+                result = register_current_capture(reference, np.zeros((420, 420)), _test_config())
+
+        self.assertFalse(result["registrationValid"])
+        self.assertEqual("ambiguous_candidates", result["failureReason"])
+        self.assertIsNone(result["registrationRecoveryPass"])
+        self.assertEqual(4, candidate_mock.call_count)
+
     def test_similarity_roundtrip_and_exact_fit(self):
         expected = SimilarityTransform(320.0, 75.0, 0.72, -88.5)
         reference = [(10.0, 20.0), (200.0, 30.0), (80.0, 190.0), (260.0, 220.0)]

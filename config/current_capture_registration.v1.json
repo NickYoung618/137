@@ -1,6 +1,6 @@
 {
   "schema_version": "hole2-current-capture-registration-config/1",
-  "config_version": "current-capture-registration-v1",
+  "config_version": "current-capture-registration-v2",
   "orientations_deg": [0, 90, 180, 270],
   "coarse": {
     "downsample": 8,
@@ -33,6 +33,10 @@
     "max_residual_px": 45.0,
     "min_candidate_score_margin": 0.75,
     "max_roundtrip_error_px": 0.001
+  },
+  "registration_recovery": {
+    "enabled": true,
+    "refine_search_radius_target_px": 48.0
   },
   "d7": {
     "max_reference_tangent_error_px": 4.0,
