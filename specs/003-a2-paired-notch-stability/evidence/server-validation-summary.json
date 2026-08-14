@@ -22,7 +22,7 @@
     }
   },
   "postChangeValidation": {
-    "unitTests": {"run": 34, "passed": 34, "skipped": 0},
+    "unitTests": {"run": 42, "passed": 42, "skipped": 0},
     "legacySweep72": {
       "manifestValid": true,
       "valid": 72,
@@ -42,7 +42,7 @@
       "crossConditionResidualMeanRangeDeg": 0.3442903150114489,
       "elapsedP95Ms": 933.3694194909184
     },
-    "pairedControlled": {
+    "pairedControlledCompatibility": {
       "normalValid": 5,
       "normalTotal": 5,
       "maeDeg": 0.11638627711824938,
@@ -52,7 +52,18 @@
       "badTotal": 3,
       "falsePositiveCount": 0,
       "failureCodes": ["RING_TRUNCATED", "SLOT_PAIR_AMBIGUOUS", "SLOT_PAIR_NOT_FOUND"]
+    },
+    "multiNotchRolesControlled": {
+      "diagnosticNormalUnique": 3,
+      "diagnosticNormalTotal": 3,
+      "includedAngleTruthDeg": 85.0,
+      "includedAngleMaeDeg": 0.0936580144282857,
+      "includedAngleMaxErrorDeg": 0.15499567381300494,
+      "negativeFailClosed": 2,
+      "negativeTotal": 2,
+      "formalMechanicalValid": 0,
+      "failureCodes": ["DATUM_DEFINITION_UNCONFIRMED", "ROLE_ASSIGNMENT_AMBIGUOUS", "ROLE_ASSIGNMENT_FAILED"]
     }
   },
-  "productionStatus": "BLOCKED_B001_B005"
+  "productionStatus": "BLOCKED_B001_B008"
 }

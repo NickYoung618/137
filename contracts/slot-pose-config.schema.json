@@ -30,6 +30,9 @@
         "positive_direction": {"type": ["string", "null"], "enum": ["cw", "ccw", null]},
         "conventions_confirmed": {"type": "boolean"},
         "target_semantics_confirmed": {"type": "boolean", "default": false},
+        "drawing_datum_definition_confirmed": {"type": "boolean", "default": false},
+        "a2_drawing_feature_mapping_confirmed": {"type": "boolean", "default": false},
+        "output_purpose": {"type": ["string", "null"], "enum": ["drawing_tolerance_inspection", "mechanical_correction", null]},
         "valid_range_deg": {"type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
         "production_plc_mapping_confirmed": {"type": "boolean"}
       }
@@ -38,7 +41,7 @@
       "type": "object",
       "required": ["min_notch_prominence", "min_polar_score", "max_rotation_disagreement_deg", "min_scale", "max_scale"],
       "properties": {
-        "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline"], "default": "legacy_single_notch"},
+        "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline", "multi_notch_roles"], "default": "legacy_single_notch"},
         "min_notch_prominence": {"type": "number", "minimum": 0},
         "min_polar_score": {"type": "number", "minimum": 0},
         "max_rotation_disagreement_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
@@ -73,9 +76,41 @@
             "min_pair_score": {"type": "number", "minimum": 0, "maximum": 1},
             "min_score_margin": {"type": "number", "minimum": 0, "maximum": 1}
           }
+        },
+        "role_assignment": {
+          "type": "object",
+          "required": ["datum_definition", "assignments", "min_score_margin", "max_opposition_error_deg"],
+          "properties": {
+            "datum_definition": {"enum": ["single_candidate_ray", "opposed_candidates_axis"]},
+            "min_score_margin": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_opposition_error_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+            "drawing_nominal_angle_deg": {"type": ["number", "null"], "minimum": 0, "maximum": 180},
+            "drawing_tolerance_deg": {"type": ["number", "null"], "minimum": 0},
+            "assignments": {
+              "type": "object",
+              "required": ["datum_primary", "target_left"],
+              "additionalProperties": {"$ref": "#/$defs/roleRule"}
+            }
+          }
         }
       }
     }
   },
-  "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "roleRule": {
+      "type": "object",
+      "required": ["expected_reference_azimuth_deg", "max_deviation_deg"],
+      "properties": {
+        "expected_reference_azimuth_deg": {"type": "number"},
+        "max_deviation_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "multi_notch_roles"}}}}},
+      "then": {"properties": {"detector": {"required": ["profile", "role_assignment"]}}}
+    }
+  ]
 }

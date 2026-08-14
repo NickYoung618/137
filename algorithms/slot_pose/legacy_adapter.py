@@ -13,6 +13,7 @@ from typing import Any
 
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
+from algorithms.slot_pose.role_assignment import assign_roles
 
 
 REQUIRED_FUNCTIONS = (
@@ -110,7 +111,7 @@ class LegacyAEndFaceAdapter:
         if missing:
             raise LegacyAdapterError("ASSET_MISMATCH", "function_inventory", f"missing functions: {missing}")
 
-    def _paired_profile(
+    def _candidate_profile(
         self,
         gray: Any,
         center: tuple[float, float],
@@ -152,7 +153,8 @@ class LegacyAEndFaceAdapter:
             int(profile_config["n_angles"]),
         )
         candidates, summary = extract_dark_candidates(polar.mean(axis=0), profile_config)
-        pairing = assess_pairs(candidates, self.config["detector"]["pairing"])
+        pairing_config = self.config["detector"].get("pairing")
+        pairing = assess_pairs(candidates, pairing_config) if isinstance(pairing_config, dict) else None
         profile_diagnostics.update({
             "medianIntensity": summary["medianIntensity"],
             "madIntensity": summary["madIntensity"],
@@ -261,14 +263,14 @@ class LegacyAEndFaceAdapter:
                 failures.append("notch_rotation_missing")
         elif mode == "paired_notches_centerline":
             try:
-                reference_paired = self._paired_profile(
+                reference_paired = self._candidate_profile(
                     self.reference_model.reference_gray,
                     self.reference_model.alignment_center,
                     float(self.reference_model.alignment_outer_radius),
                     1.0,
                     "reference",
                 )
-                target_paired = self._paired_profile(target_gray, center, outer_radius, scale, "target")
+                target_paired = self._candidate_profile(target_gray, center, outer_radius, scale, "target")
             except LegacyAdapterError as exc:
                 diagnostics.update(exc.diagnostics)
                 exc.diagnostics = diagnostics
@@ -315,6 +317,59 @@ class LegacyAEndFaceAdapter:
                     f"polar/paired disagreement {pair_agreement_deg:.3f}deg exceeds threshold",
                     diagnostics,
                 )
+        elif mode == "multi_notch_roles":
+            try:
+                target_roles = self._candidate_profile(target_gray, center, outer_radius, scale, "target")
+            except LegacyAdapterError as exc:
+                diagnostics.update(exc.diagnostics)
+                exc.diagnostics = diagnostics
+                raise
+            role_assignment = assign_roles(
+                [
+                    _candidate_from_dict(item)
+                    for item in target_roles["candidates"]
+                ],
+                detector["role_assignment"],
+                expected_offset_deg=math.degrees(float(polar_rotation)),
+            )
+            diagnostics.update({
+                "angularProfile": target_roles["angularProfile"],
+                "candidates": target_roles["candidates"],
+                "candidateSummary": target_roles["candidateSummary"],
+                "roleAssignment": role_assignment,
+                "drawingEvidence": {
+                    "kind": "drawing_geometry_intent_only",
+                    "label": "85°±5° (Z106)",
+                    "provesA2FeatureMapping": False,
+                },
+            })
+            if not role_assignment["unique"]:
+                code = (
+                    "ROLE_ASSIGNMENT_AMBIGUOUS"
+                    if "role_assignment_not_unique" in role_assignment["failedChecks"]
+                    else "ROLE_ASSIGNMENT_FAILED"
+                )
+                raise LegacyAdapterError(
+                    code, "role_assignment",
+                    f"notch role assignment failed: {role_assignment['failedChecks']}", diagnostics,
+                )
+            candidate_deg = float(role_assignment["selectedRoleAzimuthsDeg"]["target_left"])
+            diagnostics["candidateAzimuthImageDeg"] = candidate_deg
+            drawing_angle = role_assignment["drawingAngle"]
+            pose = self.config["pose"]
+            purpose = pose.get("output_purpose")
+            if (
+                purpose == "drawing_tolerance_inspection"
+                and pose.get("drawing_datum_definition_confirmed")
+                and pose.get("a2_drawing_feature_mapping_confirmed")
+                and drawing_angle.get("drawingNominalDeg") is not None
+                and drawing_angle.get("drawingToleranceDeg") is not None
+            ):
+                deviation = abs(float(drawing_angle["includedAngleDeg"]) - float(drawing_angle["drawingNominalDeg"]))
+                drawing_angle["toleranceDeviationDeg"] = deviation
+                drawing_angle["toleranceStatus"] = (
+                    "PASS" if deviation <= float(drawing_angle["drawingToleranceDeg"]) else "FAIL"
+                )
         else:  # load_config prevents this; retain a local guard for direct construction.
             raise LegacyAdapterError("QUALITY_REJECTED", "configuration", f"unsupported diagnostic mode: {mode}")
 
@@ -338,6 +393,13 @@ class LegacyAEndFaceAdapter:
                 min(1.0, float(pairing["scoreMargin"]) / max(1e-6, float(detector["pairing"]["min_score_margin"]))),
                 max(0.0, 1.0 - float(pairing["polarPairAgreementDeg"]) / float(detector["max_polar_pair_disagreement_deg"])),
             ]
+        elif mode == "multi_notch_roles":
+            assignment = diagnostics["roleAssignment"]
+            confidence_parts = [
+                min(1.0, float(polar_score) / max(1.0, 2.0 * float(detector["min_polar_score"]))),
+                float(assignment["bestScore"]),
+                min(1.0, float(assignment["scoreMargin"]) / max(1e-6, float(detector["role_assignment"]["min_score_margin"]))),
+            ]
         else:
             confidence_parts = [
                 min(1.0, float(notch_prominence) / max(1.0, 2.0 * float(detector["min_notch_prominence"]))),
@@ -350,6 +412,22 @@ class LegacyAEndFaceAdapter:
 
     def mechanical_angle(self, candidate_image_deg: float) -> float:
         pose = self.config["pose"]
+        if self.config["detector"].get("diagnostic_mode") == "multi_notch_roles":
+            if not pose.get("drawing_datum_definition_confirmed"):
+                raise LegacyAdapterError(
+                    "DATUM_DEFINITION_UNCONFIRMED", "pose_mapping",
+                    "drawing datum definition has not been confirmed",
+                )
+            if not pose.get("a2_drawing_feature_mapping_confirmed"):
+                raise LegacyAdapterError(
+                    "FEATURE_MAPPING_UNCONFIRMED", "pose_mapping",
+                    "A2 image candidates have not been mapped to drawing datum/target features",
+                )
+            if pose.get("output_purpose") != "mechanical_correction":
+                raise LegacyAdapterError(
+                    "OUTPUT_PURPOSE_UNCONFIRMED", "pose_mapping",
+                    "drawing tolerance observation is not a confirmed mechanical correction contract",
+                )
         if not pose.get("target_semantics_confirmed"):
             raise LegacyAdapterError(
                 "TARGET_SEMANTICS_UNCONFIRMED", "pose_mapping",
@@ -369,3 +447,19 @@ class LegacyAEndFaceAdapter:
         if valid_range is not None and not float(valid_range[0]) <= angle <= float(valid_range[1]):
             raise LegacyAdapterError("ANGLE_OUT_OF_RANGE", "pose_mapping", f"angle {angle:.6f}deg is outside valid range")
         return angle
+
+
+def _candidate_from_dict(payload: dict[str, Any]):
+    from algorithms.slot_pose.angular_profile import NotchCandidate
+
+    return NotchCandidate(
+        candidate_id=str(payload["candidateId"]),
+        center_deg=float(payload["centerDeg"]),
+        half_width_deg=float(payload["halfWidthDeg"]),
+        start_deg=float(payload["startDeg"]),
+        end_deg=float(payload["endDeg"]),
+        wraps_boundary=bool(payload["wrapsBoundary"]),
+        prominence=float(payload["prominence"]),
+        deficit_area=float(payload["deficitArea"]),
+        rank=int(payload["rank"]),
+    )

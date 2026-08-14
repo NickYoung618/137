@@ -81,6 +81,8 @@ class SlotPoseContractTests(unittest.TestCase):
             "ANGLE_OUT_OF_RANGE",
             "SLOT_PAIR_NOT_FOUND", "SLOT_PAIR_AMBIGUOUS", "RING_TRUNCATED",
             "TARGET_SEMANTICS_UNCONFIRMED",
+            "ROLE_ASSIGNMENT_FAILED", "ROLE_ASSIGNMENT_AMBIGUOUS",
+            "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED",
         }.issubset(ERROR_CODES))
 
     def test_old_config_defaults_to_legacy_but_unconfirmed_target(self) -> None:

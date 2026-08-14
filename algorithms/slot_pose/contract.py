@@ -13,7 +13,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.3.0"
+ALGORITHM_VERSION = "0.4.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -23,9 +23,14 @@ ERROR_CODES = {
     "SLOT_FIT_FAILED",
     "SLOT_PAIR_NOT_FOUND",
     "SLOT_PAIR_AMBIGUOUS",
+    "ROLE_ASSIGNMENT_FAILED",
+    "ROLE_ASSIGNMENT_AMBIGUOUS",
     "RING_TRUNCATED",
     "QUALITY_REJECTED",
     "TARGET_SEMANTICS_UNCONFIRMED",
+    "DATUM_DEFINITION_UNCONFIRMED",
+    "FEATURE_MAPPING_UNCONFIRMED",
+    "OUTPUT_PURPOSE_UNCONFIRMED",
     "POSE_CONVENTION_UNCONFIRMED",
     "ANGLE_OUT_OF_RANGE",
     "INTERNAL_ERROR",
@@ -61,7 +66,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not isinstance(detector, dict):
         raise ValueError("detector configuration must be an object")
     mode = detector.setdefault("diagnostic_mode", "legacy_single_notch")
-    if mode not in {"legacy_single_notch", "paired_notches_centerline"}:
+    if mode not in {"legacy_single_notch", "paired_notches_centerline", "multi_notch_roles"}:
         raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
     if mode == "paired_notches_centerline":
         from algorithms.slot_pose.angular_profile import validate_pairing_config, validate_profile_config
@@ -73,6 +78,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
         disagreement = detector.get("max_polar_pair_disagreement_deg")
         if not isinstance(disagreement, (int, float)) or not 0.0 < float(disagreement) <= 180.0:
             raise ValueError("max_polar_pair_disagreement_deg must be in (0, 180]")
+    if mode == "multi_notch_roles":
+        from algorithms.slot_pose.angular_profile import validate_profile_config
+        from algorithms.slot_pose.role_assignment import validate_role_config
+
+        if not isinstance(detector.get("profile"), dict) or not isinstance(detector.get("role_assignment"), dict):
+            raise ValueError("multi-role mode requires detector.profile and detector.role_assignment objects")
+        validate_profile_config(detector["profile"])
+        validate_role_config(detector["role_assignment"])
     return config
 
 
@@ -152,6 +165,9 @@ def build_result(
             **diagnostics,
             "poseConventionsConfirmed": bool(pose.get("conventions_confirmed", False)),
             "targetSemanticsConfirmed": bool(pose.get("target_semantics_confirmed", False)),
+            "drawingDatumDefinitionConfirmed": bool(pose.get("drawing_datum_definition_confirmed", False)),
+            "a2DrawingFeatureMappingConfirmed": bool(pose.get("a2_drawing_feature_mapping_confirmed", False)),
+            "outputPurpose": pose.get("output_purpose"),
             "productionPlcMappingConfirmed": bool(pose.get("production_plc_mapping_confirmed", False)),
             "failClosed": True,
         },
