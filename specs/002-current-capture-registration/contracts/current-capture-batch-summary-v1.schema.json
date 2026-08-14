@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/current-capture-batch-summary-v1.schema.json",
+  "title": "Current Capture External Batch Quality Summary v1",
+  "type": "object",
+  "required": ["schemaVersion", "overall", "groups", "evidenceScope", "runtimeInputs"],
+  "properties": {
+    "schemaVersion": {"const": "hole2-current-capture-batch-summary/1"},
+    "overall": {"$ref": "#/$defs/stats"},
+    "groups": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/stats"}
+    },
+    "evidenceScope": {"const": "external_batch_technical_quality_only_not_repeatability_mm_accuracy_or_production_ok_ng"},
+    "runtimeInputs": {
+      "type": "object",
+      "required": ["referenceAnnotation", "referenceImage", "configuration", "groups"],
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "stats": {
+      "type": "object",
+      "required": ["total", "executionSuccess", "executionErrors", "registrationValid", "technicalComplete", "featureValid", "orientationCounts", "qualityStates", "registrationFailureReasons", "candidateRejectionReasons", "featureFailureReasons", "timingMs"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "executionSuccess": {"type": "integer", "minimum": 0},
+        "executionErrors": {"type": "object"},
+        "registrationValid": {"type": "integer", "minimum": 0},
+        "technicalComplete": {"type": "integer", "minimum": 0},
+        "featureValid": {"type": "object", "required": ["7", "Phi12.2"]},
+        "orientationCounts": {"type": "object"},
+        "qualityStates": {"type": "object"},
+        "registrationFailureReasons": {"type": "object"},
+        "candidateRejectionReasons": {"type": "object"},
+        "featureFailureReasons": {"type": "object"},
+        "timingMs": {"type": "object", "required": ["count", "mean", "p50", "p95", "max"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

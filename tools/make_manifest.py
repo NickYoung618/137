@@ -118,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, type=Path, help="External dataset root.")
     parser.add_argument("--output", required=True, type=Path, help="Manifest JSON to create.")
     parser.add_argument("--dataset-id", required=True)
-    parser.add_argument("--task", required=True, help="Stable task name, for example a_end_face.")
+    parser.add_argument("--task", required=True, help="Stable task name, for example a_end_face or hole_2.")
     parser.add_argument("--expected-repeats", type=int, default=20)
     parser.add_argument("--default-sample", default="sample_1")
     parser.add_argument("--default-position", default="pos_1")

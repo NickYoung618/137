@@ -1,7 +1,7 @@
 [project]
-name = "housing-inspection-a-end-face"
-version = "1.3.0"
-description = "Quality-aware A-end-face JSON CLI with an independently gated short-line candidate"
+name = "housing-inspection-137"
+version = "1.4.0"
+description = "A-end-face and hole-2 visual inspection algorithms with external-data tooling"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "numpy==2.4.4",

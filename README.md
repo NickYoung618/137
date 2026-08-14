@@ -1,8 +1,14 @@
-# 137 壳体 A 端面检测算法
+# 137 壳体检测算法
 
-本仓库只承载 A 端面检测，不包含其他视觉引导业务。
+本仓库承载 137 壳体 A 端面与孔2柱面/端面检测；两类算法保持独立入口、配置和规格。
 
 ## 检测核心来源
+
+## 孔2交付状态
+
+当前已完成数据无关工具链、配置模板和现有 `hole_2` 算法适配。尺寸7已按确认语义实现
+双边界拟合，Φ12.2已提供半径和显式像素直径列。正式毫米标定、20张重复性验证和生产
+OK/NG仍等待真实图片、图纸确认及验收数据。
 
 `algorithms/end_face/core.py` 原样来自桌面算法包
 `/home/ubuntu/disk/zzx/算法/算法.zip` 内的 `A端面/repeatability_evaluation.py`，
@@ -166,3 +172,84 @@ uv run python tools/compare_short_line_candidates.py summarize \
 - `data/manifests/` 只保存小体积相对路径清单和 SHA-256。
 - 检测失败返回结构化失败 JSON；单项特征无效时保持该项 `coreValid=false`，但不默认否决定位。
 - 本 CLI 只输出 A 端面量测结果，不提供视觉引导、PLC 写入或质量 OK/NG 业务。
+
+## 孔2数据无关工具链与现拍检测
+
+项目研发原则见 [Constitution](.specify/memory/constitution.md)。本轮数据无关基础的规格、方案和
+任务记录位于 [001-data-independent-foundation](specs/001-data-independent-foundation/spec.md)。
+
+## 数据无关工具链
+
+安装固定依赖并运行测试：
+
+```bash
+uv sync
+uv run python -m unittest discover -s tests -v
+```
+
+为外置图片生成Manifest：
+
+```bash
+uv run python tools/make_manifest.py \
+  --input /path/to/hole2-data \
+  --output data/manifests/hole2-batch-001.json \
+  --dataset-id hole2-batch-001 \
+  --task hole_2 \
+  --expected-repeats 20 \
+  --reference-image /path/to/hole2-data/sample_1/pos_1/image_001.bmp
+```
+
+在服务器或Mac验证同一批原图：
+
+```bash
+uv run python tools/validate_dataset.py \
+  --manifest data/manifests/hole2-batch-001.json \
+  --data-root /path/to/hole2-data \
+  --config config/hole2_inspection.example.json \
+  --report outputs/hole2-batch-001/validation.json
+```
+
+从算法测量CSV计算静态/动态重复性：
+
+```bash
+uv run python tools/evaluate_repeatability.py \
+  --measurements outputs/hole2-batch-001/measurements.csv \
+  --config config/hole2_inspection.example.json \
+  --output-dir outputs/hole2-batch-001/repeatability
+```
+
+使用现有权威参考资产进行一图冒烟：
+
+```bash
+bash scripts/smoke_reference.sh
+```
+
+数据目录详见 [data/README.md](data/README.md)，算法适配及资产指纹见
+[algorithms/hole_2/README.md](algorithms/hole_2/README.md)。
+
+## 现拍样品姿态注册与孔2尺寸检测
+
+002 功能在旧孔2 v6 之外增加四个离散方向、主同心圆全局定位、六组圆/圆弧空间一致性、
+稳健相似变换和版本化质量门限。有效姿态才会接入 v6 双边界检测；`Φ12.2` 由独立现拍圆弧
+候选保护，`7` 的横向测量轴由旧参考中“尺寸线与 `Φ12.2` 相切”的几何关系重建。旧参考
+坐标业务列与目标图坐标同时输出。
+
+检测入口不接受现拍 LabelMe；负责人确认 JSON 只能在结果冻结后由独立验收入口读取。完整
+服务器/Mac 命令、哈希校验和证据限制见
+[002 quickstart](specs/002-current-capture-registration/quickstart.md)。
+
+负责人确认单图的当前结果（只代表像素几何，不代表重复性、毫米精度或生产 OK/NG）：
+
+- 注册方向 `270°`，6 个空间支持，覆盖率 `1.0`，注册有效。
+- `7`：预测 `317.5631 px`，真值 `316.0000 px`；长度误差 `1.5631 px`，无序端点平均误差 `2.3096 px`。
+- `Φ12.2`：预测直径 `539.1520 px`，真值拟合直径 `539.2892 px`；直径误差 `0.1372 px`，圆心误差 `0.5013 px`。
+- 最终审计复跑总耗时 `10275.41 ms`；检测与验收结果留在仓库外，未提交原图、标注或结果 JSON。
+
+检测结果现在显式输出目标↔参考正/逆变换与技术质量状态；注册或任一
+特征失败时 CLI 返回非零且不保留伪造几何。验收报告会汇总方向、候选分数/拒绝
+原因、变换、特征质量与真实误差。Mac `2000` 正常品 + `200` 坏品的外置分组
+批量命令见 [002 quickstart](specs/002-current-capture-registration/quickstart.md)。
+
+`Φ12.2` 使用受控两阶段半径搜索：主下限保持 `0.88`，只有主候选在
+下界饱和时才以 `0.84` 下限恢复一次，并在质量字段中显式记录。尺寸7
+的新切线双边界失败时，只允许回退到已通过原 v6 双边界质量状态的有限结果。

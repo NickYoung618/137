@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/current-capture-acceptance-v1.schema.json",
+  "title": "Current Capture Offline Acceptance Report v1",
+  "type": "object",
+  "required": ["schemaVersion", "status", "hashes", "truthValidation", "detectionSummary", "metrics", "scope"],
+  "properties": {
+    "schemaVersion": {"const": "hole2-current-capture-acceptance/1"},
+    "status": {"enum": ["evaluated", "result_invalid", "input_rejected"]},
+    "hashes": {
+      "type": "object", "required": ["targetImage", "targetAnnotation", "detectionResult"],
+      "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "truthValidation": {
+      "type": "object", "required": ["valid", "shapeCount", "labels"],
+      "properties": {
+        "valid": {"type": "boolean"}, "shapeCount": {"const": 2},
+        "labels": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}
+      }, "additionalProperties": true
+    },
+    "detectionSummary": {
+      "type": "object",
+      "required": ["algorithmVersion", "configVersion", "resultSchemaVersion", "timingMs", "qualityStatus", "registration", "features"],
+      "properties": {
+        "algorithmVersion": {"type": "string", "minLength": 1},
+        "configVersion": {"type": "string", "minLength": 1},
+        "resultSchemaVersion": {"const": "hole2-current-capture-result/1"},
+        "timingMs": {"type": "object"},
+        "qualityStatus": {"type": "object"},
+        "registration": {
+          "type": "object",
+          "required": ["qualityStatus", "registrationValid", "failureReason", "selectedOrientationDeg", "transform", "inverseTransform", "candidates"],
+          "properties": {
+            "qualityStatus": {"enum": ["valid", "invalid"]},
+            "registrationValid": {"type": "boolean"},
+            "failureReason": {"type": ["string", "null"]},
+            "selectedOrientationDeg": {"type": ["integer", "null"]},
+            "transform": {"type": ["object", "null"]},
+            "inverseTransform": {"type": ["object", "null"]},
+            "candidates": {"type": "array", "minItems": 4}
+          },
+          "additionalProperties": true
+        },
+        "features": {
+          "type": "object", "required": ["7", "Phi12.2"],
+          "additionalProperties": {"type": "object"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "object", "required": ["7", "Phi12.2"],
+      "properties": {"7": {"type": ["object", "null"]}, "Phi12.2": {"type": ["object", "null"]}},
+      "additionalProperties": false
+    },
+    "scope": {"const": "single_image_pixel_geometry_only_no_acceptance_tolerance_not_repeatability_mm_accuracy_or_production_ok_ng"},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

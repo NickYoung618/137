@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/current-capture-result-v1.schema.json",
+  "title": "Current Capture Registration and Measurement Result v1",
+  "type": "object",
+  "required": ["schemaVersion", "algorithmVersion", "configVersion", "runtimeInputs", "registration", "features", "qualityStatus", "referenceMeasurements", "timingMs", "evidenceScope"],
+  "properties": {
+    "schemaVersion": {"const": "hole2-current-capture-result/1"},
+    "algorithmVersion": {"type": "string", "minLength": 1},
+    "configVersion": {"type": "string", "minLength": 1},
+    "runtimeInputs": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object", "required": ["role", "path", "sha256"],
+        "properties": {
+          "role": {"enum": ["reference_annotation", "reference_image", "target_image", "configuration"]},
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }, "additionalProperties": false
+      }
+    },
+    "registration": {
+      "type": "object", "required": ["registrationValid", "failureReason", "candidates", "selected", "transform", "inverseTransform", "transformDirection", "inverseTransformDirection", "referenceImageSize", "targetImageSize"],
+      "properties": {
+        "registrationValid": {"type": "boolean"},
+        "failureReason": {"type": ["string", "null"]},
+        "candidates": {"type": "array", "minItems": 4},
+        "selected": {"type": ["object", "null"]},
+        "transform": {"type": ["object", "null"]},
+        "inverseTransform": {"type": ["object", "null"]},
+        "transformDirection": {"const": "reference_px_to_target_px"},
+        "inverseTransformDirection": {"const": "target_px_to_reference_px"},
+        "referenceImageSize": {"$ref": "#/$defs/imageSize"},
+        "targetImageSize": {"$ref": "#/$defs/imageSize"}
+      }, "additionalProperties": true
+    },
+    "features": {
+      "type": "object", "required": ["7", "Phi12.2"],
+      "properties": {
+        "7": {"$ref": "#/$defs/feature"},
+        "Phi12.2": {"$ref": "#/$defs/feature"}
+      }, "additionalProperties": false
+    },
+    "qualityStatus": {"$ref": "#/$defs/qualityStatus"},
+    "referenceMeasurements": {"type": "object"},
+    "v6Measurements": {"type": "object"},
+    "timingMs": {"type": "object", "required": ["total"], "properties": {"total": {"type": "number", "minimum": 0}}, "additionalProperties": {"type": "number"}},
+    "evidenceScope": {"const": "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng"},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "imageSize": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "qualityStatus": {
+      "type": "object",
+      "required": ["technicalValid", "state", "failureReasons", "productionDisposition"],
+      "properties": {
+        "technicalValid": {"type": "boolean"},
+        "state": {"enum": ["complete", "registration_invalid", "measurement_invalid"]},
+        "failureReasons": {"type": "array", "items": {"type": "string"}},
+        "productionDisposition": {"const": "not_evaluated"}
+      },
+      "additionalProperties": false
+    },
+    "feature": {
+      "type": "object", "required": ["featureCode", "measurementValid", "qualityStatus", "failureReason", "sourceDetector", "reference", "target", "quality"],
+      "properties": {
+        "featureCode": {"type": "string"},
+        "measurementValid": {"type": "boolean"},
+        "qualityStatus": {"enum": ["valid", "invalid"]},
+        "failureReason": {"type": ["string", "null"]},
+        "sourceDetector": {"type": "string"},
+        "reference": {"type": ["object", "null"]},
+        "target": {"type": ["object", "null"]},
+        "quality": {"type": "object"}
+      }, "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

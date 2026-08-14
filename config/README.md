@@ -14,3 +14,12 @@
 - `requiredFeatureLabels` 默认为空；只有经现场评审确认的定位必要特征才可加入。
 - 46 的 NCC `0.55`、中间环模板 `0.35`、径向点数/残差和短线峰值规则属于核心固定条件，
   由核心 SHA-256 约束，不在策略中覆盖。
+
+孔2运行配置以 `hole2_inspection.example.json` 为模板复制到外部工作目录，现场值不得直接覆盖模板。
+
+- `calibration.mm_per_px`：毫米/参考像素，必须来自受控标定；为 `null` 时重复性工具只输出像素。
+- `feature_mappings`：把算法CSV列映射到稳定业务特征。Φ12.2直接使用
+  `Phi12_2_diameter_px`；`Phi12_2_r`作为可追溯的拟合半径保留。
+- `tolerance.confirmed=false`：表示不得用于正式OK/NG。
+- `repeatability.tiers`：需求中的0.10、0.05、0.03 mm档；当前模板暂以极差评估，口径待确认。
+- `current_capture_registration.v1.json` 中 `Φ12.2` 主半径下限固定为 `0.88`；只有主候选在下界饱和时才以 `recovery_min_radius_scale_ratio=0.84` 执行一次恢复搜索。

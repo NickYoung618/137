@@ -1,4 +1,6 @@
-# A 端面外置数据约定
+# 外置数据约定
+
+## A 端面
 
 原图、参考图、LabelMe 大标注和派生图不得提交 Git。推荐外置结构：
 
@@ -26,3 +28,26 @@ validation/acceptance split 的 Manifest。
 外置 A2 手工 LabelMe 参考至少包含 canonical `19`、`30` 各一个两点 `line`；其 `imagePath` 指向
 同目录或绝对路径下的代表图。可用 `tools/inspect_short_line_labelme.py` 在检测前校验，不读取其
 `imageData` 作为算法输入，也不会把图片复制进输出。
+
+## 孔2
+
+原始图片不提交Git。推荐在服务器或Mac的外置数据根目录中使用：
+
+```text
+<data-root>/
+├── sample_1/
+│   ├── pos_1/                 # 固定位置重复采集，通常20张
+│   │   ├── image_001.bmp
+│   │   └── ...
+│   └── pos_2/                 # 换位后重复采集，用于动态重复性
+└── sample_2/
+    └── pos_1/
+```
+
+约束：
+
+- 原图保持无损，不缩放、不转JPEG；派生ROI必须与原图SHA-256和裁剪坐标关联。
+- `sample_id + position + repeat_index`在一个Manifest内唯一。
+- Manifest只保存相对路径；Mac和服务器通过不同的`--data-root`验证同一清单。
+- 原图、派生图和运行输出分别放在`data/raw`、`data/derived`和`outputs`，均不进入Git。
+- 可提交的内容仅包括`data/manifests/*.json`、配置、代码及小体积报告摘要。

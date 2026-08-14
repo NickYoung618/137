@@ -1,0 +1,64 @@
+{
+  "schema_version": "inspection-algorithm-config/1",
+  "project": "137-housing-hole-2",
+  "calibration": {
+    "mm_per_px": null,
+    "status": "pending_calibration",
+    "calibration_id": null,
+    "note": "填写经受控标定得到的毫米/参考像素比例；未填写时只输出像素统计。"
+  },
+  "feature_mappings": [
+    {
+      "feature_code": "HOLE2-DIM-7",
+      "name": "7(+0.24/+0.15)",
+      "source_label": "7",
+      "source_column": "d7_length",
+      "source_quantity": "dual_boundary_distance",
+      "source_unit": "ref_px",
+      "scale": 1.0,
+      "output_quantity": "length",
+      "output_unit": "mm",
+      "tolerance": {
+        "nominal": 7.0,
+        "lower": 7.15,
+        "upper": 7.24,
+        "unit": "mm",
+        "confirmed": false
+      },
+      "repeatability_tier": "R0.03",
+      "enabled": true
+    },
+    {
+      "feature_code": "HOLE2-DIA-12_2",
+      "name": "Φ12.2",
+      "source_label": "Φ12.2",
+      "source_column": "Phi12_2_diameter_px",
+      "source_quantity": "diameter",
+      "source_unit": "ref_px",
+      "scale": 1.0,
+      "output_quantity": "diameter",
+      "output_unit": "mm",
+      "tolerance": {
+        "nominal": 12.2,
+        "lower": null,
+        "upper": null,
+        "unit": "mm",
+        "confirmed": false
+      },
+      "repeatability_tier": "R0.03",
+      "enabled": true
+    }
+  ],
+  "repeatability": {
+    "metric": "range",
+    "min_valid_repeats": 20,
+    "min_dynamic_positions": 2,
+    "tiers_confirmed": false,
+    "tiers": {
+      "R0.10": {"unit": "mm", "limit": 0.1},
+      "R0.05": {"unit": "mm", "limit": 0.05},
+      "R0.03": {"unit": "mm", "limit": 0.03}
+    },
+    "note": "档位数值来自需求资料；以极差作为判定指标的口径仍需业务确认。"
+  }
+}
