@@ -32,9 +32,11 @@ class CurrentCaptureContractTests(unittest.TestCase):
         self.assertTrue(features["7"]["measurementValid"])
         self.assertEqual("valid", features["7"]["qualityStatus"])
         self.assertEqual("v6_original_quality", features["7"]["quality"]["candidate_fallback_pass"])
+        self.assertEqual("v6_original_quality", features["7"]["recoveryPass"])
         self.assertAlmostEqual(75.0, features["7"]["target"]["lengthPx"])
         self.assertTrue(features["Phi12.2"]["measurementValid"])
         self.assertEqual("expanded_radius", features["Phi12.2"]["quality"]["candidate_recovery_pass"])
+        self.assertEqual("expanded_radius", features["Phi12.2"]["recoveryPass"])
         self.assertAlmostEqual(22.5, features["Phi12.2"]["target"]["radiusPx"])
         self.assertEqual(2, len(features["Phi12.2"]["target"]["supportPointsPx"]))
 
@@ -69,6 +71,7 @@ class CurrentCaptureContractTests(unittest.TestCase):
             ],
             "registration": {
                 "registrationValid": False, "failureReason": "test",
+                "primaryFailureReason": "test", "registrationRecoveryPass": None,
                 "candidates": [{}, {}, {}, {}], "selected": None, "transform": None,
                 "inverseTransform": None,
                 "transformDirection": "reference_px_to_target_px",
@@ -76,8 +79,8 @@ class CurrentCaptureContractTests(unittest.TestCase):
                 "referenceImageSize": [100, 100], "targetImageSize": [100, 100],
             },
             "features": {
-                "7": {"featureCode": "HOLE2-DIM-7", "measurementValid": False, "qualityStatus": "invalid", "failureReason": "registration_invalid", "sourceDetector": "v6", "reference": None, "target": None, "quality": {}},
-                "Phi12.2": {"featureCode": "HOLE2-DIA-12_2", "measurementValid": False, "qualityStatus": "invalid", "failureReason": "registration_invalid", "sourceDetector": "v6", "reference": None, "target": None, "quality": {}},
+                "7": {"featureCode": "HOLE2-DIM-7", "measurementValid": False, "qualityStatus": "invalid", "failureReason": "registration_invalid", "sourceDetector": "v6", "recoveryPass": None, "reference": None, "target": None, "quality": {}},
+                "Phi12.2": {"featureCode": "HOLE2-DIA-12_2", "measurementValid": False, "qualityStatus": "invalid", "failureReason": "registration_invalid", "sourceDetector": "v6", "recoveryPass": None, "reference": None, "target": None, "quality": {}},
             },
             "qualityStatus": {
                 "technicalValid": False, "state": "registration_invalid",

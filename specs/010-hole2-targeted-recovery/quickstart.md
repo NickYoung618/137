@@ -43,3 +43,8 @@ scripts/run_hole2_full_regression.sh \
 `registration.registrationRecoveryPass=stable_multi_support` 表示 primary 已明确失败为
 `no_valid_candidate`，且扩展局部精配准窗后的多支持几何候选通过了全部原门。
 `primaryFailureReason` 保留触发原因。`ambiguous_candidates` 不会触发该恢复。
+
+`Φ12.2.recoveryPass` 可为 `expanded_radius`、`center_recenter`或
+`robust_multicircle`。每个特征顶层都输出 `sourceDetector`、`recoveryPass`和
+`quality`；`recoveryPass=null` 表示未触发恢复分支，是否有效始终以
+`measurementValid` 和 `quality` 为准。

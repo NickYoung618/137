@@ -24,13 +24,17 @@ from .main import (
     build_reference,
     bilinear_sample,
     boundary_parallelism_deg,
+    circular_residual,
     contrast_stretch,
     detect_dimension_boundary,
     extract_image,
+    fit_circle_kasa,
     forward_xy,
+    geometric_circle_fit,
     gradient_magnitude,
     inverse_xy,
     load_gray,
+    radial_edge_at_angle,
     solve_similarity,
 )
 
@@ -126,6 +130,17 @@ def load_registration_config(path: Path) -> dict[str, Any]:
         raise ValueError("phi12_2 recovery_min_radius_scale_ratio must remain 0.84")
     if recovery_min >= main_min:
         raise ValueError("phi12_2 recovery radius lower bound must be below main bound")
+    center_recovery_radius = float(phi["center_recovery_search_radius_px"])
+    if not 0.0 < center_recovery_radius < float(phi["search_radius_px"]):
+        raise ValueError("phi12_2 center recovery search radius must be positive and locally bounded")
+    if not 0 < int(phi["multicircle_radial_search_width_px"]) <= int(phi["search_radius_px"]):
+        raise ValueError("phi12_2 multicircle radial search must remain locally bounded")
+    if not 0.0 < float(phi["multicircle_ransac_inlier_residual_px"]) <= float(
+        phi["max_fit_residual_target_px"]
+    ):
+        raise ValueError("phi12_2 multicircle RANSAC residual cannot loosen the fit gate")
+    if not 0.0 < float(phi["min_angle_coverage_fraction"]) <= 1.0:
+        raise ValueError("phi12_2 minimum angle coverage fraction is invalid")
     registration_recovery = config["registration_recovery"]
     recovery_refine_radius = float(registration_recovery["refine_search_radius_target_px"])
     primary_refine_radius = float(config["supports"]["refine_search_radius_target_px"])
@@ -854,20 +869,29 @@ def build_feature_outputs(
         phi_valid = False
         phi_reason = str(measurements.get("Phi12_2.quality.candidate_failure", "detector_invalid"))
 
+    d7_quality = _quality_subset(measurements, "d7")
+    phi_quality = _quality_subset(measurements, "Phi12_2")
+    d7_recovery_pass = (
+        d7_quality.get("candidate_recovery_pass")
+        or d7_quality.get("candidate_fallback_pass")
+    )
+    phi_recovery_pass = phi_quality.get("candidate_recovery_pass")
     features = {
         "7": {
             "featureCode": "HOLE2-DIM-7", "measurementValid": d7_valid,
             "qualityStatus": "valid" if d7_valid else "invalid",
             "failureReason": d7_reason, "sourceDetector": d7_source_detector,
+            "recoveryPass": d7_recovery_pass,
             "reference": d7_reference, "target": d7_target,
-            "quality": _quality_subset(measurements, "d7"),
+            "quality": d7_quality,
         },
         "Phi12.2": {
             "featureCode": "HOLE2-DIA-12_2", "measurementValid": phi_valid,
             "qualityStatus": "valid" if phi_valid else "invalid",
             "failureReason": phi_reason, "sourceDetector": phi_source_detector,
+            "recoveryPass": phi_recovery_pass,
             "reference": phi_reference, "target": phi_target,
-            "quality": _quality_subset(measurements, "Phi12_2"),
+            "quality": phi_quality,
         },
     }
     return features, compatible
@@ -879,12 +903,14 @@ def _invalid_features(reason: str) -> dict[str, Any]:
             "featureCode": "HOLE2-DIM-7", "measurementValid": False,
             "qualityStatus": "invalid",
             "failureReason": reason, "sourceDetector": "hole2-v6-dual-boundary",
+            "recoveryPass": None,
             "reference": None, "target": None, "quality": {},
         },
         "Phi12.2": {
             "featureCode": "HOLE2-DIA-12_2", "measurementValid": False,
             "qualityStatus": "invalid",
             "failureReason": reason, "sourceDetector": "hole2-v6-current-capture-candidate",
+            "recoveryPass": None,
             "reference": None, "target": None, "quality": {},
         },
     }
@@ -979,6 +1005,191 @@ def _phi_radius_search_pass(
     }
 
 
+def _ransac_circle(
+    points: np.ndarray,
+    *,
+    trials: int,
+    inlier_residual_px: float,
+    minimum_inliers: int,
+) -> tuple[tuple[float, float, float], np.ndarray, float] | None:
+    """Fit a deterministic RANSAC circle and refine only its inliers."""
+    if len(points) < max(3, minimum_inliers):
+        return None
+    rng = np.random.default_rng(0)
+    best: tuple[int, float, tuple[float, float, float], np.ndarray] | None = None
+    for _ in range(max(1, trials)):
+        indices = rng.choice(len(points), size=3, replace=False)
+        try:
+            circle = fit_circle_kasa(points[indices])
+        except (ValueError, np.linalg.LinAlgError):
+            continue
+        if not all(math.isfinite(float(value)) for value in circle) or circle[2] <= 0.0:
+            continue
+        residuals = np.abs(
+            np.hypot(points[:, 0] - circle[0], points[:, 1] - circle[1]) - circle[2]
+        )
+        inliers = residuals <= inlier_residual_px
+        count = int(inliers.sum())
+        if count < minimum_inliers:
+            continue
+        median = float(np.median(residuals[inliers]))
+        ranked = (count, -median, circle, inliers)
+        if best is None or ranked[:2] > best[:2]:
+            best = ranked
+    if best is None:
+        return None
+    inliers = best[3]
+    refined = geometric_circle_fit(points[inliers], best[2])
+    residual = circular_residual(points[inliers], refined)
+    return refined, inliers, residual
+
+
+def _phi_multicircle_recovery(
+    target: np.ndarray,
+    shape: ShapeModel,
+    transform: SimilarityTransform,
+    predicted_center: tuple[float, float],
+    predicted_radius: float,
+    main: dict[str, Any],
+    gradient: np.ndarray,
+    normalizer: float,
+    phi_config: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Use polarity-aware radial edges and RANSAC to reject a wrong circle."""
+    image = contrast_stretch(target)
+    angle_start = float(shape.angle_start + transform.theta_rad)
+    angle_end = float(shape.angle_end + transform.theta_rad)
+    expected_extent = max(0.05, abs(angle_end - angle_start))
+    sample_count = max(120, int(predicted_radius * expected_extent))
+    angles = np.linspace(angle_start, angle_end, min(480, sample_count), dtype=np.float64)
+    search_width = int(phi_config["multicircle_radial_search_width_px"])
+    seed_centers = [
+        predicted_center,
+        (float(main["target_cx"]), float(main["target_cy"])),
+        (
+            0.5 * (predicted_center[0] + float(main["target_cx"])),
+            0.5 * (predicted_center[1] + float(main["target_cy"])),
+        ),
+    ]
+    radius_mid = predicted_radius * 0.5 * (
+        float(phi_config["min_radius_scale_ratio"])
+        + float(phi_config["max_radius_scale_ratio"])
+    )
+    seed_radii = [predicted_radius, float(main["target_radius"]), radius_mid]
+    radius_min = predicted_radius * float(phi_config["min_radius_scale_ratio"])
+    radius_max = predicted_radius * float(phi_config["max_radius_scale_ratio"])
+    center_limit = float(phi_config["search_radius_px"]) * float(
+        phi_config["boundary_saturation_fraction"]
+    )
+    candidates: list[dict[str, Any]] = []
+    for seed_center in seed_centers:
+        for seed_radius in seed_radii:
+            edge_points: list[tuple[float, float]] = []
+            point_angles: list[float] = []
+            for angle in angles:
+                point = radial_edge_at_angle(
+                    image, seed_center, float(angle), float(seed_radius),
+                    float(shape.polarity), search_width,
+                )
+                if point is not None:
+                    edge_points.append(point)
+                    point_angles.append(float(angle))
+            points = np.asarray(edge_points, dtype=np.float64)
+            fitted = _ransac_circle(
+                points,
+                trials=int(phi_config["multicircle_ransac_trials"]),
+                inlier_residual_px=float(phi_config["multicircle_ransac_inlier_residual_px"]),
+                minimum_inliers=int(phi_config["min_edge_points"]),
+            )
+            if fitted is None:
+                continue
+            circle, inliers, residual = fitted
+            cx, cy, radius = (float(value) for value in circle)
+            inlier_angles = np.unwrap(np.asarray(point_angles, dtype=np.float64)[inliers])
+            covered_extent = float(np.ptp(inlier_angles)) if len(inlier_angles) > 1 else 0.0
+            coverage_fraction = min(1.0, covered_extent / expected_extent)
+            support_values = bilinear_sample(
+                gradient,
+                cx + radius * np.cos(angles),
+                cy + radius * np.sin(angles),
+            )
+            side_values = np.concatenate([
+                bilinear_sample(
+                    gradient, cx + (radius + offset) * np.cos(angles),
+                    cy + (radius + offset) * np.sin(angles),
+                )
+                for offset in (-6.0, 6.0)
+            ])
+            support_values = support_values[np.isfinite(support_values)]
+            side_values = side_values[np.isfinite(side_values)]
+            peak = float(np.median(support_values)) if len(support_values) else 0.0
+            side = float(np.median(side_values)) if len(side_values) else peak
+            edge_peak = peak / normalizer
+            prominence = (peak - side) / normalizer
+            offset_x = cx - predicted_center[0]
+            offset_y = cy - predicted_center[1]
+            ratio = radius / predicted_radius
+            boundary = {
+                "xLower": offset_x <= -center_limit,
+                "xUpper": offset_x >= center_limit,
+                "yLower": offset_y <= -center_limit,
+                "yUpper": offset_y >= center_limit,
+                "limitPx": center_limit,
+            }
+            reasons: list[str] = []
+            if not radius_min <= radius <= radius_max:
+                reasons.append("radius_scale_ratio_out_of_range")
+            if any(boundary[name] for name in ("xLower", "xUpper", "yLower", "yUpper")):
+                reasons.append("center_boundary_saturated")
+            if residual > float(phi_config["max_fit_residual_target_px"]):
+                reasons.append("ransac_residual_above_gate")
+            if coverage_fraction < float(phi_config["min_angle_coverage_fraction"]):
+                reasons.append("angle_coverage_below_gate")
+            if edge_peak < float(phi_config["min_edge_peak_normalized"]):
+                reasons.append("edge_peak_below_gate")
+            if prominence < float(phi_config["min_edge_prominence_normalized"]):
+                reasons.append("edge_prominence_below_gate")
+            candidates.append({
+                "target_cx": cx, "target_cy": cy, "target_radius": radius,
+                "radius_scale_ratio": ratio,
+                "center_offset": math.hypot(offset_x, offset_y),
+                "center_offset_x": offset_x, "center_offset_y": offset_y,
+                "center_boundary": boundary,
+                "radius_lower_bound": radius_min, "radius_upper_bound": radius_max,
+                "edge_peak": edge_peak, "prominence": prominence,
+                "lower_radius_saturated": radius <= radius_min + 1e-6,
+                "upper_radius_saturated": radius >= radius_max - 1e-6,
+                "center_saturated": any(boundary[name] for name in ("xLower", "xUpper", "yLower", "yUpper")),
+                "ransac_inliers": int(inliers.sum()),
+                "ransac_residual": residual,
+                "angle_coverage_fraction": coverage_fraction,
+                "failureReasons": reasons,
+                "score": edge_peak + prominence + coverage_fraction - residual / max(
+                    1.0, float(phi_config["max_fit_residual_target_px"])
+                ),
+            })
+    accepted = [candidate for candidate in candidates if not candidate["failureReasons"]]
+    selected = max(accepted, key=lambda candidate: candidate["score"], default=None)
+    diagnostics = {
+        "candidate_multicircle_count": len(candidates),
+        "candidate_multicircle_valid_count": len(accepted),
+        "candidate_multicircle_rejections": [
+            candidate["failureReasons"] for candidate in candidates if candidate["failureReasons"]
+        ],
+        "candidate_multicircle_ransac_inliers": (
+            None if selected is None else selected["ransac_inliers"]
+        ),
+        "candidate_multicircle_ransac_residual_target_px": (
+            None if selected is None else selected["ransac_residual"]
+        ),
+        "candidate_multicircle_angle_coverage_fraction": (
+            None if selected is None else selected["angle_coverage_fraction"]
+        ),
+        "candidate_multicircle_polarity_enforced": abs(float(shape.polarity)) > 1e-9,
+    }
+    return selected, diagnostics
+
+
 def _detect_phi12_2(
     target: np.ndarray,
     reference: ReferenceModel,
@@ -1018,6 +1229,8 @@ def _detect_phi12_2(
 
     recovery_pass: str | None = None
     selected = main
+    multicircle_diagnostics: dict[str, Any] = {}
+    center_recovery_seed_offset: list[float] | None = None
     if bool(main["lower_radius_saturated"]):
         recovery_pass = "expanded_radius"
         expanded = _phi_radius_search_pass(
@@ -1033,6 +1246,49 @@ def _detect_phi12_2(
                 "candidate_main_radius_scale_ratio": main["radius_scale_ratio"],
             }
         selected = expanded
+    elif bool(main["center_saturated"]):
+        recovery_pass = "center_recenter"
+        center_recovery_seed_offset = [
+            float(main["center_offset_x"]), float(main["center_offset_y"]),
+        ]
+        recenter_config = {
+            **phi_config,
+            "search_radius_px": float(phi_config["center_recovery_search_radius_px"]),
+        }
+        recentered = _phi_radius_search_pass(
+            gradient, normalizer,
+            (float(main["target_cx"]), float(main["target_cy"])),
+            predicted_radius, cosines, sines, recenter_config, main_min,
+        )
+        if recentered is None:
+            return None, {
+                "candidate_failure": "center_recenter_search_empty",
+                "candidate_recovery_pass": recovery_pass,
+                "candidate_main_lower_bound_saturated": False,
+                "candidate_main_radius_scale_ratio": main["radius_scale_ratio"],
+                "candidate_center_recovery_seed_offset_target_px": center_recovery_seed_offset,
+            }
+        # The second pass owns a small local window around a strong ring-edge
+        # seed.  Keep its local boundary flags, but report displacement from
+        # the original registration prediction for auditability.
+        recentered["center_offset_x"] = float(recentered["target_cx"] - predicted_center[0])
+        recentered["center_offset_y"] = float(recentered["target_cy"] - predicted_center[1])
+        recentered["center_offset"] = math.hypot(
+            recentered["center_offset_x"], recentered["center_offset_y"]
+        )
+        selected = recentered
+    elif (
+        bool(main["upper_radius_saturated"])
+        or float(main["edge_peak"]) < float(phi_config["min_edge_peak_normalized"])
+        or float(main["prominence"]) < float(phi_config["min_edge_prominence_normalized"])
+    ):
+        recovery_pass = "robust_multicircle"
+        recovered, multicircle_diagnostics = _phi_multicircle_recovery(
+            target, shape, transform, predicted_center, predicted_radius,
+            main, gradient, normalizer, phi_config,
+        )
+        if recovered is not None:
+            selected = recovered
 
     target_cx = float(selected["target_cx"])
     target_cy = float(selected["target_cy"])
@@ -1070,7 +1326,7 @@ def _detect_phi12_2(
     )
     selected_min = (
         float(phi_config["recovery_min_radius_scale_ratio"])
-        if recovery_pass else main_min
+        if recovery_pass == "expanded_radius" else main_min
     )
     reasons: list[str] = []
     if not (selected_min <= ratio <= float(phi_config["max_radius_scale_ratio"])):
@@ -1096,6 +1352,7 @@ def _detect_phi12_2(
         "candidate_center_offset_target_px": float(selected["center_offset"]),
         "candidate_center_offset_x_target_px": float(selected["center_offset_x"]),
         "candidate_center_offset_y_target_px": float(selected["center_offset_y"]),
+        "candidate_center_recovery_seed_offset_target_px": center_recovery_seed_offset,
         "candidate_center_x_boundary": {
             "lower": bool(selected["center_boundary"]["xLower"]),
             "upper": bool(selected["center_boundary"]["xUpper"]),
@@ -1117,6 +1374,7 @@ def _detect_phi12_2(
         "candidate_median_edge_score": float(np.median(edge_scores)) if edge_scores else float("nan"),
         "candidate_search_boundary_saturated": saturated,
         "candidate_lower_radius_boundary_saturated": bool(selected["lower_radius_saturated"]),
+        **multicircle_diagnostics,
     }
     if reasons:
         return None, quality
@@ -1330,6 +1588,7 @@ def validate_result_contract(result: dict[str, Any]) -> None:
             raise ValueError("each runtime input requires a path and lowercase SHA-256")
     registration_required = {
         "registrationValid", "failureReason", "candidates", "selected", "transform",
+        "primaryFailureReason", "registrationRecoveryPass",
         "inverseTransform", "transformDirection", "inverseTransformDirection",
         "referenceImageSize", "targetImageSize",
     }
@@ -1349,7 +1608,7 @@ def validate_result_contract(result: dict[str, Any]) -> None:
         raise ValueError("features must contain exactly 7 and Phi12.2")
     feature_required = {
         "featureCode", "measurementValid", "qualityStatus", "failureReason", "sourceDetector",
-        "reference", "target", "quality",
+        "recoveryPass", "reference", "target", "quality",
     }
     for name, feature in result["features"].items():
         if not isinstance(feature, dict) or not feature_required <= feature.keys():

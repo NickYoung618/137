@@ -48,6 +48,7 @@
   },
   "phi12_2": {
     "search_radius_px": 48,
+    "center_recovery_search_radius_px": 32,
     "center_search_step_px": 4,
     "radius_search_step_px": 2,
     "refine_step_px": 1,
@@ -58,6 +59,10 @@
     "max_fit_residual_target_px": 3.0,
     "min_edge_peak_normalized": 0.35,
     "min_edge_prominence_normalized": 0.15,
-    "boundary_saturation_fraction": 0.95
+    "boundary_saturation_fraction": 0.95,
+    "multicircle_radial_search_width_px": 28,
+    "multicircle_ransac_trials": 96,
+    "multicircle_ransac_inlier_residual_px": 3.0,
+    "min_angle_coverage_fraction": 0.65
   }
 }

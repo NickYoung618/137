@@ -13,6 +13,7 @@ from algorithms.hole_2.current_capture import (
     SimilarityTransform,
     _detect_d7_tangent,
     _detect_phi12_2,
+    _ransac_circle,
     _v6_d7_fallback,
     fit_similarity_transform,
     load_registration_config,
@@ -134,11 +135,35 @@ def _test_config():
             "recovery_min_radius_scale_ratio": 0.84,
             "max_radius_scale_ratio": 1.08, "min_edge_points": 20,
             "max_fit_residual_target_px": 3.0,
+            "center_recovery_search_radius_px": 16.0,
+            "multicircle_radial_search_width_px": 12,
+            "multicircle_ransac_trials": 48,
+            "multicircle_ransac_inlier_residual_px": 3.0,
+            "min_angle_coverage_fraction": 0.65,
         },
     }
 
 
 class CurrentCaptureRegistrationTests(unittest.TestCase):
+    def test_phi_multicircle_ransac_rejects_outliers_without_nominal_pull(self):
+        angles = np.linspace(0.1, 2.8, 80)
+        circle_points = np.column_stack([
+            25.0 + 42.0 * np.cos(angles),
+            31.0 + 42.0 * np.sin(angles),
+        ])
+        outliers = np.asarray([[180.0, 20.0], [-80.0, 90.0], [150.0, 170.0]])
+        fitted = _ransac_circle(
+            np.vstack([circle_points, outliers]),
+            trials=96, inlier_residual_px=1.0, minimum_inliers=40,
+        )
+        self.assertIsNotNone(fitted)
+        circle, inliers, residual = fitted
+        self.assertAlmostEqual(25.0, circle[0], delta=0.1)
+        self.assertAlmostEqual(31.0, circle[1], delta=0.1)
+        self.assertAlmostEqual(42.0, circle[2], delta=0.1)
+        self.assertGreaterEqual(int(inliers.sum()), 80)
+        self.assertLess(residual, 0.1)
+
     def test_registration_recovery_runs_only_after_no_valid_candidate(self):
         with tempfile.TemporaryDirectory() as tmp:
             reference, _ = _synthetic_reference(Path(tmp))
@@ -436,6 +461,38 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertGreaterEqual(quality["candidate_radius_scale_ratio"], 0.84)
         self.assertLess(quality["candidate_radius_scale_ratio"], 0.88)
 
+    def test_phi_center_boundary_uses_bounded_recenter_pass(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="arc",
+            points=[(100.0 + 40.0 * math.cos(a), 100.0 + 40.0 * math.sin(a)) for a in angles],
+            circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), np.zeros((240, 240)), [phi], [])
+        target = np.full((240, 240), 20.0)
+        yy, xx = np.indices(target.shape)
+        target[np.hypot(xx - 130.0, yy - 100.0) <= 42.0] = 220.0
+        target = gaussian_blur(target, 1.0)
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 20, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+            "center_recovery_search_radius_px": 16.0,
+        })
+
+        values, quality = _detect_phi12_2(
+            target, reference, SimilarityTransform(0.0, 0.0, 1.0, 0.0), config
+        )
+
+        self.assertIsNotNone(values, quality)
+        self.assertEqual("center_recenter", quality["candidate_recovery_pass"])
+        self.assertAlmostEqual(130.0, values["Phi12_2_cx"], delta=1.0)
+        self.assertFalse(quality["candidate_search_boundary_saturated"])
+
     def test_phi_does_not_expand_for_non_lower_bound_failure(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
         phi = ShapeModel(
@@ -463,8 +520,9 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         )
 
         self.assertIsNone(values)
-        self.assertIsNone(quality["candidate_recovery_pass"])
+        self.assertEqual("robust_multicircle", quality["candidate_recovery_pass"])
         self.assertFalse(quality["candidate_main_lower_bound_saturated"])
+        self.assertNotEqual("expanded_radius", quality["candidate_recovery_pass"])
 
     def test_phi_expanded_pass_does_not_promote_another_saturated_boundary(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)

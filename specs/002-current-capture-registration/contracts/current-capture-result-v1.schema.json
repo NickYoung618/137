@@ -20,10 +20,12 @@
       }
     },
     "registration": {
-      "type": "object", "required": ["registrationValid", "failureReason", "candidates", "selected", "transform", "inverseTransform", "transformDirection", "inverseTransformDirection", "referenceImageSize", "targetImageSize"],
+      "type": "object", "required": ["registrationValid", "failureReason", "primaryFailureReason", "registrationRecoveryPass", "candidates", "selected", "transform", "inverseTransform", "transformDirection", "inverseTransformDirection", "referenceImageSize", "targetImageSize"],
       "properties": {
         "registrationValid": {"type": "boolean"},
         "failureReason": {"type": ["string", "null"]},
+        "primaryFailureReason": {"type": ["string", "null"]},
+        "registrationRecoveryPass": {"type": ["string", "null"]},
         "candidates": {"type": "array", "minItems": 4},
         "selected": {"type": ["object", "null"]},
         "transform": {"type": ["object", "null"]},
@@ -65,13 +67,14 @@
       "additionalProperties": false
     },
     "feature": {
-      "type": "object", "required": ["featureCode", "measurementValid", "qualityStatus", "failureReason", "sourceDetector", "reference", "target", "quality"],
+      "type": "object", "required": ["featureCode", "measurementValid", "qualityStatus", "failureReason", "sourceDetector", "recoveryPass", "reference", "target", "quality"],
       "properties": {
         "featureCode": {"type": "string"},
         "measurementValid": {"type": "boolean"},
         "qualityStatus": {"enum": ["valid", "invalid"]},
         "failureReason": {"type": ["string", "null"]},
         "sourceDetector": {"type": "string"},
+        "recoveryPass": {"type": ["string", "null"]},
         "reference": {"type": ["object", "null"]},
         "target": {"type": ["object", "null"]},
         "quality": {"type": "object"}
