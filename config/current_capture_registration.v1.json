@@ -1,6 +1,6 @@
 {
   "schema_version": "hole2-current-capture-registration-config/1",
-  "config_version": "current-capture-registration-v2",
+  "config_version": "current-capture-registration-v3",
   "orientations_deg": [0, 90, 180, 270],
   "coarse": {
     "downsample": 8,
@@ -49,7 +49,14 @@
     "band_strip_half_width_px": 20,
     "band_strip_samples": 31,
     "min_consistent_bands": 3,
-    "max_cross_band_length_deviation_px": 3.0
+    "max_cross_band_length_deviation_px": 3.0,
+    "paired_edge_min_width_target_px": 3.0,
+    "paired_edge_max_width_target_px": 16.0,
+    "paired_edge_min_peak": 4.0,
+    "paired_edge_prior_sigma_px": 14.0,
+    "paired_edge_strip_half_width_px": 36,
+    "paired_edge_strip_samples": 31,
+    "paired_edge_min_support": 12
   },
   "phi12_2": {
     "search_radius_px": 48,
@@ -68,7 +75,15 @@
     "multicircle_radial_search_width_px": 28,
     "multicircle_ransac_trials": 96,
     "multicircle_ransac_inlier_residual_px": 3.0,
-    "min_angle_coverage_fraction": 0.65
+    "min_angle_coverage_fraction": 0.65,
+    "phase_profile_half_width_px": 12,
+    "phase_profile_smooth_window": 5,
+    "phase_angle_extension_deg": 5.0,
+    "phase_min_contrast": 12.0,
+    "phase_min_edge_score": 4.0,
+    "phase_min_points": 40,
+    "phase_ransac_trials": 128,
+    "phase_ransac_inlier_residual_px": 3.0
   },
   "geometry_consistency": {
     "max_reference_ratio_absolute_deviation": 0.08

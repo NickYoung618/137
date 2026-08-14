@@ -18,6 +18,9 @@ import numpy as np
 from PIL import Image
 
 from .main import (
+    D7_BOUNDARY_MIN_AXIS_COSINE,
+    EDGE_SCORE_FLOOR,
+    BoundaryDetection,
     Extraction,
     ReferenceModel,
     ShapeModel,
@@ -35,12 +38,15 @@ from .main import (
     inverse_xy,
     line_axis_intersection,
     load_gray,
+    parabolic_peak,
     radial_edge_at_angle,
+    robust_fit_line,
     solve_similarity,
+    smooth_1d,
 )
 
 
-ALGORITHM_VERSION = "hole2-current-capture-registration/2"
+ALGORITHM_VERSION = "hole2-current-capture-registration/3"
 RESULT_SCHEMA_VERSION = "hole2-current-capture-result/1"
 EVIDENCE_SCOPE = "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng"
 
@@ -155,6 +161,29 @@ def load_registration_config(path: Path) -> dict[str, Any]:
         raise ValueError("d7 band strip samples cannot undercut the original point gate")
     if float(d7["max_cross_band_length_deviation_px"]) <= 0.0:
         raise ValueError("d7 cross-band length deviation gate must be positive")
+    if not 3.0 <= float(d7["paired_edge_min_width_target_px"]) < float(
+        d7["paired_edge_max_width_target_px"]
+    ) <= 24.0:
+        raise ValueError("d7 paired edge width bounds are invalid")
+    if int(d7["paired_edge_min_support"]) < int(d7["min_boundary_points"]):
+        raise ValueError("d7 paired edge support cannot undercut the original point gate")
+    if float(d7["paired_edge_min_peak"]) < float(d7["min_edge_score"]):
+        raise ValueError("d7 paired edge peak cannot undercut the original edge gate")
+    if int(d7["paired_edge_strip_samples"]) < int(d7["paired_edge_min_support"]):
+        raise ValueError("d7 paired edge strip samples cannot undercut its support gate")
+    phase_half_width = int(phi["phase_profile_half_width_px"])
+    if phase_half_width < 10 or phase_half_width > int(phi["search_radius_px"]):
+        raise ValueError("phi12_2 phase profile half width must remain locally bounded")
+    if not 0.0 <= float(phi["phase_angle_extension_deg"]) <= 10.0:
+        raise ValueError("phi12_2 phase angle extension must remain at most 10 degrees")
+    if int(phi["phase_min_points"]) < int(phi["min_edge_points"]):
+        raise ValueError("phi12_2 phase point gate cannot undercut the original point gate")
+    if float(phi["phase_ransac_inlier_residual_px"]) > float(
+        phi["max_fit_residual_target_px"]
+    ):
+        raise ValueError("phi12_2 phase RANSAC residual cannot loosen the fit gate")
+    if float(phi["phase_min_edge_score"]) < EDGE_SCORE_FLOOR:
+        raise ValueError("phi12_2 phase edge score cannot undercut the core floor")
     geometry_gate = float(config["geometry_consistency"]["max_reference_ratio_absolute_deviation"])
     if not 0.0 < geometry_gate < 0.25:
         raise ValueError("geometry consistency ratio gate is invalid")
@@ -1165,9 +1194,12 @@ def _phi_multicircle_recovery(
             edge_points: list[tuple[float, float]] = []
             point_angles: list[float] = []
             for angle in angles:
+                polarity_token = math.copysign(
+                    EDGE_SCORE_FLOOR + 1.0, float(shape.polarity)
+                ) if abs(float(shape.polarity)) > 1e-9 else 0.0
                 point = radial_edge_at_angle(
                     image, seed_center, float(angle), float(seed_radius),
-                    float(shape.polarity), search_width,
+                    polarity_token, search_width,
                 )
                 if point is not None:
                     edge_points.append(point)
@@ -1266,6 +1298,245 @@ def _phi_multicircle_recovery(
         "candidate_multicircle_polarity_enforced": abs(float(shape.polarity)) > 1e-9,
     }
     return selected, diagnostics
+
+
+def _reference_edge_phase_fraction(
+    reference: ReferenceModel,
+    shape: ShapeModel,
+    phi_config: dict[str, Any],
+) -> tuple[float | None, dict[str, Any]]:
+    """Infer annotation edge phase from the old reference pixels only."""
+    if (
+        shape.circle is None
+        or shape.template_angles is None
+        or abs(float(shape.polarity)) <= 1e-9
+    ):
+        return None, {"failure": "reference_polarity_or_geometry_unavailable"}
+    half_width = int(phi_config["phase_profile_half_width_px"])
+    offsets = np.arange(-half_width, half_width + 1, dtype=np.float64)
+    center_index = half_width
+    polarity_sign = 1.0 if float(shape.polarity) > 0.0 else -1.0
+    cx, cy, radius = (float(value) for value in shape.circle)
+    fractions: list[float] = []
+    contrasts: list[float] = []
+    for angle in shape.template_angles:
+        profile = bilinear_sample(
+            reference.gray,
+            cx + (radius + offsets) * math.cos(float(angle)),
+            cy + (radius + offsets) * math.sin(float(angle)),
+        )
+        if np.isnan(profile).any():
+            continue
+        oriented = profile * polarity_sign
+        inner = float(np.median(oriented[:5]))
+        outer = float(np.median(oriented[-5:]))
+        contrast = outer - inner
+        if contrast < float(phi_config["phase_min_contrast"]):
+            continue
+        fraction = float((oriented[center_index] - inner) / contrast)
+        if math.isfinite(fraction) and -0.25 <= fraction <= 1.25:
+            fractions.append(fraction)
+            contrasts.append(contrast)
+    minimum = int(phi_config["phase_min_points"])
+    if len(fractions) < minimum:
+        return None, {
+            "failure": "reference_phase_support_below_gate",
+            "support": len(fractions),
+            "minimumSupport": minimum,
+        }
+    phase = float(np.clip(np.median(fractions), 0.05, 0.95))
+    return phase, {
+        "failure": None,
+        "support": len(fractions),
+        "minimumSupport": minimum,
+        "medianContrast": float(np.median(contrasts)),
+        "phaseFraction": phase,
+    }
+
+
+def _phase_edge_at_angle(
+    image: np.ndarray,
+    center: tuple[float, float],
+    radius: float,
+    angle: float,
+    polarity_sign: float,
+    phase_fraction: float,
+    phi_config: dict[str, Any],
+) -> tuple[tuple[float, float], float, float] | None:
+    half_width = int(phi_config["phase_profile_half_width_px"])
+    offsets = np.arange(-half_width, half_width + 1, dtype=np.float64)
+    profile = bilinear_sample(
+        image,
+        center[0] + (radius + offsets) * math.cos(angle),
+        center[1] + (radius + offsets) * math.sin(angle),
+    )
+    if np.isnan(profile).any():
+        return None
+    oriented = smooth_1d(
+        profile * polarity_sign, int(phi_config["phase_profile_smooth_window"])
+    )
+    derivative = np.diff(oriented)
+    mids = (offsets[:-1] + offsets[1:]) * 0.5
+    prior_sigma = max(2.0, half_width * 0.42)
+    prior = np.exp(-(mids * mids) / (2.0 * prior_sigma * prior_sigma))
+    score = np.maximum(derivative, 0.0) * prior
+    peak_index = int(np.argmax(score))
+    raw_peak = float(max(derivative[peak_index], 0.0))
+    if raw_peak < float(phi_config["phase_min_edge_score"]):
+        return None
+    inner_start = max(0, peak_index - 8)
+    inner_stop = max(inner_start + 1, peak_index - 3)
+    outer_start = min(len(oriented), peak_index + 5)
+    outer_stop = min(len(oriented), peak_index + 10)
+    if inner_stop > len(oriented) or outer_stop <= outer_start:
+        return None
+    inner = float(np.median(oriented[inner_start:inner_stop]))
+    outer = float(np.median(oriented[outer_start:outer_stop]))
+    contrast = outer - inner
+    if contrast < float(phi_config["phase_min_contrast"]):
+        return None
+    threshold = inner + phase_fraction * contrast
+    crossing_offset: float | None = None
+    for index in range(
+        max(0, peak_index - 2), min(len(oriented) - 1, peak_index + 9)
+    ):
+        first = float(oriented[index])
+        second = float(oriented[index + 1])
+        if first <= threshold <= second and second > first:
+            fraction = (threshold - first) / (second - first)
+            crossing_offset = float(offsets[index] + fraction)
+            break
+    if crossing_offset is None:
+        return None
+    edge_radius = radius + crossing_offset
+    return (
+        (
+            float(center[0] + edge_radius * math.cos(angle)),
+            float(center[1] + edge_radius * math.sin(angle)),
+        ),
+        raw_peak,
+        contrast,
+    )
+
+
+def _refine_phi_reference_phase(
+    target: np.ndarray,
+    reference: ReferenceModel,
+    shape: ShapeModel,
+    transform: SimilarityTransform,
+    predicted_center: tuple[float, float],
+    predicted_radius: float,
+    seed: dict[str, Any],
+    normalizer: float,
+    phi_config: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    phase, reference_diagnostic = _reference_edge_phase_fraction(
+        reference, shape, phi_config
+    )
+    diagnostics: dict[str, Any] = {
+        "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+        "candidate_reference_edge_phase_fraction": phase,
+        "candidate_reference_phase": reference_diagnostic,
+        "candidate_polarity_enforced": phase is not None,
+        "candidate_phase_failure": None,
+    }
+    if phase is None:
+        diagnostics["candidate_phase_failure"] = reference_diagnostic["failure"]
+        return None, diagnostics
+    polarity_sign = 1.0 if float(shape.polarity) > 0.0 else -1.0
+    extension = math.radians(float(phi_config["phase_angle_extension_deg"]))
+    angle_start = float(shape.angle_start + transform.theta_rad - extension)
+    angle_end = float(shape.angle_end + transform.theta_rad + extension)
+    angles = np.linspace(angle_start, angle_end, max(160, int(phi_config["phase_min_points"] * 5)))
+    image = contrast_stretch(target)
+    points: list[tuple[float, float]] = []
+    point_angles: list[float] = []
+    edge_peaks: list[float] = []
+    contrasts: list[float] = []
+    seed_center = (float(seed["target_cx"]), float(seed["target_cy"]))
+    seed_radius = float(seed["target_radius"])
+    for angle in angles:
+        detected = _phase_edge_at_angle(
+            image, seed_center, seed_radius, float(angle), polarity_sign,
+            phase, phi_config,
+        )
+        if detected is None:
+            continue
+        point, edge_peak, contrast = detected
+        points.append(point)
+        point_angles.append(float(angle))
+        edge_peaks.append(edge_peak)
+        contrasts.append(contrast)
+    fitted = _ransac_circle(
+        np.asarray(points, dtype=np.float64),
+        trials=int(phi_config["phase_ransac_trials"]),
+        inlier_residual_px=float(phi_config["phase_ransac_inlier_residual_px"]),
+        minimum_inliers=int(phi_config["phase_min_points"]),
+    ) if points else None
+    if fitted is None:
+        diagnostics.update({
+            "candidate_phase_failure": "phase_circle_fit_failed",
+            "candidate_phase_edge_points": len(points),
+        })
+        return None, diagnostics
+    circle, inliers, residual = fitted
+    cx, cy, radius = (float(value) for value in circle)
+    inlier_angles = np.unwrap(np.asarray(point_angles, dtype=np.float64)[inliers])
+    expected_extent = max(1e-9, abs(angle_end - angle_start))
+    coverage = float(np.ptp(inlier_angles) / expected_extent) if len(inlier_angles) > 1 else 0.0
+    coverage = min(1.0, coverage)
+    offset_x = cx - predicted_center[0]
+    offset_y = cy - predicted_center[1]
+    center_limit = float(seed["center_boundary"]["limitPx"])
+    center_boundary = {
+        "xLower": offset_x <= -center_limit,
+        "xUpper": offset_x >= center_limit,
+        "yLower": offset_y <= -center_limit,
+        "yUpper": offset_y >= center_limit,
+        "limitPx": center_limit,
+    }
+    radius_min = float(seed["radius_lower_bound"])
+    radius_max = float(seed["radius_upper_bound"])
+    reasons: list[str] = []
+    if not radius_min <= radius <= radius_max:
+        reasons.append("phase_radius_out_of_bounds")
+    if any(center_boundary[key] for key in ("xLower", "xUpper", "yLower", "yUpper")):
+        reasons.append("phase_center_boundary_saturated")
+    if int(inliers.sum()) < int(phi_config["phase_min_points"]):
+        reasons.append("phase_edge_points_below_gate")
+    if residual > float(phi_config["max_fit_residual_target_px"]):
+        reasons.append("phase_fit_residual_above_gate")
+    if coverage < float(phi_config["min_angle_coverage_fraction"]):
+        reasons.append("phase_angle_coverage_below_gate")
+    diagnostics.update({
+        "candidate_phase_failure": None if not reasons else ",".join(reasons),
+        "candidate_phase_edge_points": int(inliers.sum()),
+        "candidate_phase_raw_points": len(points),
+        "candidate_phase_fit_residual_target_px": float(residual),
+        "candidate_phase_angle_coverage_fraction": coverage,
+        "candidate_phase_angle_extension_deg": float(phi_config["phase_angle_extension_deg"]),
+        "candidate_phase_edge_peak_normalized": float(np.median(edge_peaks) / normalizer),
+        "candidate_phase_contrast": float(np.median(contrasts)),
+    })
+    if reasons:
+        return None, diagnostics
+    refined = dict(seed)
+    refined.update({
+        "target_cx": cx,
+        "target_cy": cy,
+        "target_radius": radius,
+        "radius_scale_ratio": radius / predicted_radius,
+        "center_offset": math.hypot(offset_x, offset_y),
+        "center_offset_x": offset_x,
+        "center_offset_y": offset_y,
+        "center_boundary": center_boundary,
+        "center_saturated": False,
+        "lower_radius_saturated": radius <= radius_min + 1e-6,
+        "upper_radius_saturated": radius >= radius_max - 1e-6,
+        "edge_peak": float(np.median(edge_peaks) / normalizer),
+        "phase_refined": True,
+    })
+    return refined, diagnostics
 
 
 def _detect_phi12_2(
@@ -1368,6 +1639,28 @@ def _detect_phi12_2(
         if recovered is not None:
             selected = recovered
 
+    phase_diagnostics: dict[str, Any] = {
+        "candidate_edge_semantics": "gradient_magnitude_legacy",
+        "candidate_reference_edge_phase_fraction": None,
+        "candidate_polarity_enforced": False,
+        "candidate_phase_failure": "reference_polarity_unavailable",
+    }
+    if abs(float(shape.polarity)) > 1e-9:
+        phase_selected, phase_diagnostics = _refine_phi_reference_phase(
+            target, reference, shape, transform, predicted_center, predicted_radius,
+            selected, normalizer, phi_config,
+        )
+        if phase_selected is None:
+            return None, {
+                "candidate_failure": str(phase_diagnostics["candidate_phase_failure"]),
+                "candidate_recovery_pass": recovery_pass,
+                "candidate_main_lower_bound_saturated": bool(main["lower_radius_saturated"]),
+                "candidate_main_radius_scale_ratio": float(main["radius_scale_ratio"]),
+                **phase_diagnostics,
+                **multicircle_diagnostics,
+            }
+        selected = phase_selected
+
     target_cx = float(selected["target_cx"])
     target_cy = float(selected["target_cy"])
     target_radius = float(selected["target_radius"])
@@ -1395,8 +1688,15 @@ def _detect_phi12_2(
         index = int(np.argmax(safe * prior))
         residuals.append(abs(float(radial_offsets[index])))
         edge_scores.append(float(safe[index]))
-    point_count = len(residuals)
-    fit_residual = float(np.median(residuals)) if residuals else float("inf")
+    point_count = int(
+        phase_diagnostics.get("candidate_phase_edge_points", len(residuals))
+    )
+    fit_residual = float(
+        phase_diagnostics.get(
+            "candidate_phase_fit_residual_target_px",
+            float(np.median(residuals)) if residuals else float("inf"),
+        )
+    )
     saturated = bool(
         selected["center_saturated"]
         or selected["lower_radius_saturated"]
@@ -1452,6 +1752,7 @@ def _detect_phi12_2(
         "candidate_median_edge_score": float(np.median(edge_scores)) if edge_scores else float("nan"),
         "candidate_search_boundary_saturated": saturated,
         "candidate_lower_radius_boundary_saturated": bool(selected["lower_radius_saturated"]),
+        **phase_diagnostics,
         **multicircle_diagnostics,
     }
     if reasons:
@@ -1463,6 +1764,167 @@ def _detect_phi12_2(
         "Phi12_2_r": float(target_radius / transform.scale),
         "Phi12_2_diameter_px": float(2.0 * target_radius / transform.scale),
     }, quality
+
+
+def _paired_contour_boundary(
+    image: np.ndarray,
+    p1_target: tuple[float, float],
+    p2_target: tuple[float, float],
+    endpoint: str,
+    outer_polarity: float,
+    d7_config: dict[str, Any],
+    diagnostics: dict[str, Any],
+) -> BoundaryDetection | None:
+    """Fit the centerline of a dark physical contour from two edge polarities."""
+    diagnostics.update({
+        "endpoint": endpoint,
+        "boundarySemantics": "paired_edge_centerline",
+        "pairSupport": 0,
+        "outerPeakMedian": None,
+        "innerPeakMedian": None,
+        "pairWidthMedianPx": None,
+        "inlierPoints": 0,
+        "medianResidualPx": None,
+        "axisCosine": None,
+        "offsetPx": None,
+        "failureStage": None,
+    })
+    dx = p2_target[0] - p1_target[0]
+    dy = p2_target[1] - p1_target[1]
+    length = math.hypot(dx, dy)
+    if length < 5.0:
+        diagnostics["failureStage"] = "axis_degenerate"
+        return None
+    if abs(float(outer_polarity)) <= 1e-9:
+        diagnostics["failureStage"] = "reference_outer_polarity_unavailable"
+        return None
+    axis = (dx / length, dy / length)
+    tangent = (-axis[1], axis[0])
+    origin = p1_target if endpoint == "p1" else p2_target
+    search_window = 42
+    offsets = np.arange(-search_window, search_window + 1, dtype=np.float64)
+    mids = (offsets[:-1] + offsets[1:]) * 0.5
+    prior_sigma = float(d7_config["paired_edge_prior_sigma_px"])
+    prior = np.exp(-(mids * mids) / (2.0 * prior_sigma * prior_sigma))
+    outer_sign = 1.0 if outer_polarity > 0.0 else -1.0
+    # p1's interior lies towards p2 (+axis); p2's lies towards p1 (-axis).
+    interior_sign = 1.0 if endpoint == "p1" else -1.0
+    minimum_width = float(d7_config["paired_edge_min_width_target_px"])
+    maximum_width = float(d7_config["paired_edge_max_width_target_px"])
+    minimum_peak = float(d7_config["paired_edge_min_peak"])
+    edge_points: list[tuple[float, float]] = []
+    outer_peaks: list[float] = []
+    inner_peaks: list[float] = []
+    pair_widths: list[float] = []
+
+    for tangent_offset in np.linspace(
+        -float(d7_config["paired_edge_strip_half_width_px"]),
+        float(d7_config["paired_edge_strip_half_width_px"]),
+        int(d7_config["paired_edge_strip_samples"]),
+    ):
+        center = (
+            origin[0] + tangent_offset * tangent[0],
+            origin[1] + tangent_offset * tangent[1],
+        )
+        profile = bilinear_sample(
+            image,
+            center[0] + offsets * axis[0],
+            center[1] + offsets * axis[1],
+        )
+        if np.isnan(profile).any():
+            continue
+        derivative = np.diff(smooth_1d(profile, 7))
+        outer_score = derivative * outer_sign
+        inner_score = -derivative * outer_sign
+        best: tuple[float, float, float, float, float] | None = None
+        for outer_index in range(1, len(derivative) - 1):
+            outer_peak = float(outer_score[outer_index])
+            if (
+                outer_peak < minimum_peak
+                or outer_peak < float(outer_score[outer_index - 1])
+                or outer_peak < float(outer_score[outer_index + 1])
+            ):
+                continue
+            for inner_index in range(1, len(derivative) - 1):
+                signed_width = float(
+                    (mids[inner_index] - mids[outer_index]) * interior_sign
+                )
+                if not minimum_width <= signed_width <= maximum_width:
+                    continue
+                inner_peak = float(inner_score[inner_index])
+                if (
+                    inner_peak < minimum_peak
+                    or inner_peak < float(inner_score[inner_index - 1])
+                    or inner_peak < float(inner_score[inner_index + 1])
+                ):
+                    continue
+                outer_delta = parabolic_peak(outer_score.tolist(), outer_index)
+                inner_delta = parabolic_peak(inner_score.tolist(), inner_index)
+                outer_position = float(mids[outer_index] + outer_delta)
+                inner_position = float(mids[inner_index] + inner_delta)
+                center_position = 0.5 * (outer_position + inner_position)
+                pair_score = float(
+                    min(outer_peak, inner_peak)
+                    * math.sqrt(prior[outer_index] * prior[inner_index])
+                )
+                candidate = (
+                    pair_score, center_position, outer_peak, inner_peak,
+                    abs(inner_position - outer_position),
+                )
+                if best is None or candidate[0] > best[0]:
+                    best = candidate
+        if best is None:
+            continue
+        _, center_position, outer_peak, inner_peak, pair_width = best
+        edge_points.append((
+            float(center[0] + center_position * axis[0]),
+            float(center[1] + center_position * axis[1]),
+        ))
+        outer_peaks.append(outer_peak)
+        inner_peaks.append(inner_peak)
+        pair_widths.append(pair_width)
+
+    diagnostics.update({
+        "pairSupport": len(edge_points),
+        "outerPeakMedian": None if not outer_peaks else float(np.median(outer_peaks)),
+        "innerPeakMedian": None if not inner_peaks else float(np.median(inner_peaks)),
+        "pairWidthMedianPx": None if not pair_widths else float(np.median(pair_widths)),
+    })
+    minimum_support = int(d7_config["paired_edge_min_support"])
+    fitted = robust_fit_line(edge_points, min_points=minimum_support)
+    if fitted is None:
+        diagnostics["failureStage"] = "paired_centerline_fit_failed"
+        return None
+    line, inliers = fitted
+    diagnostics["inlierPoints"] = int(len(inliers))
+    axis_cosine = abs(float(line[0]) * axis[0] + float(line[1]) * axis[1])
+    diagnostics["axisCosine"] = axis_cosine
+    if axis_cosine < D7_BOUNDARY_MIN_AXIS_COSINE:
+        diagnostics["failureStage"] = "axis_alignment_below_gate"
+        return None
+    residuals = np.abs(line[0] * inliers[:, 0] + line[1] * inliers[:, 1] + line[2])
+    median_residual = float(np.median(residuals))
+    diagnostics["medianResidualPx"] = median_residual
+    if median_residual > float(d7_config["max_fit_residual_target_px"]):
+        diagnostics["failureStage"] = "fit_residual_above_gate"
+        return None
+    intersection = line_axis_intersection(line, origin, axis)
+    if intersection is None:
+        diagnostics["failureStage"] = "axis_intersection_failed"
+        return None
+    feature_point, offset = intersection
+    diagnostics["offsetPx"] = float(offset)
+    if abs(offset) > search_window:
+        diagnostics["failureStage"] = "offset_out_of_search_window"
+        return None
+    return BoundaryDetection(
+        feature_point=feature_point,
+        line=tuple(float(value) for value in line),
+        point_count=int(len(inliers)),
+        median_residual_px=median_residual,
+        median_edge_score=float(min(np.median(outer_peaks), np.median(inner_peaks))),
+        offset_px=float(offset),
+    )
 
 
 def _d7_multiband_recovery(
@@ -1754,13 +2216,13 @@ def _detect_d7_tangent(
     image = contrast_stretch(target)
     first_diagnostic: dict[str, Any] = {}
     second_diagnostic: dict[str, Any] = {}
-    first = detect_dimension_boundary(
-        image, p1_shifted, p2_shifted, "p1", polarity=polarities[0],
-        diagnostics=first_diagnostic,
+    first = _paired_contour_boundary(
+        image, p1_shifted, p2_shifted, "p1", polarities[0],
+        d7_config, first_diagnostic,
     )
-    second = detect_dimension_boundary(
-        image, p1_shifted, p2_shifted, "p2", polarity=polarities[1],
-        diagnostics=second_diagnostic,
+    second = _paired_contour_boundary(
+        image, p1_shifted, p2_shifted, "p2", polarities[1],
+        d7_config, second_diagnostic,
     )
 
     def recover_multiband(
@@ -1775,6 +2237,10 @@ def _detect_d7_tangent(
         recovered_first, recovered_second = recovered
         ref_first = transform.inverse(*recovered_first)
         ref_second = transform.inverse(*recovered_second)
+        combined["candidate_primary_failed_sides"] = list(
+            combined.get("candidate_failed_sides", [])
+        )
+        combined["candidate_failed_sides"] = []
         combined["candidate_failure"] = None
         return {
             "d7_x1": ref_first[0], "d7_y1": ref_first[1],
@@ -1789,6 +2255,7 @@ def _detect_d7_tangent(
         ]
         return recover_multiband({
             "candidate_failure": "tangent_boundary_fit_failed",
+            "candidate_boundary_semantics": "paired_edge_centerline",
             "candidate_reference_tangent_error_px": tangent_error_ref,
             "candidate_axis_shift_target_px": axis_shift,
             "candidate_failed_sides": failed_sides,
@@ -1808,6 +2275,7 @@ def _detect_d7_tangent(
     quality = {
         "candidate_failure": None if not reasons else ",".join(reasons),
         "candidate_recovery_pass": None,
+        "candidate_boundary_semantics": "paired_edge_centerline",
         "candidate_reference_tangent_error_px": tangent_error_ref,
         "candidate_axis_shift_target_px": axis_shift,
         "candidate_p1_edge_points": float(first.point_count),
@@ -1820,6 +2288,14 @@ def _detect_d7_tangent(
         "candidate_failed_sides": [],
         "candidate_p1_strip": first_diagnostic,
         "candidate_p2_strip": second_diagnostic,
+        "candidate_p1_pair_support": int(first_diagnostic["pairSupport"]),
+        "candidate_p2_pair_support": int(second_diagnostic["pairSupport"]),
+        "candidate_p1_outer_peak": first_diagnostic["outerPeakMedian"],
+        "candidate_p2_outer_peak": second_diagnostic["outerPeakMedian"],
+        "candidate_p1_inner_peak": first_diagnostic["innerPeakMedian"],
+        "candidate_p2_inner_peak": second_diagnostic["innerPeakMedian"],
+        "candidate_p1_pair_width_target_px": first_diagnostic["pairWidthMedianPx"],
+        "candidate_p2_pair_width_target_px": second_diagnostic["pairWidthMedianPx"],
     }
     if reasons:
         return recover_multiband(quality)
@@ -1998,7 +2474,7 @@ def run_current_capture(
         for key, value in phi_quality.items():
             measurements[f"Phi12_2.quality.{key}"] = value
         phi_source = "hole2-v6-current-capture-candidate"
-        d7_source = "hole2-v6-current-capture-tangent-dual-boundary"
+        d7_source = "hole2-v6-current-capture-paired-contour-centerline"
         if phi_values is not None:
             measurements.update(phi_values)
             d7_values, d7_quality = _detect_d7_tangent(

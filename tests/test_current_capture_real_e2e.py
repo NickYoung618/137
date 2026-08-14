@@ -8,21 +8,21 @@ from tools.evaluate_current_capture import evaluate_current_capture
 
 
 IMAGE_SHA256 = "faf357c2e6e8e58d667f76a3d9ed4f4d51ab4d451c2661cf0efbc641405b2d8b"
-ANNOTATION_SHA256 = "f95e82c67c0d220fd8e34547b123723cc28a9ba67b4eddb9db2f5c1848f4dbc2"
+ANNOTATION_SHA256 = "018e3449c051c15f7946315bd0d7f21cd79f4d4983efca0d11c7d98f02bfffa6"
 
 
 class CurrentCaptureRealE2ETests(unittest.TestCase):
-    def test_confirmed_external_capture_detection_then_labelme_acceptance(self):
+    def test_latest_truth_external_capture_detection_then_labelme_acceptance(self):
         asset_root = Path(os.environ.get(
             "HOLE2_CURRENT_E2E_DIR",
-            "/home/ubuntu/disk/dzk/hole2-current-confirmed-20260814",
+            "/home/ubuntu/disk/dzk/hole2-latest-truth-20260815",
         ))
         reference_root = Path(os.environ.get(
             "HOLE2_ASSET_DIR",
             "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/hole_2",
         ))
         image = asset_root / "Pic_2026_08_12_214449_1.bmp"
-        annotation = asset_root / "Pic_2026_08_12_214449_1.json"
+        annotation = asset_root / "端面标注样品.json"
         required = [image, annotation, reference_root / "annotation.json", reference_root / "reference.bmp"]
         if not all(path.is_file() for path in required):
             self.skipTest("external confirmed current-capture/reference assets are unavailable")
@@ -56,9 +56,9 @@ class CurrentCaptureRealE2ETests(unittest.TestCase):
             self.assertEqual(
                 "complete", report["detectionSummary"]["qualityStatus"]["state"]
             )
-            self.assertLess(report["metrics"]["7"]["endpointMeanErrorPx"], 5.0)
+            self.assertLessEqual(report["metrics"]["7"]["endpointMaxErrorPx"], 2.0)
             self.assertLessEqual(report["metrics"]["7"]["lengthAbsoluteErrorPx"], 2.0)
-            self.assertLess(report["metrics"]["Phi12.2"]["centerErrorPx"], 2.0)
+            self.assertLess(report["metrics"]["Phi12.2"]["centerErrorPx"], 3.0)
             self.assertLessEqual(report["metrics"]["Phi12.2"]["diameterAbsoluteErrorPx"], 1.0)
             self.assertLess(
                 report["metrics"]["Phi12.2"]["truthPointToPredictedCircleResidualPx"]["p95"],

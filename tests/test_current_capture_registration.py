@@ -21,6 +21,7 @@ from algorithms.hole_2.current_capture import (
     _detect_d7_tangent,
     _d7_multiband_recovery,
     _detect_phi12_2,
+    _paired_contour_boundary,
     _ransac_circle,
     _v6_d7_fallback,
     evaluate_geometry_consistency,
@@ -143,6 +144,13 @@ def _test_config():
             "band_strip_samples": 13,
             "min_consistent_bands": 3,
             "max_cross_band_length_deviation_px": 3.0,
+            "paired_edge_min_width_target_px": 3.0,
+            "paired_edge_max_width_target_px": 16.0,
+            "paired_edge_min_peak": 4.0,
+            "paired_edge_prior_sigma_px": 14.0,
+            "paired_edge_strip_half_width_px": 6,
+            "paired_edge_strip_samples": 13,
+            "paired_edge_min_support": 12,
         },
         "phi12_2": {
             "search_radius_px": 20, "min_radius_scale_ratio": 0.88,
@@ -154,6 +162,14 @@ def _test_config():
             "multicircle_ransac_trials": 48,
             "multicircle_ransac_inlier_residual_px": 3.0,
             "min_angle_coverage_fraction": 0.65,
+            "phase_profile_half_width_px": 12,
+            "phase_profile_smooth_window": 5,
+            "phase_angle_extension_deg": 5.0,
+            "phase_min_contrast": 12.0,
+            "phase_min_edge_score": 4.0,
+            "phase_min_points": 20,
+            "phase_ransac_trials": 48,
+            "phase_ransac_inlier_residual_px": 3.0,
         },
         "geometry_consistency": {
             "max_reference_ratio_absolute_deviation": 0.08,
@@ -162,6 +178,105 @@ def _test_config():
 
 
 class CurrentCaptureRegistrationTests(unittest.TestCase):
+    def test_phi_reference_phase_refines_same_positive_physical_edge(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        reference_gray = np.full((220, 220), 220.0)
+        yy, xx = np.indices(reference_gray.shape)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[(100.0 + 40.0 * math.cos(a), 100.0 + 40.0 * math.sin(a)) for a in angles],
+            circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel(
+            {}, Path("synthetic.bmp"), reference_gray, [phi], []
+        )
+        target = np.full((220, 220), 220.0)
+        target[np.hypot(xx - 105.0, yy - 107.0) <= 36.0] = 20.0
+        target = gaussian_blur(target, 1.0)
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 16, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+            "phase_angle_extension_deg": 0.0,
+        })
+        values, quality = _detect_phi12_2(
+            target, reference, SimilarityTransform(0.0, 0.0, 1.0, 0.0), config
+        )
+        self.assertIsNotNone(values, quality)
+        self.assertAlmostEqual(105.0, values["Phi12_2_cx"], delta=0.8)
+        self.assertAlmostEqual(107.0, values["Phi12_2_cy"], delta=0.8)
+        self.assertAlmostEqual(36.0, values["Phi12_2_r"], delta=0.8)
+        self.assertTrue(quality["candidate_polarity_enforced"])
+        self.assertEqual(
+            "reference_phase_outer_polarity_edge", quality["candidate_edge_semantics"]
+        )
+        self.assertGreaterEqual(quality["candidate_phase_edge_points"], 20)
+
+    def test_phi_reference_phase_rejects_opposite_target_polarity(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        target = np.full((220, 220), 20.0)
+        target[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 220.0
+        target = gaussian_blur(target, 1.0)
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 12, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+            "phase_angle_extension_deg": 0.0,
+        })
+        values, quality = _detect_phi12_2(
+            target, reference, SimilarityTransform(0.0, 0.0, 1.0, 0.0), config
+        )
+        self.assertIsNone(values)
+        self.assertIn("phase", quality["candidate_failure"])
+        self.assertTrue(quality["candidate_polarity_enforced"])
+
+    def test_d7_paired_contour_uses_dark_band_center_not_outer_peak(self):
+        image = np.full((200, 220), 220.0)
+        image[:, 56:64] = 20.0
+        image[:, 136:144] = 20.0
+        image = gaussian_blur(image, 1.0)
+        config = _test_config()["d7"] | {
+            "paired_edge_strip_half_width_px": 24,
+            "paired_edge_strip_samples": 25,
+        }
+        first_diagnostic = {}
+        second_diagnostic = {}
+        first = _paired_contour_boundary(
+            image, (60.0, 100.0), (140.0, 100.0), "p1", -100.0,
+            config, first_diagnostic,
+        )
+        second = _paired_contour_boundary(
+            image, (60.0, 100.0), (140.0, 100.0), "p2", 100.0,
+            config, second_diagnostic,
+        )
+        self.assertIsNotNone(first, first_diagnostic)
+        self.assertIsNotNone(second, second_diagnostic)
+        self.assertAlmostEqual(60.0, first.feature_point[0], delta=0.6)
+        self.assertAlmostEqual(140.0, second.feature_point[0], delta=0.6)
+        self.assertAlmostEqual(80.0, math.dist(first.feature_point, second.feature_point), delta=0.8)
+        self.assertEqual("paired_edge_centerline", first_diagnostic["boundarySemantics"])
+        self.assertGreaterEqual(first_diagnostic["pairSupport"], 12)
+        self.assertAlmostEqual(8.0, first_diagnostic["pairWidthMedianPx"], delta=1.0)
+
     def test_geometry_consistency_rejects_without_pulling_output(self):
         d7 = ShapeModel(
             index=0, label="7", sanitized="d7", kind="line",
@@ -522,8 +637,8 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertEqual(["p1", "p2"], quality["candidate_failed_sides"])
         for side in ("p1", "p2"):
             strip = quality[f"candidate_{side}_strip"]
-            self.assertEqual("line_fit_failed", strip["failureStage"])
-            self.assertEqual(0, strip["acceptedEdgePoints"])
+            self.assertEqual("paired_centerline_fit_failed", strip["failureStage"])
+            self.assertEqual(0, strip["pairSupport"])
 
     def test_phi_radius_expands_only_after_main_lower_bound_saturation(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
