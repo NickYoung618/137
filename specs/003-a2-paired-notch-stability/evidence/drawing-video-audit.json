@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "slot-pose-external-evidence-audit/1",
+  "evidenceId": "drawing-explanation-video-20260814",
+  "mediaCommitted": false,
+  "videoSha256": "39f1029b9ea014f59b2286d49ed2d0172d750c125be9bfc6ba4518b753bec17e",
+  "observations": [
+    "The recording explains a drawing; it is not a workpiece-rotation recording.",
+    "A near-vertical datum, a left radial slot ray, and their included angle are drawn in sequence.",
+    "The drawing annotation 85 deg +/- 5 deg (Z106) is highlighted."
+  ],
+  "notProven": [
+    "Which drawing feature defines the vertical datum.",
+    "Whether the annotation is a dimensional OK/NG criterion or an input to mechanical correction.",
+    "Which Mac A2 image candidates correspond to drawing datum and target features.",
+    "Any mechanical zero, sign convention, valid correction range, or PLC mapping."
+  ]
+}

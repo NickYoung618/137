@@ -154,3 +154,20 @@
 3. 以US2完成所有fail-closed分支，再进入数据工具。
 4. 以US3完成Mac一键验收，以US4冻结v2兼容边界。
 5. 最后复跑全量和两套合成基线，只做本地提交，不推送、不合并main。
+
+---
+
+## Phase 8: Drawing Evidence Correction & Generic Roles
+
+- [x] T039 [US1] Audit the external drawing video hash and record bounded metadata in `specs/003-a2-paired-notch-stability/evidence/drawing-video-audit.json`
+- [x] T040 [US1] Replace paired-first assumptions with generic datum/target roles and blockers in `specs/003-a2-paired-notch-stability/spec.md`
+- [x] T041 [US1] Redesign primary entities around role assignment and drawing observations in `specs/003-a2-paired-notch-stability/data-model.md`
+- [x] T042 [US1] Define separate drawing-angle truth and v2 diagnostic contracts in `specs/003-a2-paired-notch-stability/contracts/`
+- [x] T043 [US1] Add exhaustive unique role assignment and circular geometry in `algorithms/slot_pose/role_assignment.py`
+- [x] T044 [US1] Integrate `multi_notch_roles` and semantic gates in `algorithms/slot_pose/legacy_adapter.py`
+- [x] T045 [US2] Add role/mapping/datum/output-purpose failure codes and validation in `algorithms/slot_pose/contract.py`
+- [x] T046 [US1] Add wrap, extra-candidate, ambiguity, missing-role and datum-axis tests in `tests/test_role_assignment.py`
+- [x] T047 [US1] Add integrated multi-notch fixtures and tests in `tools/generate_synthetic_multi_notches.py` and `tests/test_multi_notch_roles.py`
+- [x] T048 [US2] Prove drawing inspection cannot become mechanical correction in `tests/test_multi_notch_roles.py`
+- [x] T049 Update example configuration and workflow in `config/inspection.example.json` and `specs/003-a2-paired-notch-stability/quickstart.md`
+- [x] T050 Run full regression, consistency analysis, pollution checks, and update `specs/003-a2-paired-notch-stability/evidence/server-validation-summary.json`

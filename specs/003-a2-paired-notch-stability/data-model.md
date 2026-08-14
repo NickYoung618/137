@@ -1,4 +1,4 @@
-# Data Model: A2双缺口槽姿态稳定检测与真实数据验收
+# Data Model: A2多槽候选、角色几何与真实数据验收
 
 ## AngularProfile
 
@@ -23,37 +23,51 @@
 | deficitArea | positive number | 阈值下亮度亏损积分，用于排名 |
 | rank | positive integer | 按prominence、deficitArea、centerDeg确定性排名 |
 
-## PairAssessment
+## RoleRule
 
 | Field | Type | Rule |
 |---|---|---|
-| leftCandidateId, rightCandidateId | string | 指向两个不同NotchCandidate |
-| separationDeg | number | 最短环形距离，`[0,180]` |
-| widthRatio, prominenceRatio | number | 小值/大值，`(0,1]` |
-| centerlineDeg | number | 两角在最短环形弧上的中点，`[0,360)` |
-| score | number | `0..1`，距离、宽度、显著度三部分组合 |
-| failedChecks | string list | 被硬门控拒绝的可解释原因 |
+| roleName | enum/string | 首版至少`datum_primary`、`target_left`，可选`datum_secondary` |
+| expectedReferenceAzimuthDeg | number | 参考图像方位，只作显式诊断窗口 |
+| maxDeviationDeg | number | `(0,180]`，候选进入该角色的环形最大偏差 |
 
-## PairingResult
+## RoleAssignmentResult
 
 | Field | Type | Rule |
 |---|---|---|
-| assessments | PairAssessment list | 全部组合，确定性排序 |
-| selectedPair | PairAssessment/null | 仅当最佳得分和唯一性差距通过时非空 |
+| assessments | assignment list | 全部角色到不同候选的排列；包含每角色偏差、得分和失败项 |
+| selectedRoleCandidateIds | map/null | 仅当最佳分配唯一时非空 |
 | bestScore, secondBestScore | number/null | 没有对应排名时为空 |
-| scoreMargin | number/null | `best-second`；只有一个通过硬门的配对时可视为`best` |
-| unique | boolean | 选中对唯一性结论 |
-| failureCode | string/null | 无法配对时的稳定原因 |
+| scoreMargin | number/null | `best-second`；未达门槛不得选角色 |
+| unique | boolean | 角色分配是否唯一 |
+| datumDefinition | enum | `single_candidate_ray` / `opposed_candidates_axis` |
+| failedChecks | string list | 角色缺失、窗口失败、分配歧义或datum不对置 |
+
+## DrawingAngleObservation
+
+| Field | Type | Rule |
+|---|---|---|
+| datumAzimuthImageDeg, targetAzimuthImageDeg | number | `[0,360)`图像观测，不是机械命令 |
+| clockwiseAngleDeg | number | datum至target的顺时针角，`[0,360)` |
+| shortestSignedAngleDeg | number | `[-180,180)`环形最短有向角 |
+| includedAngleDeg | number | `abs(shortestSignedAngleDeg)`，`[0,180]` |
+| drawingNominalDeg, drawingToleranceDeg | number/null | 来自图纸证据的`85`/`5`，不自动获得验收语义 |
+| toleranceStatus | enum | 默认`NOT_EVALUATED`；只在映射、datum及检测用途确认后可PASS/FAIL |
+
+## LegacyPairingDiagnostic
+
+`PairAssessment`/`PairingResult`仅作`paired_notches_centerline`兼容诊断，不是主数据模型，不表达图纸datum/target权威角色。
 
 ## DiagnosticConfiguration
 
 | Field | Type | Rule |
 |---|---|---|
-| diagnosticMode | enum | `legacy_single_notch` / `paired_notches_centerline` |
+| diagnosticMode | enum | `legacy_single_notch` / `paired_notches_centerline` / `multi_notch_roles` |
 | targetSemanticsConfirmed | boolean | false时正式角始终为空 |
 | profile | object | 角度/径向样本数、环带宽、平滑窗、MAD倍数和最小显著度 |
 | pairing | object | 候选数、宽度/显著度、间距、比率、最佳得分和次优差距门槛 |
 | maxPolarPairDisagreementDeg | positive number | paired rotation与polar rotation的最大环形差 |
+| roleAssignment | object | 角色窗口、datum定义、分配差距、对置误差及图纸标注 |
 
 ## A2ManifestRecord
 
@@ -86,6 +100,6 @@ false-positive数/率、错误码和耗时，不含伪造的0度。
 
 ## State Transitions
 
-`received → face_located → profile_extracted → candidates_extracted → mode_evaluated → diagnostic_ready`。
+`received → face_located → profile_extracted → candidates_extracted → roles_assessed → diagnostic_ready`。
 任一阶段可进入`failed`终态。只有`diagnostic_ready`且目标语义、机械约定、质量门和角范围全部通过，
 才允许`pose_computed → succeeded`；否则仍以无角失败终止。

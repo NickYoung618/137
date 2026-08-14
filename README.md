@@ -43,13 +43,14 @@ uv run python algorithms/slot_pose/main.py \
 Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正式规格、方案、任务和历史数值
 证据位于`specs/002-slot-pose-estimation/`。
 
-## A2双缺口稳定性增量
+## A2多槽角色几何增量
 
 `003-a2-paired-notch-stability`在不替换历史圆心、尺度、极坐标和polar链的前提下，增加了：
 
-- `legacy_single_notch`历史对照模式和`paired_notches_centerline`双缺口中心线诊断模式。
+- `legacy_single_notch`历史对照、`paired_notches_centerline`兼容诊断和`multi_notch_roles`通用角色模式。
 - 全外缘暗区候选的角中心、半宽、显著度、起止边界、环绕标志、排名和次候选差距。
 - paired候选数、两侧宽度/显著度、角间距、唯一性、环带完整性、圆心/尺度和polar一致性门控。
+- 任意数量候选到`datum_primary`/`datum_secondary`/`target_left`的显式分配、唯一性和环形夹角。
 - v2向后兼容诊断、外置A2 Manifest/truth契约、正常/坏图分报告和Mac一键验收CLI。
 
 服务器paired合成冒烟：
@@ -64,7 +65,8 @@ uv run python tools/run_slot_pose_batch.py \
   --output "${TMPDIR:-/tmp}/slot-pose-paired/results.jsonl"
 ```
 
-机械方未确认目标实体前，上述两种模式都只能作诊断；默认配置的
+现场图纸视频只证明竖向datum、左槽射线和`85°±5° (Z106)`的几何意图，不证明A2顶部两缺口的角色。
+目标、datum、A2映射和输出用途未确认前，所有模式都只能作诊断；默认配置的
 `target_semantics_confirmed=false`，因此绝不输出正式机械角。完整规格和Mac命令见
 `specs/003-a2-paired-notch-stability/`。
 
@@ -111,6 +113,9 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
 - B-003 机械/机器人负责人：确认机械零位、正方向及图像到机械坐标映射。
 - B-004 质量负责人：确认MAE/P95/max、静态极差、跨组残差、有效率、坏图误引导率和节拍门限。
 - B-005 PLC/机器人工程师：确认字段、地址、缩放、握手、超时和失败动作。
+- B-006 设计/机械方：确认竖向datum是上槽射线、上下槽轴还是其他基准。
+- B-007 业务/质量方：确认85°±5°是尺寸OK/NG还是引导换算输入。
+- B-008 现场负责人：确认A2暗区与图纸datum/target特征的逐项对应。
 
-关闭顺序：B-001/B-002 → B-003 → 冻结Mac验证集 → B-004验收 → B-005上线。全部关闭前，本MVP
+关闭顺序：B-006/B-007/B-008 → B-001/B-002 → B-003 → 冻结Mac验证集 → B-004验收 → B-005上线。全部关闭前，本MVP
 只能用于离线诊断和验证，不能宣称生产可交付。

@@ -1,4 +1,4 @@
-# Quickstart: A2双缺口稳定检测与Mac验收
+# Quickstart: A2多槽角色几何与Mac验收
 
 ## 1. 服务器全量测试
 
@@ -40,6 +40,13 @@ uv run python tools/run_slot_pose_batch.py \
 
 ## 4. Mac A2外置数据一键验收
 
+在读取A2前，先以`multi_notch_roles`合成图验证通用角色分配（额外候选不导致失败，角色缺失/歧义必须失败）：
+
+```bash
+uv run python tools/generate_synthetic_multi_notches.py \
+  --output-dir "${TMPDIR:-/tmp}/slot-pose-multi-role" --seed 137
+```
+
 先根据采集记录准备显式分组CSV，再执行：
 
 ```bash
@@ -57,5 +64,5 @@ uv run python tools/run_a2_acceptance.py \
 
 ## 5. 正式结论门禁
 
-B-001目标实体、B-002数据/工位映射、B-003机械角契约、B-004质量阈值和B-005 PLC/上位机契约未关闭时，
+B-006图纸datum、B-007输出用途、B-008 A2特征映射及B-001至B-005未关闭时，
 报告可提供诊断统计，但所有正式引导角仍为空，不接入PLC。
