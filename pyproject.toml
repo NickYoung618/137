@@ -1,6 +1,6 @@
 [project]
 name = "housing-inspection-slot-pose"
-version = "0.4.0"
+version = "0.4.1"
 description = "Offline dataset tooling and fail-closed slot pose contract skeleton"
 requires-python = ">=3.12,<3.13"
 dependencies = [

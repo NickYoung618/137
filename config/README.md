@@ -9,6 +9,9 @@
 - `detector`门限只使用历史函数已有的notch显著度、polar分数、两路旋转一致性和尺度，不包含新视觉检测器。
 - `detector.diagnostic_mode`只能显式选择`legacy_single_notch`、`paired_notches_centerline`或`multi_notch_roles`，
   程序不会根据图像自动替换目标语义。
+- `detector.face_search_roi_normalized`默认不存在；启用时仅在调用原有圆心/尺度链前，以归一化
+  `[x_min,y_min,x_max,y_max]`屏蔽相邻工装，候选剖面仍从未裁切原图采样。ROI需在冻结视野上独立验证，
+  不代替datum/target映射确认，也不改变fail-closed门。
 - `pose.target_semantics_confirmed=false`表示机械方尚未确认单缺口或双缺口中心线是生产对象；
   该标志与零位/正方向的`conventions_confirmed`相互独立，任一为false都无正式角。
 - paired门限是可解释诊断参数：profile控制环带采样和暗区候选，pairing控制候选数、
@@ -17,6 +20,5 @@
   `drawing_datum_definition_confirmed`、`a2_drawing_feature_mapping_confirmed`和`output_purpose`任一未确认时不产生正式纠偏角。
 - `mm_per_px`为统一保留字段；纯角度输出不使用。`ANGLE_PENDING.limit=null`表示只统计、不判定。
 
-Mac运行时，历史源码可指向已核验同源文件
-`/Users/daizekai/Desktop/壳体项目/work/算法原始/A端面/repeatability_evaluation.py`；标注和参考图也需
-指向本机实际文件并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。
+Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
+并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。

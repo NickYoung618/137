@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.4.0"
+ALGORITHM_VERSION = "0.4.1"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -68,6 +69,18 @@ def load_config(config_path: Path) -> dict[str, Any]:
     mode = detector.setdefault("diagnostic_mode", "legacy_single_notch")
     if mode not in {"legacy_single_notch", "paired_notches_centerline", "multi_notch_roles"}:
         raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
+    face_roi = detector.get("face_search_roi_normalized")
+    if face_roi is not None:
+        if (
+            not isinstance(face_roi, list)
+            or len(face_roi) != 4
+            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in face_roi)
+            or not all(math.isfinite(float(value)) for value in face_roi)
+        ):
+            raise ValueError("detector.face_search_roi_normalized must be [x_min,y_min,x_max,y_max]")
+        x_min, y_min, x_max, y_max = map(float, face_roi)
+        if not (0.0 <= x_min < x_max <= 1.0 and 0.0 <= y_min < y_max <= 1.0):
+            raise ValueError("detector.face_search_roi_normalized must be ordered within [0,1]")
     if mode == "paired_notches_centerline":
         from algorithms.slot_pose.angular_profile import validate_pairing_config, validate_profile_config
 

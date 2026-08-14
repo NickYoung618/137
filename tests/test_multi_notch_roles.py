@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from types import MethodType
 from pathlib import Path
 
+from algorithms.slot_pose.contract import load_config
+from algorithms.slot_pose.legacy_adapter import LegacyAEndFaceAdapter
 from algorithms.slot_pose.main import run
 from tools.generate_synthetic_multi_notches import build_dataset
 
@@ -50,6 +53,13 @@ class MultiNotchRoleIntegrationTests(unittest.TestCase):
                 self.assertFalse(payload["result"]["valid"])
                 self.assertEqual(code, payload["error"]["code"], payload)
                 self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
+
+    def test_multi_role_profile_does_not_require_legacy_single_notch(self) -> None:
+        adapter = LegacyAEndFaceAdapter(load_config(self.config))
+        adapter.module.find_outer_notch_angle = MethodType(lambda _self, *_args: None, adapter.module)
+        estimate = adapter.estimate(self.images / "normal_base.png")
+        self.assertTrue(estimate["diagnostics"]["roleAssignment"]["unique"])
+        self.assertGreaterEqual(estimate["diagnostics"]["candidateSummary"]["count"], 4)
 
     def test_drawing_inspection_does_not_become_mechanical_correction(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

@@ -104,6 +104,19 @@ class SlotPoseContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "diagnostic_mode"):
                 load_config(path)
 
+    def test_normalized_face_search_roi_is_optional_and_strictly_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["detector"]["face_search_roi_normalized"] = [0.1, 0.0, 0.8, 1.0]
+            path.write_text(json.dumps(config), encoding="utf-8")
+            self.assertEqual([0.1, 0.0, 0.8, 1.0], load_config(path)["detector"]["face_search_roi_normalized"])
+            for invalid in ([0.8, 0.0, 0.1, 1.0], [-0.1, 0.0, 0.8, 1.0], [0.0, 0.0, 1.1, 1.0]):
+                config["detector"]["face_search_roi_normalized"] = invalid
+                path.write_text(json.dumps(config), encoding="utf-8")
+                with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "face_search_roi_normalized"):
+                    load_config(path)
+
     def test_valid_result_requires_confirmed_target_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

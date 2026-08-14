@@ -42,6 +42,18 @@
       "required": ["min_notch_prominence", "min_polar_score", "max_rotation_disagreement_deg", "min_scale", "max_scale"],
       "properties": {
         "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline", "multi_notch_roles"], "default": "legacy_single_notch"},
+        "face_search_roi_normalized": {
+          "type": "array",
+          "description": "Optional alignment-only [x_min,y_min,x_max,y_max] ROI; absent by default.",
+          "prefixItems": [
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "number", "minimum": 0, "maximum": 1}
+          ],
+          "minItems": 4,
+          "maxItems": 4
+        },
         "min_notch_prominence": {"type": "number", "minimum": 0},
         "min_polar_score": {"type": "number", "minimum": 0},
         "max_rotation_disagreement_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},

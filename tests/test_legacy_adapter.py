@@ -7,8 +7,15 @@ import time
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from algorithms.slot_pose.contract import load_config, sha256_file
-from algorithms.slot_pose.legacy_adapter import LegacyAEndFaceAdapter, LegacyAdapterError, REQUIRED_FUNCTIONS
+from algorithms.slot_pose.legacy_adapter import (
+    LegacyAEndFaceAdapter,
+    LegacyAdapterError,
+    REQUIRED_FUNCTIONS,
+    apply_normalized_face_search_roi,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +40,16 @@ class LegacyAdapterTests(unittest.TestCase):
         with self.assertRaises(LegacyAdapterError) as caught:
             LegacyAEndFaceAdapter(config)
         self.assertEqual("ASSET_MISMATCH", caught.exception.code)
+
+    def test_normalized_face_search_roi_masks_only_alignment_input(self) -> None:
+        image = np.arange(80, dtype=np.uint8).reshape(8, 10)
+        masked = apply_normalized_face_search_roi(image, [0.2, 0.25, 0.8, 0.75])
+        np.testing.assert_array_equal(masked[2:6, 2:8], image[2:6, 2:8])
+        self.assertEqual(0, int(masked[:2].sum()))
+        self.assertEqual(0, int(masked[:, :2].sum()))
+        self.assertEqual(0, int(masked[6:].sum()))
+        self.assertEqual(0, int(masked[:, 8:].sum()))
+        self.assertGreater(int(image.sum()), int(masked.sum()))
 
     def test_reference_baseline_and_source_remains_unchanged(self) -> None:
         source = Path(self.config["legacy_asset"]["source_path"])

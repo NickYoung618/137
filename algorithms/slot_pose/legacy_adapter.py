@@ -11,6 +11,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import numpy as np
+
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 from algorithms.slot_pose.role_assignment import assign_roles
@@ -46,6 +48,19 @@ class LegacyPaths:
 
 def _circular_difference_deg(a: float, b: float) -> float:
     return abs((a - b + 180.0) % 360.0 - 180.0)
+
+
+def apply_normalized_face_search_roi(gray: np.ndarray, roi: list[float]) -> np.ndarray:
+    """Mask alignment distractors while preserving original image coordinates."""
+    height, width = gray.shape
+    x_min, y_min, x_max, y_max = map(float, roi)
+    left = max(0, min(width, int(math.floor(x_min * width))))
+    top = max(0, min(height, int(math.floor(y_min * height))))
+    right = max(0, min(width, int(math.ceil(x_max * width))))
+    bottom = max(0, min(height, int(math.ceil(y_max * height))))
+    masked = np.zeros_like(gray)
+    masked[top:bottom, left:right] = gray[top:bottom, left:right]
+    return masked
 
 
 class LegacyAEndFaceAdapter:
@@ -173,25 +188,42 @@ class LegacyAEndFaceAdapter:
             target_gray = self.module.load_detection_gray(image_path)
         except Exception as exc:
             raise LegacyAdapterError("INPUT_INVALID", "image_loading", str(exc)) from exc
+        face_search_roi = self.config["detector"].get("face_search_roi_normalized")
         try:
-            transform = self.module.estimate_global_transform(self.reference_model, target_gray)
+            alignment_gray = (
+                apply_normalized_face_search_roi(target_gray, face_search_roi)
+                if isinstance(face_search_roi, list)
+                else target_gray
+            )
+            transform = self.module.estimate_global_transform(self.reference_model, alignment_gray)
         except Exception as exc:
             raise LegacyAdapterError("FACE_NOT_FOUND", "face_detection", str(exc)) from exc
 
         center = (float(transform.target_center[0]), float(transform.target_center[1]))
         scale = float(transform.scale)
         outer_radius = float(self.reference_model.alignment_outer_radius * scale)
-        reference_notch = self.module.find_outer_notch_angle(
-            self.reference_model.reference_gray,
-            self.reference_model.alignment_center,
-            self.reference_model.alignment_outer_radius,
-        )
-        if reference_notch is None:
-            raise LegacyAdapterError("SLOT_NOT_FOUND", "reference_slot_detection", "historical reference has no notch")
-        target_notch = self.module.find_outer_notch_angle(target_gray, center, outer_radius)
-        if target_notch is None:
-            raise LegacyAdapterError("SLOT_NOT_FOUND", "slot_detection", "historical notch detector returned no candidate")
-        notch_angle, notch_half_width, notch_prominence = target_notch
+        detector = self.config["detector"]
+        mode = str(detector.get("diagnostic_mode", "legacy_single_notch"))
+
+        # The historical single-notch detector is a legacy-mode baseline, not a
+        # prerequisite for profile-based paired or generic multi-role modes.
+        reference_notch = None
+        target_notch = None
+        notch_angle = None
+        notch_half_width = None
+        notch_prominence = None
+        if mode == "legacy_single_notch":
+            reference_notch = self.module.find_outer_notch_angle(
+                self.reference_model.reference_gray,
+                self.reference_model.alignment_center,
+                self.reference_model.alignment_outer_radius,
+            )
+            if reference_notch is None:
+                raise LegacyAdapterError("SLOT_NOT_FOUND", "reference_slot_detection", "historical reference has no notch")
+            target_notch = self.module.find_outer_notch_angle(target_gray, center, outer_radius)
+            if target_notch is None:
+                raise LegacyAdapterError("SLOT_NOT_FOUND", "slot_detection", "historical notch detector returned no candidate")
+            notch_angle, notch_half_width, notch_prominence = target_notch
 
         polar_rotation, polar_score = self.module.estimate_rotation_by_polar(
             self.reference_model.reference_gray,
@@ -202,14 +234,16 @@ class LegacyAEndFaceAdapter:
             self.reference_model.alignment_outer_radius,
             scale,
         )
-        notch_rotation_result = self.module.estimate_rotation_by_notch(
-            self.reference_model.reference_gray,
-            target_gray,
-            self.reference_model.alignment_center,
-            center,
-            self.reference_model.alignment_outer_radius,
-            scale,
-        )
+        notch_rotation_result = None
+        if mode == "legacy_single_notch":
+            notch_rotation_result = self.module.estimate_rotation_by_notch(
+                self.reference_model.reference_gray,
+                target_gray,
+                self.reference_model.alignment_center,
+                center,
+                self.reference_model.alignment_outer_radius,
+                scale,
+            )
         notch_rotation_deg = None
         notch_pair_prominence = None
         agreement_deg = None
@@ -218,9 +252,7 @@ class LegacyAEndFaceAdapter:
             notch_pair_prominence = float(notch_rotation_result[1])
             agreement_deg = _circular_difference_deg(math.degrees(float(polar_rotation)), notch_rotation_deg)
 
-        detector = self.config["detector"]
-        mode = str(detector.get("diagnostic_mode", "legacy_single_notch"))
-        candidate_deg = math.degrees(float(notch_angle)) % 360.0
+        candidate_deg = math.degrees(float(notch_angle)) % 360.0 if notch_angle is not None else None
         failures: list[str] = []
         if float(polar_score) < float(detector["min_polar_score"]):
             failures.append("polar_score")
@@ -230,7 +262,7 @@ class LegacyAEndFaceAdapter:
         diagnostics = {
             "diagnosticMode": mode,
             "candidateAzimuthImageDeg": candidate_deg,
-            "referenceNotch": {
+            "referenceNotch": None if reference_notch is None else {
                 "azimuthImageDeg": math.degrees(float(reference_notch[0])) % 360.0,
                 "halfWidthDeg": math.degrees(float(reference_notch[1])),
                 "prominence": float(reference_notch[2]),
@@ -238,10 +270,11 @@ class LegacyAEndFaceAdapter:
             "face": {
                 "centerX": center[0], "centerY": center[1], "radiusPx": outer_radius,
                 "scale": scale, "method": "legacy_estimate_global_transform",
+                "searchRoiNormalized": face_search_roi,
             },
             "slot": {
-                "halfWidthDeg": math.degrees(float(notch_half_width)),
-                "prominence": float(notch_prominence),
+                "halfWidthDeg": math.degrees(float(notch_half_width)) if notch_half_width is not None else None,
+                "prominence": float(notch_prominence) if notch_prominence is not None else None,
                 "notchPairProminence": notch_pair_prominence,
                 "polarRotationDeg": math.degrees(float(polar_rotation)),
                 "notchRotationDeg": notch_rotation_deg,
@@ -257,6 +290,7 @@ class LegacyAEndFaceAdapter:
             "functionInventory": list(REQUIRED_FUNCTIONS),
         }
         if mode == "legacy_single_notch":
+            assert notch_prominence is not None
             if float(notch_prominence) < float(detector["min_notch_prominence"]):
                 failures.append("notch_prominence")
             if agreement_deg is None:
