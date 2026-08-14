@@ -19,8 +19,21 @@
 ## Phase 3 - 交付与门禁
 
 - [x] T011 更新真实 E2E 为最新哈希；旧审核改为非阻断历史报告
-- [ ] T012 实现无绝对路径单图验收脚本与日志/产物契约测试
-- [ ] T013 复跑9帧并核验500/521/620无新增失效
-- [ ] T014 运行 unittest、compileall、Schema、SpecKit analyze 与媒体/大文件审计
-- [ ] T015 更新 quickstart、标记任务完成、分里程碑 commit/push main
-- [ ] T016 给出 Mac 2200张复测命令与最终接受门
+- [x] T012 实现无绝对路径单图验收脚本与日志/产物契约测试
+- [x] T013 复跑9帧并核验500/521/620无新增失效
+- [x] T014 运行 unittest、compileall、Schema、SpecKit analyze 与媒体/大文件审计
+- [x] T015 更新 quickstart、标记任务完成、分里程碑 commit/push main
+- [x] T016 给出 Mac 2200张复测命令与最终接受门
+
+## Final verification evidence
+
+- `uv run --with jsonschema python -m unittest discover -s tests -v`: `119` tests passed，
+  包含 Schema 与 SHA 锁定最新真实 E2E，无 skip。
+- `uv run python -m compileall -q algorithms config scripts specs tests tools`: passed。
+- `bash -n` 两个回归脚本 passed；系统未安装 `shellcheck`，由脚本契约测试补充。
+- 最新单图一键脚本：`PASS`；尺寸7误差 `0.717320 px`，Phi直径误差 `0.105305 px`。
+- 9帧：registration `9/9`、尺寸7 `4/9`、Phi `8/9`；500/521/620均完整有效，
+  变换与旧版零差。623旧尺寸7疑似错边被显式拒绝。
+- `algorithms/hole_2/main.py` 在011增量中的 diff 为0字节；当前 SHA-256 为
+  `6406447ef90ac96f6fa3626eb50f0166c871a6d643d6579dbd8c3b473eac847f`。
+- Git无大于1MiB跟踪文件，无跟踪图片、压缩包或JSONL；Mac 2200张仍待外置最终验收。

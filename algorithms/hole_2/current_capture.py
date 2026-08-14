@@ -1362,7 +1362,7 @@ def _phase_edge_at_angle(
     polarity_sign: float,
     phase_fraction: float,
     phi_config: dict[str, Any],
-) -> tuple[tuple[float, float], float, float] | None:
+) -> tuple[tuple[float, float], float, float, float] | None:
     half_width = int(phi_config["phase_profile_half_width_px"])
     offsets = np.arange(-half_width, half_width + 1, dtype=np.float64)
     profile = bilinear_sample(
@@ -1382,6 +1382,10 @@ def _phase_edge_at_angle(
     score = np.maximum(derivative, 0.0) * prior
     peak_index = int(np.argmax(score))
     raw_peak = float(max(derivative[peak_index], 0.0))
+    local = derivative[np.abs(mids) <= min(6.0, half_width * 0.5)]
+    local_positive = float(max(float(np.max(local)), 0.0)) if len(local) else 0.0
+    local_negative = float(max(-float(np.min(local)), 0.0)) if len(local) else 0.0
+    local_polarity_margin = local_positive - local_negative
     if raw_peak < float(phi_config["phase_min_edge_score"]):
         return None
     inner_start = max(0, peak_index - 8)
@@ -1416,6 +1420,7 @@ def _phase_edge_at_angle(
         ),
         raw_peak,
         contrast,
+        local_polarity_margin,
     )
 
 
@@ -1453,6 +1458,7 @@ def _refine_phi_reference_phase(
     point_angles: list[float] = []
     edge_peaks: list[float] = []
     contrasts: list[float] = []
+    polarity_support: list[bool] = []
     seed_center = (float(seed["target_cx"]), float(seed["target_cy"]))
     seed_radius = float(seed["target_radius"])
     for angle in angles:
@@ -1462,11 +1468,12 @@ def _refine_phi_reference_phase(
         )
         if detected is None:
             continue
-        point, edge_peak, contrast = detected
+        point, edge_peak, contrast, local_polarity_margin = detected
         points.append(point)
         point_angles.append(float(angle))
         edge_peaks.append(edge_peak)
         contrasts.append(contrast)
+        polarity_support.append(local_polarity_margin >= 0.0)
     fitted = _ransac_circle(
         np.asarray(points, dtype=np.float64),
         trials=int(phi_config["phase_ransac_trials"]),
@@ -1498,6 +1505,7 @@ def _refine_phi_reference_phase(
     radius_min = float(seed["radius_lower_bound"])
     radius_max = float(seed["radius_upper_bound"])
     reasons: list[str] = []
+    polarity_support_fraction = float(np.mean(polarity_support)) if polarity_support else 0.0
     if not radius_min <= radius <= radius_max:
         reasons.append("phase_radius_out_of_bounds")
     if any(center_boundary[key] for key in ("xLower", "xUpper", "yLower", "yUpper")):
@@ -1508,12 +1516,15 @@ def _refine_phi_reference_phase(
         reasons.append("phase_fit_residual_above_gate")
     if coverage < float(phi_config["min_angle_coverage_fraction"]):
         reasons.append("phase_angle_coverage_below_gate")
+    if polarity_support_fraction < float(phi_config["min_angle_coverage_fraction"]):
+        reasons.append("phase_polarity_support_below_gate")
     diagnostics.update({
         "candidate_phase_failure": None if not reasons else ",".join(reasons),
         "candidate_phase_edge_points": int(inliers.sum()),
         "candidate_phase_raw_points": len(points),
         "candidate_phase_fit_residual_target_px": float(residual),
         "candidate_phase_angle_coverage_fraction": coverage,
+        "candidate_phase_polarity_support_fraction": polarity_support_fraction,
         "candidate_phase_angle_extension_deg": float(phi_config["phase_angle_extension_deg"]),
         "candidate_phase_edge_peak_normalized": float(np.median(edge_peaks) / normalizer),
         "candidate_phase_contrast": float(np.median(contrasts)),
@@ -1651,15 +1662,40 @@ def _detect_phi12_2(
             selected, normalizer, phi_config,
         )
         if phase_selected is None:
-            return None, {
-                "candidate_failure": str(phase_diagnostics["candidate_phase_failure"]),
-                "candidate_recovery_pass": recovery_pass,
-                "candidate_main_lower_bound_saturated": bool(main["lower_radius_saturated"]),
-                "candidate_main_radius_scale_ratio": float(main["radius_scale_ratio"]),
-                **phase_diagnostics,
-                **multicircle_diagnostics,
+            phase_failure = str(phase_diagnostics["candidate_phase_failure"])
+            bounded_phase_failures = {
+                "phase_radius_out_of_bounds",
+                "phase_center_boundary_saturated",
+                "phase_angle_coverage_below_gate",
             }
-        selected = phase_selected
+            failure_parts = set(phase_failure.split(","))
+            fallback_eligible = (
+                bool(failure_parts)
+                and (
+                    failure_parts <= bounded_phase_failures
+                    or failure_parts == {"phase_polarity_support_below_gate"}
+                )
+            )
+            if fallback_eligible:
+                phase_diagnostics.update({
+                    "candidate_edge_semantics": "legacy_gradient_magnitude_quality_fallback",
+                    "candidate_polarity_enforced": False,
+                    "candidate_phase_fallback": "legacy_magnitude_quality_fallback",
+                })
+                if recovery_pass is None:
+                    recovery_pass = "legacy_magnitude_quality_fallback"
+            else:
+                return None, {
+                    "candidate_failure": phase_failure,
+                    "candidate_recovery_pass": recovery_pass,
+                    "candidate_main_lower_bound_saturated": bool(main["lower_radius_saturated"]),
+                    "candidate_main_radius_scale_ratio": float(main["radius_scale_ratio"]),
+                    **phase_diagnostics,
+                    **multicircle_diagnostics,
+                }
+        else:
+            phase_diagnostics["candidate_phase_fallback"] = None
+            selected = phase_selected
 
     target_cx = float(selected["target_cx"])
     target_cy = float(selected["target_cy"])
@@ -2474,6 +2510,10 @@ def run_current_capture(
         for key, value in phi_quality.items():
             measurements[f"Phi12_2.quality.{key}"] = value
         phi_source = "hole2-v6-current-capture-candidate"
+        if phi_quality.get("candidate_phase_fallback") == "legacy_magnitude_quality_fallback":
+            phi_source = "hole2-v6-current-capture-legacy-magnitude-quality-fallback"
+        elif phi_quality.get("candidate_polarity_enforced") is True:
+            phi_source = "hole2-v6-current-capture-reference-phase-circle"
         d7_source = "hole2-v6-current-capture-paired-contour-centerline"
         if phi_values is not None:
             measurements.update(phi_values)

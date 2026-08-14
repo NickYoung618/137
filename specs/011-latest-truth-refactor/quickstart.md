@@ -32,3 +32,34 @@ uv run python tools/diagnose_latest_truth_edges.py \
 
 输出 `truth-prediction-overlay.png`、`d7-edge-profiles.json`、
 `phi-radial-profile.json` 和 `diagnostic-summary.json`；输出目录在 Git 工作树内会被拒绝。
+
+## 一键单图验收
+
+```bash
+bash scripts/run_hole2_single_acceptance.sh \
+  /external/reference/annotation.json \
+  /external/reference/reference.bmp \
+  /external/latest/Pic_2026_08_12_214449_1.bmp \
+  /external/latest/端面标注样品.json \
+  /external/output/hole2-single-acceptance
+```
+
+脚本先运行不读取目标标注的检测，再执行离线验收，保存 `stdout.log`、`stderr.log`、
+`exit-code.txt`、`run-metadata.json`、`algorithm-result.json`、
+`acceptance-report.json`、`key-metrics.json` 和 `key-metrics.txt`。两个门同时通过时清楚打印
+`PASS`；任何检测、验收或像素门失败都返回非零并打印 `FAIL` 或错误原因。
+
+## Mac 2000正常 + 200坏品复测
+
+```bash
+bash scripts/run_hole2_full_regression.sh \
+  /external/reference/annotation.json \
+  /external/reference/reference.bmp \
+  /external/mac/normal-2000 \
+  /external/mac/defective-200 \
+  /external/output/hole2-full-regression-v3 \
+  4
+```
+
+最终接受条件：正常组 registration `>=1962`、尺寸7 `>=1863`、Phi `>=1922`，且按旧参考
+比例计算的离群数不增加。服务器9帧只能证明控制帧500/521/620无新增失效，不能代替2200张结论。

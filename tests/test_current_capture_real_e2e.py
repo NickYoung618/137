@@ -47,6 +47,14 @@ class CurrentCaptureRealE2ETests(unittest.TestCase):
             self.assertIsNotNone(inverse)
             self.assertTrue(result["features"]["7"]["measurementValid"])
             self.assertTrue(result["features"]["Phi12.2"]["measurementValid"])
+            self.assertEqual(
+                "hole2-v6-current-capture-paired-contour-centerline",
+                result["features"]["7"]["sourceDetector"],
+            )
+            self.assertEqual(
+                "hole2-v6-current-capture-reference-phase-circle",
+                result["features"]["Phi12.2"]["sourceDetector"],
+            )
             self.assertNotIn("target_annotation", {item["role"] for item in result["runtimeInputs"]})
 
             report = evaluate_current_capture(

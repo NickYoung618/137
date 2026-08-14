@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-15
 
-**Status**: In implementation
+**Status**: Implemented; pending Mac 2200-image acceptance
 
 ## Context
 

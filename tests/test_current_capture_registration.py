@@ -249,6 +249,52 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertIn("phase", quality["candidate_failure"])
         self.assertTrue(quality["candidate_polarity_enforced"])
 
+    def test_phi_bounded_phase_failure_can_preserve_old_quality_candidate(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        target = reference_gray.copy()
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 12, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+        })
+        phase_quality = {
+            "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+            "candidate_reference_edge_phase_fraction": 0.6,
+            "candidate_polarity_enforced": True,
+            "candidate_phase_failure": "phase_center_boundary_saturated",
+            "candidate_phase_edge_points": 120,
+            "candidate_phase_fit_residual_target_px": 0.5,
+        }
+        with patch(
+            "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+            return_value=(None, phase_quality),
+        ):
+            values, quality = _detect_phi12_2(
+                target, reference, SimilarityTransform(0.0, 0.0, 1.0, 0.0), config
+            )
+        self.assertIsNotNone(values, quality)
+        self.assertEqual(
+            "legacy_magnitude_quality_fallback", quality["candidate_phase_fallback"]
+        )
+        self.assertFalse(quality["candidate_polarity_enforced"])
+        self.assertEqual(
+            "legacy_gradient_magnitude_quality_fallback",
+            quality["candidate_edge_semantics"],
+        )
+
     def test_d7_paired_contour_uses_dark_band_center_not_outer_peak(self):
         image = np.full((200, 220), 220.0)
         image[:, 56:64] = 20.0
