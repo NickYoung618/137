@@ -117,6 +117,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
     ray_hypotheses, axis_hypotheses = _role_hypotheses(diagnostics)
     raw_candidates = diagnostics.get("rawCandidates") or diagnostics.get("candidates") or []
     groove_recognition = diagnostics.get("grooveRecognition") or {}
+    single_groove_pose = diagnostics.get("singleGroovePose")
     return {
         "imageId": manifest_item["imageId"],
         "relativePath": manifest_item["relativePath"],
@@ -135,6 +136,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "rawCandidates": raw_candidates,
         "grooveRecognition": groove_recognition,
         "grooveCandidates": diagnostics.get("grooveCandidates") or [],
+        "singleGroovePose": single_groove_pose,
         "roleSuggestion": {
             "status": role_status,
             "selectedRoleCandidateIds": selected,
@@ -201,11 +203,28 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
             groove_label = "" if assessment is None else f" G={float(assessment['grooveScore']):.2f} {'ACCEPT' if assessment.get('accepted') else 'REJECT'}"
             label = candidate_id if role is None else f"{candidate_id} / {role}"
             draw.text(endpoint, f" {label} {angle:.2f}deg{groove_label}", fill=color, font=font, stroke_width=2, stroke_fill="black")
+        single_pose = record.get("singleGroovePose") or {}
+        measurement = single_pose.get("imageMeasurement") or {}
+        radial_axis = measurement.get("radialAxis") or {}
+        axis_from, axis_to = radial_axis.get("from"), radial_axis.get("to")
+        if single_pose.get("geometryValid") and isinstance(axis_from, dict) and isinstance(axis_to, dict):
+            draw.line(
+                (axis_from["x"], axis_from["y"], axis_to["x"], axis_to["y"]),
+                fill="#ff5dce", width=width * 2,
+            )
     error = record["result"].get("errorCode") or "NONE"
     count = len(record.get("candidates") or [])
     groove_count = len(record.get("grooveCandidates") or [])
     draw.rectangle((0, 0, min(image.width, 2400), max(110, image.height // 18)), fill="#111111")
-    draw.text((18, 12), f"{record['imageId']}  raw={count} grooves={groove_count}  error={error}", fill="white", font=font)
+    single_pose = record.get("singleGroovePose") or {}
+    single_measurement = single_pose.get("imageMeasurement") or {}
+    image_azimuth = single_measurement.get("azimuthDeg")
+    single_text = "" if image_azimuth is None else f" image-up-cw={float(image_azimuth):.2f}deg"
+    draw.text(
+        (18, 12),
+        f"{record['imageId']}  raw={count} grooves={groove_count}{single_text}  error={error}",
+        fill="white", font=font,
+    )
     draw.text(
         (18, 56), "orange dashed=alignment prior; cyan solid=gyj physical-circle result",
         fill="white", font=font,
@@ -260,6 +279,16 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         overlays.append((str(item["imageId"]), overlay_path))
 
     failures = Counter(record["result"]["errorCode"] or "NONE" for record in records)
+    single_valid_count = sum(
+        1 for record in records if (record.get("singleGroovePose") or {}).get("geometryValid") is True
+    )
+    image_azimuth_count = sum(
+        1 for record in records
+        if isinstance(((record.get("singleGroovePose") or {}).get("imageMeasurement") or {}).get("azimuthDeg"), (int, float))
+    )
+    datum_blocked_count = sum(
+        1 for record in records if record["result"]["errorCode"] == "DATUM_DEFINITION_UNCONFIRMED"
+    )
     summary = {
         "schemaVersion": "slot-pose-review/1",
         "datasetId": dataset_id,
@@ -267,6 +296,9 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         "candidateBearingConvention": "image +x is 0 deg; clockwise is positive because image y increases downward",
         "roleSuggestionsAreAuthoritative": False,
         "failureCounts": dict(sorted(failures.items())),
+        "singleGrooveGeometryValidCount": single_valid_count,
+        "imageGrooveAzimuthAvailableCount": image_azimuth_count,
+        "mechanicalGuidanceBlockedByDatumCount": datum_blocked_count,
         "records": records,
     }
     write_json(output_dir / "review.json", summary)
@@ -304,7 +336,8 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                 })
     with (output_dir / "failures.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
-            "image_id", "relative_path", "error_code", "error_stage", "candidate_count", "groove_count", "role_status",
+            "image_id", "relative_path", "error_code", "error_stage", "candidate_count", "groove_count",
+            "single_groove_status", "image_azimuth_deg", "role_status",
         ])
         writer.writeheader()
         for record in records:
@@ -317,6 +350,10 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                 "error_stage": record["result"]["errorStage"],
                 "candidate_count": len(record["candidates"]),
                 "groove_count": len(record["grooveCandidates"]),
+                "single_groove_status": (record.get("singleGroovePose") or {}).get("status"),
+                "image_azimuth_deg": (
+                    ((record.get("singleGroovePose") or {}).get("imageMeasurement") or {}).get("azimuthDeg")
+                ),
                 "role_status": record["roleSuggestion"]["status"],
             })
     render_contact_sheet(overlays, output_dir / "contact-sheet.jpg")

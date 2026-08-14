@@ -14,7 +14,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.7.0"
+ALGORITHM_VERSION = "0.8.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -70,7 +70,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not isinstance(detector, dict):
         raise ValueError("detector configuration must be an object")
     mode = detector.setdefault("diagnostic_mode", "legacy_single_notch")
-    if mode not in {"legacy_single_notch", "paired_notches_centerline", "multi_notch_roles"}:
+    if mode not in {
+        "legacy_single_notch", "paired_notches_centerline", "multi_notch_roles", "single_real_groove",
+    }:
         raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
     face_roi = detector.get("face_search_roi_normalized")
     if face_roi is not None:
@@ -94,20 +96,30 @@ def load_config(config_path: Path) -> dict[str, Any]:
         disagreement = detector.get("max_polar_pair_disagreement_deg")
         if not isinstance(disagreement, (int, float)) or not 0.0 < float(disagreement) <= 180.0:
             raise ValueError("max_polar_pair_disagreement_deg must be in (0, 180]")
-    if mode == "multi_notch_roles":
+    if mode in {"multi_notch_roles", "single_real_groove"}:
         from algorithms.slot_pose.angular_profile import validate_profile_config
         from algorithms.slot_pose.groove_recognition import merged_groove_config
         from algorithms.slot_pose.physical_outer_circle import merged_physical_outer_circle_config
-        from algorithms.slot_pose.role_assignment import validate_role_config
 
-        if not isinstance(detector.get("profile"), dict) or not isinstance(detector.get("role_assignment"), dict):
-            raise ValueError("multi-role mode requires detector.profile and detector.role_assignment objects")
+        if not isinstance(detector.get("profile"), dict):
+            raise ValueError(f"{mode} mode requires detector.profile")
         validate_profile_config(detector["profile"])
         detector["groove_recognition"] = merged_groove_config(detector.get("groove_recognition"))
         detector["physical_outer_circle"] = merged_physical_outer_circle_config(
             detector.get("physical_outer_circle")
         )
+    if mode == "multi_notch_roles":
+        from algorithms.slot_pose.role_assignment import validate_role_config
+
+        if not isinstance(detector.get("role_assignment"), dict):
+            raise ValueError("multi-role mode requires detector.role_assignment")
         validate_role_config(detector["role_assignment"])
+    if mode == "single_real_groove":
+        from algorithms.slot_pose.single_groove_pose import merged_single_groove_pose_config
+
+        detector["single_groove_pose"] = merged_single_groove_pose_config(
+            detector.get("single_groove_pose")
+        )
     return config
 
 

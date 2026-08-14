@@ -18,6 +18,7 @@ from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 from algorithms.slot_pose.groove_recognition import recognize_grooves
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
 from algorithms.slot_pose.role_assignment import assign_roles
+from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
 
 
 REQUIRED_FUNCTIONS = (
@@ -388,7 +389,7 @@ class LegacyAEndFaceAdapter:
                     f"polar/paired disagreement {pair_agreement_deg:.3f}deg exceeds threshold",
                     diagnostics,
                 )
-        elif mode == "multi_notch_roles":
+        elif mode in {"multi_notch_roles", "single_real_groove"}:
             outer_model = next(
                 (
                     model for model in self.reference_model.shapes
@@ -433,7 +434,10 @@ class LegacyAEndFaceAdapter:
                 diagnostics.update(exc.diagnostics)
                 exc.diagnostics = diagnostics
                 raise
-            minimum_required = len(detector["role_assignment"]["assignments"])
+            minimum_required = (
+                1 if mode == "single_real_groove"
+                else len(detector["role_assignment"]["assignments"])
+            )
             recognition, groove_candidates = self._recognize_target_grooves(
                 target_gray, groove_center, groove_outer_radius, scale, target_roles["candidates"], minimum_required,
             )
@@ -450,51 +454,76 @@ class LegacyAEndFaceAdapter:
                     "provesA2FeatureMapping": False,
                 },
             })
-            if recognition["status"] != "accepted":
-                code = (
-                    "GROOVE_RECOGNITION_AMBIGUOUS"
-                    if recognition["status"] == "ambiguous"
-                    else "GROOVE_RECOGNITION_FAILED"
+            if mode == "single_real_groove":
+                single_pose = build_single_groove_pose(
+                    groove_candidates,
+                    groove_center,
+                    groove_outer_radius,
+                    detector["single_groove_pose"],
+                    recognition_status=recognition["status"],
                 )
-                raise LegacyAdapterError(
-                    code, "groove_recognition",
-                    f"accepted grooves {recognition['acceptedCount']} are insufficient for "
-                    f"{recognition['minimumRequiredCount']} configured roles",
-                    diagnostics,
+                diagnostics["singleGroovePose"] = single_pose
+                if single_pose["status"] != "accepted":
+                    code = (
+                        "GROOVE_RECOGNITION_AMBIGUOUS"
+                        if single_pose["status"] == "ambiguous"
+                        else "GROOVE_RECOGNITION_FAILED"
+                    )
+                    raise LegacyAdapterError(
+                        code,
+                        "groove_recognition",
+                        f"single_real_groove requires exactly one accepted groove; "
+                        f"accepted={single_pose['acceptedGrooveCount']}",
+                        diagnostics,
+                    )
+                candidate_deg = float(single_pose["imageMeasurement"]["profileAzimuthXRightClockwiseDeg"])
+                diagnostics["candidateAzimuthImageDeg"] = candidate_deg
+            else:
+                if recognition["status"] != "accepted":
+                    code = (
+                        "GROOVE_RECOGNITION_AMBIGUOUS"
+                        if recognition["status"] == "ambiguous"
+                        else "GROOVE_RECOGNITION_FAILED"
+                    )
+                    raise LegacyAdapterError(
+                        code, "groove_recognition",
+                        f"accepted grooves {recognition['acceptedCount']} are insufficient for "
+                        f"{recognition['minimumRequiredCount']} configured roles",
+                        diagnostics,
+                    )
+                role_assignment = assign_roles(
+                    [_candidate_from_dict(item) for item in groove_candidates],
+                    detector["role_assignment"],
+                    expected_offset_deg=math.degrees(float(polar_rotation)),
                 )
-            role_assignment = assign_roles(
-                [_candidate_from_dict(item) for item in groove_candidates],
-                detector["role_assignment"],
-                expected_offset_deg=math.degrees(float(polar_rotation)),
-            )
-            diagnostics["roleAssignment"] = role_assignment
-            if not role_assignment["unique"]:
-                code = (
-                    "ROLE_ASSIGNMENT_AMBIGUOUS"
-                    if "role_assignment_not_unique" in role_assignment["failedChecks"]
-                    else "ROLE_ASSIGNMENT_FAILED"
-                )
-                raise LegacyAdapterError(
-                    code, "role_assignment",
-                    f"notch role assignment failed: {role_assignment['failedChecks']}", diagnostics,
-                )
-            candidate_deg = float(role_assignment["selectedRoleAzimuthsDeg"]["target_left"])
-            diagnostics["candidateAzimuthImageDeg"] = candidate_deg
-            drawing_angle = role_assignment["drawingAngle"]
-            pose = self.config["pose"]
-            purpose = pose.get("output_purpose")
-            if (
-                purpose == "drawing_tolerance_inspection"
-                and pose.get("drawing_datum_definition_confirmed")
-                and pose.get("a2_drawing_feature_mapping_confirmed")
-                and drawing_angle.get("drawingNominalDeg") is not None
-                and drawing_angle.get("drawingToleranceDeg") is not None
-            ):
-                deviation = abs(float(drawing_angle["includedAngleDeg"]) - float(drawing_angle["drawingNominalDeg"]))
-                drawing_angle["toleranceDeviationDeg"] = deviation
-                drawing_angle["toleranceStatus"] = (
-                    "PASS" if deviation <= float(drawing_angle["drawingToleranceDeg"]) else "FAIL"
-                )
+                diagnostics["roleAssignment"] = role_assignment
+                if not role_assignment["unique"]:
+                    code = (
+                        "ROLE_ASSIGNMENT_AMBIGUOUS"
+                        if "role_assignment_not_unique" in role_assignment["failedChecks"]
+                        else "ROLE_ASSIGNMENT_FAILED"
+                    )
+                    raise LegacyAdapterError(
+                        code, "role_assignment",
+                        f"notch role assignment failed: {role_assignment['failedChecks']}", diagnostics,
+                    )
+                candidate_deg = float(role_assignment["selectedRoleAzimuthsDeg"]["target_left"])
+                diagnostics["candidateAzimuthImageDeg"] = candidate_deg
+                drawing_angle = role_assignment["drawingAngle"]
+                pose = self.config["pose"]
+                purpose = pose.get("output_purpose")
+                if (
+                    purpose == "drawing_tolerance_inspection"
+                    and pose.get("drawing_datum_definition_confirmed")
+                    and pose.get("a2_drawing_feature_mapping_confirmed")
+                    and drawing_angle.get("drawingNominalDeg") is not None
+                    and drawing_angle.get("drawingToleranceDeg") is not None
+                ):
+                    deviation = abs(float(drawing_angle["includedAngleDeg"]) - float(drawing_angle["drawingNominalDeg"]))
+                    drawing_angle["toleranceDeviationDeg"] = deviation
+                    drawing_angle["toleranceStatus"] = (
+                        "PASS" if deviation <= float(drawing_angle["drawingToleranceDeg"]) else "FAIL"
+                    )
         else:  # load_config prevents this; retain a local guard for direct construction.
             raise LegacyAdapterError("QUALITY_REJECTED", "configuration", f"unsupported diagnostic mode: {mode}")
 
@@ -525,6 +554,14 @@ class LegacyAEndFaceAdapter:
                 float(assignment["bestScore"]),
                 min(1.0, float(assignment["scoreMargin"]) / max(1e-6, float(detector["role_assignment"]["min_score_margin"]))),
             ]
+        elif mode == "single_real_groove":
+            single_pose = diagnostics["singleGroovePose"]
+            selected_id = single_pose["role"]["candidateId"]
+            selected = next(item for item in diagnostics["grooveCandidates"] if item["candidateId"] == selected_id)
+            confidence_parts = [
+                min(1.0, float(polar_score) / max(1.0, 2.0 * float(detector["min_polar_score"]))),
+                float(selected["grooveScore"]),
+            ]
         else:
             confidence_parts = [
                 min(1.0, float(notch_prominence) / max(1.0, 2.0 * float(detector["min_notch_prominence"]))),
@@ -537,7 +574,7 @@ class LegacyAEndFaceAdapter:
 
     def mechanical_angle(self, candidate_image_deg: float) -> float:
         pose = self.config["pose"]
-        if self.config["detector"].get("diagnostic_mode") == "multi_notch_roles":
+        if self.config["detector"].get("diagnostic_mode") in {"multi_notch_roles", "single_real_groove"}:
             if not pose.get("drawing_datum_definition_confirmed"):
                 raise LegacyAdapterError(
                     "DATUM_DEFINITION_UNCONFIRMED", "pose_mapping",

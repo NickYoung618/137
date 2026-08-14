@@ -61,6 +61,8 @@
     "blockers": ["PHYSICAL_DATUM_UNCONFIRMED", "TARGET_ANGLE_CONVENTION_UNCONFIRMED"]
   },
   "jpeg25NoTruthRegression": {
+    "status": "SUPERSEDED_FOR_SINGLE_REAL_GROOVE_BUSINESS_MODE",
+    "supersededReason": "This historical run used multi_notch_roles and incorrectly required two configured roles after one real groove had already passed the geometry gate.",
     "imageCount": 25,
     "rawCandidateCountDistribution": {"3": 25},
     "acceptedGrooveCountDistribution": {"1": 25},

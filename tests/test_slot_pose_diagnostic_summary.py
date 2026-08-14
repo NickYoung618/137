@@ -29,6 +29,14 @@ def record(image_id: str, angles: list[float], *, error: str = "ROLE_ASSIGNMENT_
                 "prominence": 40.0, "rank": 1,
             }
         ] if angles else [],
+        "singleGroovePose": {
+            "status": "accepted" if angles else "failed",
+            "geometryValid": bool(angles),
+            "imageMeasurement": None if not angles else {
+                "azimuthDeg": (angles[0] + 90.0) % 360.0,
+                "quadrant": "upper_right",
+            },
+        },
         "roleSuggestion": {"status": "ambiguous_or_rejected", "selectedRoleCandidateIds": None},
         "elapsedMs": elapsed,
     }
@@ -65,6 +73,24 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual(1, run["candidateIdTracks"][0]["angleModeCount"])
         self.assertFalse(run["candidateIdTracks"][0]["authoritativeRole"])
         self.assertFalse(summary["roleSuggestionsAreAuthoritative"])
+
+    def test_single_groove_image_success_is_separate_from_datum_blocked_mechanical_result(self) -> None:
+        records = [
+            record("a", [291.0], error="DATUM_DEFINITION_UNCONFIRMED"),
+            record("b", [292.0], error="DATUM_DEFINITION_UNCONFIRMED"),
+        ]
+        for item in records:
+            item["grooveRecognition"]["assessments"].extend([
+                {"candidateId": "shadow-1", "accepted": False, "rejectionReasons": ["width_variation_too_high"]},
+                {"candidateId": "shadow-2", "accepted": False, "rejectionReasons": ["radial_depth_too_small"]},
+            ])
+        run = build_summary([("single", {"records": records})], 5.0)["runs"][0]
+        self.assertEqual(2, run["singleGrooveGeometryValid"]["count"])
+        self.assertEqual(2, run["imageGrooveAzimuthAvailable"]["count"])
+        self.assertEqual(2, run["mechanicalGuidanceBlockedByDatum"]["count"])
+        self.assertEqual(0, run["formalValid"]["count"])
+        self.assertEqual({"upper_right": 2}, run["singleGrooveQuadrantCounts"])
+        self.assertEqual(4, run["rejectedDarkCandidateCount"])
 
 
 if __name__ == "__main__":

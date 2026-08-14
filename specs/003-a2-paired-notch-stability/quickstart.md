@@ -86,12 +86,35 @@ uv run python tools/summarize_slot_pose_diagnostics.py \
 
 跨帧稳定只能证明图像特征可重复；固定工装、遮挡和光照边界也可能高度稳定，不得因此自动分配datum/target角色。
 
-## 5. 正式结论门禁
+## 5. 单真实槽运行模式
 
-B-006图纸datum、B-007输出用途、B-008 A2特征映射及B-001至B-005未关闭时，
+复制配置到Git外目录，将`detector.diagnostic_mode`显式设为`single_real_groove`；保持
+`single_groove_pose.expected_accepted_groove_count=1`。本次已确认的单槽配置可设
+`pose.target_semantics_confirmed=true`，但`a2_drawing_feature_mapping_confirmed`仍为false；不得依据图像
+自动切换模式。然后运行原批处理和审阅：
+
+```bash
+uv run python tools/run_slot_pose_batch.py \
+  --manifest "$A2_MANIFEST" --data-root "$A2_DATA_ROOT" \
+  --config "$A2_SINGLE_GROOVE_CONFIG" --output "$A2_SINGLE_RESULTS"
+uv run python tools/render_slot_pose_review.py \
+  --manifest "$A2_MANIFEST" --results "$A2_SINGLE_RESULTS" \
+  --data-root "$A2_DATA_ROOT" --output-dir "$A2_SINGLE_REVIEW_DIR"
+uv run python tools/summarize_slot_pose_diagnostics.py \
+  --run "single-real-groove=$A2_SINGLE_REVIEW_DIR/review.json" \
+  --output "$A2_SINGLE_SUMMARY"
+```
+
+检查`singleGrooveGeometryValid`和`imageGrooveAzimuthAvailable`，不要用顶层`result.valid`替代槽识别成功率。
+datum未确认时预期错误为`DATUM_DEFINITION_UNCONFIRMED`而不是`GROOVE_RECOGNITION_FAILED`；
+`signedRelativeRotationDeg`仍必须为`null`。
+
+## 6. 正式结论门禁
+
+B-001单真实槽数量已经关闭；B-006图纸datum、B-007输出用途、B-008图纸基准映射及B-002至B-005未关闭时，
 报告可提供诊断统计，但所有正式引导角仍为空，不接入PLC。
 
-## 6. 用LabelMe制作物理外圆标准答案
+## 7. 用LabelMe制作物理外圆标准答案
 
 在原始BMP上人工创建一个`circle`，标签必须为`physical_outer_circle_truth`；不要把算法圆
 复制成标注。标注完成后在LabelMe JSON的根级`flags`中设置
@@ -107,7 +130,7 @@ uv run python tools/build_labelme_circle_truth.py \
 输出只保存受控相对路径和哈希。JPEG诊断副本上的重复性不是绝对精度；圆心/半径精度比较必须回到这份
 原始BMP人工truth。
 
-## 7. 审阅人工外圆弧与开放槽边界
+## 8. 审阅人工外圆弧与开放槽边界
 
 源标注、原BMP和全部输出必须位于Git工作树外。源标签通过参数映射，不能假定固定点数：
 

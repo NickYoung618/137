@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-single-real-groove-pose/1",
+  "title": "Single recognized real-groove image pose diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "status", "expectedAcceptedGrooveCount", "acceptedGrooveCount",
+    "geometryValid", "role", "imageMeasurement", "targetAssessment"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "slot-single-real-groove-pose/1"},
+    "status": {"enum": ["accepted", "failed", "ambiguous"]},
+    "expectedAcceptedGrooveCount": {"const": 1},
+    "acceptedGrooveCount": {"type": "integer", "minimum": 0},
+    "geometryValid": {"type": "boolean"},
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "name", "status", "candidateId", "mechanicalGuidanceAuthoritative"],
+      "properties": {
+        "schemaVersion": {"const": "single-real-groove-role/1"},
+        "name": {"const": "real_groove"},
+        "status": {"enum": ["unique_detected", "failed", "ambiguous"]},
+        "candidateId": {"type": ["string", "null"]},
+        "mechanicalGuidanceAuthoritative": {"const": false}
+      }
+    },
+    "imageMeasurement": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/imageMeasurement"}]
+    },
+    "targetAssessment": {"$ref": "#/$defs/targetAssessment"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "accepted"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "acceptedGrooveCount": {"const": 1},
+          "geometryValid": {"const": true},
+          "imageMeasurement": {"$ref": "#/$defs/imageMeasurement"},
+          "role": {"properties": {"status": {"const": "unique_detected"}, "candidateId": {"type": "string"}}}
+        }
+      },
+      "else": {
+        "properties": {
+          "geometryValid": {"const": false},
+          "imageMeasurement": {"type": "null"},
+          "role": {"properties": {"candidateId": {"type": "null"}}}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {"x": {"type": "number"}, "y": {"type": "number"}}
+    },
+    "imageMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "coordinateConvention", "azimuthDeg",
+        "profileAzimuthXRightClockwiseDeg", "quadrant", "circlePoint", "radialAxis"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "slot-groove-image-angle/1"},
+        "coordinateConvention": {
+          "const": {
+            "origin": "detected_physical_outer_circle_center",
+            "xAxis": "right",
+            "yAxis": "down",
+            "zeroDirection": "image_up",
+            "positiveDirection": "clockwise",
+            "rangeDeg": "[0,360)"
+          }
+        },
+        "azimuthDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "profileAzimuthXRightClockwiseDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "quadrant": {
+          "enum": [
+            "upper_left", "upper_right", "lower_left", "lower_right",
+            "upper_axis", "lower_axis", "left_axis", "right_axis"
+          ]
+        },
+        "circlePoint": {"$ref": "#/$defs/point"},
+        "radialAxis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {"from": {"$ref": "#/$defs/point"}, "to": {"$ref": "#/$defs/point"}}
+        }
+      }
+    },
+    "targetAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "targetContract", "status", "quadrantMatches",
+        "signedMeasurementMinusTargetDeg", "absoluteDeviationDeg",
+        "mechanicalCorrectionDeg", "blockers"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "slot-groove-target-assessment/1"},
+        "targetContract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion", "nominalDeg", "expectedQuadrant",
+            "physicalDatumDefinitionId", "angleConventionId"
+          ],
+          "properties": {
+            "schemaVersion": {"const": "slot-groove-target/1"},
+            "nominalDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+            "expectedQuadrant": {"enum": ["upper_left", "upper_right", "lower_left", "lower_right"]},
+            "physicalDatumDefinitionId": {"type": ["string", "null"]},
+            "angleConventionId": {"type": ["string", "null"]}
+          }
+        },
+        "status": {"const": "NOT_EVALUATED"},
+        "quadrantMatches": {"type": ["boolean", "null"]},
+        "signedMeasurementMinusTargetDeg": {"type": "null"},
+        "absoluteDeviationDeg": {"type": "null"},
+        "mechanicalCorrectionDeg": {"type": "null"},
+        "blockers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    }
+  }
+}

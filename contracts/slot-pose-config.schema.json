@@ -41,7 +41,7 @@
       "type": "object",
       "required": ["min_notch_prominence", "min_polar_score", "max_rotation_disagreement_deg", "min_scale", "max_scale"],
       "properties": {
-        "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline", "multi_notch_roles"], "default": "legacy_single_notch"},
+        "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline", "multi_notch_roles", "single_real_groove"], "default": "legacy_single_notch"},
         "face_search_roi_normalized": {
           "type": "array",
           "description": "Optional alignment-only [x_min,y_min,x_max,y_max] ROI; absent by default.",
@@ -98,6 +98,29 @@
             "max_gap_rows": {"type": "integer", "minimum": 0},
             "min_groove_score": {"type": "number", "minimum": 0, "maximum": 1},
             "ambiguity_margin": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "single_groove_pose": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "output_schema_version", "image_angle_schema_version", "expected_accepted_groove_count", "target"],
+          "properties": {
+            "schema_version": {"const": "single-real-groove-pose-config/1"},
+            "output_schema_version": {"const": "slot-single-real-groove-pose/1"},
+            "image_angle_schema_version": {"const": "slot-groove-image-angle/1"},
+            "expected_accepted_groove_count": {"const": 1},
+            "target": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "nominal_deg", "expected_quadrant", "physical_datum_definition_id", "angle_convention_id"],
+              "properties": {
+                "schema_version": {"const": "slot-groove-target/1"},
+                "nominal_deg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+                "expected_quadrant": {"enum": ["upper_left", "upper_right", "lower_left", "lower_right"]},
+                "physical_datum_definition_id": {"type": ["string", "null"], "minLength": 1},
+                "angle_convention_id": {"type": ["string", "null"], "minLength": 1}
+              }
+            }
           }
         },
         "physical_outer_circle": {
@@ -166,6 +189,10 @@
     {
       "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "multi_notch_roles"}}}}},
       "then": {"properties": {"detector": {"required": ["profile", "physical_outer_circle", "role_assignment"]}}}
+    },
+    {
+      "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "single_real_groove"}}}}},
+      "then": {"properties": {"detector": {"required": ["profile", "physical_outer_circle", "groove_recognition", "single_groove_pose"]}}}
     }
   ]
 }

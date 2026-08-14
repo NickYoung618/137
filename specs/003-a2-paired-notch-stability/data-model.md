@@ -72,6 +72,15 @@
 
 `AcceptedGrooveCandidate`是`GrooveAssessment.accepted=true`的原始候选及证据联合视图。`RoleAssignmentResult`的输入只能来自此集合。
 
+## SingleRealGroovePose
+
+`SingleRealGroovePose`使用`slot-single-real-groove-pose/1`，只在显式`single_real_groove`模式下生成。
+它要求`AcceptedGrooveCandidate`恰好1个；0个为`failed`，多于1个为`ambiguous`。成功时记录
+`real_groove`唯一候选、物理外圆上的槽中心点、圆心到该点的径向轴、图像向上0°/顺时针正的绝对方位和象限。
+
+`geometryValid`只表示单槽图像几何有效，不表示机械引导有效。`targetAssessment`独立保存85°/左下目标，
+物理datum及角度用途未确认时固定`NOT_EVALUATED`，偏差和机械纠偏为空；顶层result v2继续fail-closed。
+
 ## RoleRule
 
 | Field | Type | Rule |
@@ -111,13 +120,14 @@
 
 | Field | Type | Rule |
 |---|---|---|
-| diagnosticMode | enum | `legacy_single_notch` / `paired_notches_centerline` / `multi_notch_roles` |
+| diagnosticMode | enum | `legacy_single_notch` / `paired_notches_centerline` / `multi_notch_roles` / `single_real_groove` |
 | targetSemanticsConfirmed | boolean | false时正式角始终为空 |
 | profile | object | 角度/径向样本数、环带宽、平滑窗、MAD倍数和最小显著度 |
 | pairing | object | 候选数、宽度/显著度、间距、比率、最佳得分和次优差距门槛 |
 | maxPolarPairDisagreementDeg | positive number | paired rotation与polar rotation的最大环形差 |
 | grooveRecognition | object | 单帧径向/边缘/轮廓门槛、歧义带及阈值版本 |
 | roleAssignment | object | 角色窗口、datum定义、分配差距、对置误差及图纸标注 |
+| singleGroovePose | object | 固定恰好1个接受槽、图像角/目标契约版本和独立目标信息 |
 
 ## A2ManifestRecord
 
@@ -150,9 +160,11 @@ false-positive数/率、错误码和耗时，不含伪造的0度。
 
 ## State Transitions
 
-`received → alignment_circle_located → physical_outer_circle_refined → profile_extracted → raw_candidates_extracted → grooves_recognized → roles_assessed → diagnostic_ready`。
-任一阶段可进入`failed`终态。只有`diagnostic_ready`且目标语义、机械约定、质量门和角范围全部通过，
-才允许`pose_computed → succeeded`；否则仍以无角失败终止。
+`received → alignment_circle_located → physical_outer_circle_refined → profile_extracted → raw_candidates_extracted → grooves_recognized`；
+`multi_notch_roles`继续到`roles_assessed → diagnostic_ready`，`single_real_groove`在恰好1个接受槽时进入
+`single_image_pose_ready`。两条路径都只有在机械门全部确认后才能进入`pose_computed → succeeded`。
+任一阶段可进入`failed`终态；单槽图像姿态成功但datum未确认时以`single_image_pose_ready + mechanical_blocked`
+结束，正式角仍为空。
 
 人工审阅旁路为`external_annotation_received → open_boundary_validated → locked_circle_fit →
 groove_geometry_assessed → image_measurement_ready → target_not_evaluated/comparable`；该旁路不连接

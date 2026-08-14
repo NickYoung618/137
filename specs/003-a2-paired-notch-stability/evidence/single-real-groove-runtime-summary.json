@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "single-real-groove-runtime-evidence/1",
+  "createdAt": "2026-08-15",
+  "scope": "25 external A2 JPEG diagnostic copies with no per-frame angle truth; production accuracy not evaluated",
+  "businessDecision": {
+    "realGrooveCountPerPart": 1,
+    "otherVisibleDarkRegions": "unavoidable occlusion shadows",
+    "pairedRoleCountApplies": false,
+    "physicalDatumConfirmed": false,
+    "mechanicalCorrectionAllowed": false
+  },
+  "input": {
+    "imageCount": 25,
+    "imageSize": [5472, 3648],
+    "directoryContentSummarySha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "originalBmpTruthUsed": false,
+    "manualLabelReadByRuntime": false
+  },
+  "mode": {
+    "diagnosticMode": "single_real_groove",
+    "poseSchemaVersion": "slot-single-real-groove-pose/1",
+    "imageAngleSchemaVersion": "slot-groove-image-angle/1",
+    "expectedAcceptedGrooveCount": 1,
+    "algorithmVersion": "0.8.0"
+  },
+  "results": {
+    "physicalOuterCircleAccepted": 25,
+    "rawCandidateCountDistribution": {"3": 25},
+    "acceptedGrooveCountDistribution": {"1": 25},
+    "rejectedDarkCandidateCountDistribution": {"2": 25},
+    "rejectedShadowAppearanceEvents": 50,
+    "singleGrooveGeometryValid": 25,
+    "imageAbsoluteAzimuthAvailable": 25,
+    "singleGroovePoseStatusCounts": {"accepted": 25},
+    "mechanicalGuidanceBlockedByDatum": 25,
+    "formalMechanicalValid": 0,
+    "nonNullSignedRelativeRotation": 0,
+    "errorCodeCounts": {"DATUM_DEFINITION_UNCONFIRMED": 25},
+    "grooveRecognitionFailureCount": 0,
+    "grooveRecognitionAmbiguousCount": 0
+  },
+  "rejectedAppearanceReasonEvents": {
+    "width_variation_too_high": 49,
+    "contour_discontinuous": 1,
+    "local_metal_contrast_too_low": 1,
+    "outer_edge_not_connected": 1,
+    "paired_edge_support_too_low": 1,
+    "radial_depth_too_small": 1
+  },
+  "imageBearingDevelopmentModes": [
+    {"count": 20, "minimumDeg": 21.66425218136783, "maximumDeg": 21.6709526406932, "quadrant": "upper_right"},
+    {"count": 3, "minimumDeg": 202.99294097147202, "maximumDeg": 202.99521283320775, "quadrant": "lower_left"},
+    {"count": 2, "minimumDeg": 263.00233137181357, "maximumDeg": 263.00264630255276, "quadrant": "lower_left"}
+  ],
+  "grooveScore": {
+    "minimum": 0.9134193299903904,
+    "p50": 0.9156968575108904,
+    "maximum": 0.9207062526319912
+  },
+  "elapsedMs": {
+    "p50": 1648.1245229952037,
+    "p95": 1676.4194053597748,
+    "maximum": 1793.0492339655757
+  },
+  "externalArtifactSha256": {
+    "config": "09b772084ccb52dfc38364d5d86d8806c9f86aa31837d287585f68812e8fa73c",
+    "results": "f6160ea5b54a998d0355884fa328c88e1c0b6baa52a94ffe7a86da92e657f5ea",
+    "review": "99934d2d0a33c63385a23bfdce9f4d90610dd9b4993efc5e9bc6b7777dbd2ad6",
+    "candidatesCsv": "ca9c4925e3121ed757b69fc1194307b97c2eb9042ba0712995cb1cf81accfc3d",
+    "failuresCsv": "3549c7ed953d28d458864d92c508b1542a05e5d17b034681a12176538bba86d8",
+    "contactSheet": "ae01031421bb3f3a4060a5e39cba0172d10265743b03e7a03b0e2a85ffd19990",
+    "summary": "240d542cc1020273d4c2fb3ace533b8664648eebd529ec79bec04bd474a3fd52"
+  },
+  "verification": {
+    "unitTests": {"run": 78, "passed": 78, "skippedExternal": 2},
+    "configSchemaValidated": 2,
+    "resultSchemaValidated": 25,
+    "singleGroovePoseSchemaValidated": 25,
+    "legacySweep": {
+      "samples": 72,
+      "valid": 72,
+      "maeDeg": 0.1561191377641921,
+      "p95Deg": 0.30187302208952926,
+      "maxDeg": 0.3498688679892439
+    },
+    "pairedRegression": {
+      "samples": 8,
+      "expectedPositiveValid": 5,
+      "expectedNegativeInvalid": 3,
+      "falsePositiveCount": 0,
+      "maeDeg": 0.11638627711824938,
+      "p95Deg": 0.1807641365845029,
+      "maxDeg": 0.18510730851193102
+    }
+  },
+  "interpretationLimits": [
+    "The 25 frames have no confirmed condition grouping or per-frame original-BMP angle truth, so raw angles are not averaged across modes and no accuracy is reported.",
+    "The exact-one geometry result validates the configured image-recognition state, not the 85-degree datum-relative target.",
+    "The physical datum, target-angle meaning and image-to-machine correction remain unconfirmed; all formal mechanical outputs are null."
+  ]
+}

@@ -31,7 +31,7 @@ polar配准，复用指纹锁定的gyj外缘交点/稳健拟圆核心，再做�
 
 | Principle | Pre-design | Post-design | Evidence |
 |---|---|---|---|
-| I. 规格先行与场景闭环 | PASS | PASS | `spec.md`含4个独立场景、29条FR、12条SC和B-001..B-008 |
+| I. 规格先行与场景闭环 | PASS | PASS | `spec.md`含4个独立场景、51条FR、18条SC及显式外部决策门 |
 | II. 坐标系与姿态契约明确 | PASS | PASS | 诊断角与正式机械角分离；环形角范围和方向在契约中显式化 |
 | III. 质量评估与安全失败 | PASS | PASS | paired逐项门控；失败角/置信度为空；坏图误引导单独统计 |
 | IV. 数据溯源与可复现验证 | PASS | PASS | 外置Manifest、truth、物理样品/split隔离、图像/配置/算法指纹 |
@@ -55,6 +55,7 @@ polar配准，复用指纹锁定的gyj外缘交点/稳健拟圆核心，再做�
    失败始终作计数而非0度。
 10. **人工槽边界只走离线审阅**：新增工具显式读取Git外LabelMe标签映射，复用锁定gyj代数初值/稳健几何拟圆，验证开放槽边界后计算图像方位；该模块不被运行时适配器导入。
 11. **实测与目标分契约**：报告固定图像坐标定义并输出实测方位/象限；左下85°单独进入目标对象，物理datum和映射未确认时偏差、OK/NG及机械纠偏均为空。
+12. **单真实槽独立模式**：新增显式`single_real_groove`，复用物理外圆、原始暗区和凹槽几何门，但以恰好1个接受候选为图像槽姿态成功，不进入旧datum/target双角色分配。图像姿态诊断与result v2机械有效性分层表达。
 
 ## Project Structure
 
@@ -83,13 +84,15 @@ specs/003-a2-paired-notch-stability/
 algorithms/slot_pose/
 ├── angular_profile.py          # 新的外缘候选与配对纯函数
 ├── role_assignment.py         # 通用候选角色分配与datum/target环形夹角
+├── single_groove_pose.py      # 恰好一个真实槽的版本化图像方位/象限
 ├── legacy_adapter.py           # 模式编排、已有中心/尺度/polar复用
 ├── contract.py                 # v2 fail-closed和向后兼容诊断
 └── main.py                     # 单图CLI
 
 contracts/
 ├── slot-pose-config.schema.json
-└── slot-pose-result.schema.json
+├── slot-pose-result.schema.json
+└── single-real-groove-pose.schema.json
 
 config/
 └── inspection.example.json
@@ -149,3 +152,10 @@ tests/
 - 槽边界先验证有限性、连续性和开放轮廓基本条件；拟圆后再验证两端靠圆、内部径向凹入、最深点位置和槽口角宽。阴影若不形成真实向内开放轮廓必须拒绝。
 - 代数圆初值和稳健/几何圆都来自已锁定gyj模块；人工样本只在离线工具中使用，运行时检测仍只消费图像。
 - 图像实测角采用image-up=0°、y向下、顺时针正；目标左下85°因物理datum未确认保持`NOT_EVALUATED`。
+
+## 2026-08-15 Single Real-Groove Runtime Correction
+
+- 现场已确认每件只有1个真实凹槽，另外2个暗区属于遮挡阴影；这关闭图像目标数量歧义，不关闭85°相对datum或机械换算。
+- `single_real_groove`要求恰好1个接受候选，输出图像绝对方位/象限/径向轴；0个失败，多个歧义。
+- `multi_notch_roles`和paired继续原样保留用于兼容/其他诊断，不根据候选数自动切换模式。
+- datum未确认时单槽图像几何可以成功，result v2仍以空正式角和明确datum阻塞安全失败。

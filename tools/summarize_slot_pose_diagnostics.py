@@ -178,6 +178,26 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         for assessment in (record.get("grooveRecognition") or {}).get("assessments") or []
         for reason in assessment.get("rejectionReasons") or []
     )
+    rejected_candidate_counts = [
+        sum(
+            not bool(assessment.get("accepted"))
+            for assessment in (record.get("grooveRecognition") or {}).get("assessments") or []
+        )
+        for record in records
+    ]
+    single_poses = [record.get("singleGroovePose") or {} for record in records]
+    single_status_counts = Counter(pose.get("status") or "not_available" for pose in single_poses)
+    single_geometry_count = sum(pose.get("geometryValid") is True for pose in single_poses)
+    single_measurements = [
+        pose.get("imageMeasurement") or {} for pose in single_poses
+        if isinstance((pose.get("imageMeasurement") or {}).get("azimuthDeg"), (int, float))
+    ]
+    single_azimuths = [float(item["azimuthDeg"]) for item in single_measurements]
+    single_quadrants = Counter(str(item.get("quadrant") or "unknown") for item in single_measurements)
+    datum_blocked_count = sum(
+        record.get("result", {}).get("errorCode") == "DATUM_DEFINITION_UNCONFIRMED"
+        for record in records
+    )
     role_status_counts = Counter(record.get("roleSuggestion", {}).get("status") or "not_available" for record in records)
     role_signatures = Counter(
         json.dumps(record.get("roleSuggestion", {}).get("selectedRoleCandidateIds"), sort_keys=True)
@@ -208,6 +228,24 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         ),
         "grooveRecognitionStatusCounts": dict(sorted(groove_status_counts.items())),
         "grooveRejectionReasonCounts": dict(sorted(groove_rejections.items())),
+        "rejectedDarkCandidateCount": sum(rejected_candidate_counts),
+        "rejectedDarkCandidateCountDistribution": dict(sorted(Counter(rejected_candidate_counts).items())),
+        "singleGroovePoseStatusCounts": dict(sorted(single_status_counts.items())),
+        "singleGrooveGeometryValid": {
+            "count": single_geometry_count,
+            "rate": single_geometry_count / total if total else 0.0,
+        },
+        "imageGrooveAzimuthAvailable": {
+            "count": len(single_azimuths),
+            "rate": len(single_azimuths) / total if total else 0.0,
+            "unstratifiedRawAngleStatistics": "NOT_EVALUATED",
+            "reason": "image bearings require confirmed condition/truth groups before cross-frame statistics",
+        },
+        "singleGrooveQuadrantCounts": dict(sorted(single_quadrants.items())),
+        "mechanicalGuidanceBlockedByDatum": {
+            "count": datum_blocked_count,
+            "rate": datum_blocked_count / total if total else 0.0,
+        },
         "roleAssignmentUnique": {"count": role_unique_count, "rate": role_unique_count / total if total else 0.0},
         "roleStatusCounts": dict(sorted(role_status_counts.items())),
         "selectedRoleSignatureCounts": dict(sorted(role_signatures.items())),
@@ -240,6 +278,7 @@ def build_summary(runs: list[tuple[str, dict[str, Any]]], threshold_deg: float) 
         "interpretationLimits": [
             "Cross-frame stability can identify repeatable image features but cannot prove a drawing datum/target role.",
             "A stable image-frame cluster can still be a fixture, occlusion or lighting boundary.",
+            "A valid single-groove image bearing is not a datum-relative target deviation or mechanical correction.",
             "JPEG diagnostics cannot replace original-BMP angle accuracy truth.",
         ],
     }

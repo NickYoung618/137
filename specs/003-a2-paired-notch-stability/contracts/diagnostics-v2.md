@@ -4,7 +4,7 @@
 fields are unchanged. Consumers may ignore all fields below.
 
 ```text
-diagnostics.diagnosticMode: legacy_single_notch | paired_notches_centerline | multi_notch_roles
+diagnostics.diagnosticMode: legacy_single_notch | paired_notches_centerline | multi_notch_roles | single_real_groove
 diagnostics.targetSemanticsConfirmed: boolean
 diagnostics.face.searchRoiNormalized: [x_min, y_min, x_max, y_max] | null
 diagnostics.physicalOuterCircle: {
@@ -42,6 +42,29 @@ diagnostics.grooveCandidates: [{
   grooveScore, radialDepthPx, tangentialWidthPx,
   pairedEdgeSupport, contourContinuity, thresholdVersion
 }]
+diagnostics.singleGroovePose: {
+  schemaVersion: slot-single-real-groove-pose/1,
+  status: accepted | failed | ambiguous,
+  expectedAcceptedGrooveCount: 1,
+  acceptedGrooveCount, geometryValid,
+  role: {
+    schemaVersion: single-real-groove-role/1,
+    name: real_groove, status, candidateId,
+    mechanicalGuidanceAuthoritative: false
+  },
+  imageMeasurement: null | {
+    schemaVersion: slot-groove-image-angle/1,
+    coordinateConvention, azimuthDeg,
+    profileAzimuthXRightClockwiseDeg, quadrant,
+    circlePoint, radialAxis
+  },
+  targetAssessment: {
+    schemaVersion: slot-groove-target-assessment/1,
+    targetContract, status: NOT_EVALUATED,
+    signedMeasurementMinusTargetDeg: null,
+    mechanicalCorrectionDeg: null, blockers
+  }
+}
 diagnostics.candidateSummary: {count, bestCandidateId, secondCandidateId, prominenceGap}
 diagnostics.pairing: {
   selectedCandidateIds, centerlineDeg, separationDeg, widthRatio,
@@ -71,6 +94,10 @@ Diagnostic angles are image-frame observations and are never implicit machine co
 
 `diagnostics.candidates`作为旧诊断别名仍保留原始暗区；新消费者必须区分`rawCandidates`与
 `grooveCandidates`。`multi_notch_roles`的角色分配只允许引用`grooveCandidates`。
+
+`single_real_groove`显式要求恰好一个`grooveCandidates`元素，不运行`roleAssignment`。该条件通过时
+`singleGroovePose.geometryValid=true`且图像绝对方位可用；物理datum未确认时，顶层result仍
+`valid=false`、正式角为空，错误码为`DATUM_DEFINITION_UNCONFIRMED`。这不是槽识别失败。
 
 `diagnostics.face.radiusPx`是历史配准半径，不是物理外圆。`multi_notch_roles`必须先获得
 `physicalOuterCircle.status=accepted`，才能用`physicalCircle`提取原始候选和评估凹入。

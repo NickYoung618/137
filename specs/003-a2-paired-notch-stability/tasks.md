@@ -232,3 +232,14 @@
 - [x] T079 Run the external 134-point/34-point manual sample without overwriting it; record only hashes, metrics and bounded conclusions in repository evidence (FR-043/SC-015)
 - [x] T080 Re-run the external 25-JPEG no-truth diagnostic and report only retain/reject/failure/latency distributions (FR-034/FR-044)
 - [x] T081 Run focused/full tests, Schema, legacy/paired regression, diff/pollution gates and commit locally without push or PLC/upstream changes (SC-001..SC-006/SC-016)
+
+---
+
+## Phase 15: Versioned Single Real-Groove Runtime Mode
+
+- [x] T082 [US1] Add failing pure/integration tests for one accepted groove plus two rejected shadows, image-up azimuth/quadrant, zero and multiple accepted candidates, target separation and runtime truth isolation (FR-045..FR-049/SC-017)
+- [x] T083 [US4] Extend config/result diagnostic contracts and Schema with explicit `single_real_groove` and `slot-single-real-groove-pose/1` while preserving result v2 fail-closed semantics (FR-047..FR-049/FR-051)
+- [x] T084 [US1] Implement exact-one groove cardinality, single-groove image pose construction and adapter orchestration without role assignment or automatic mode switching (FR-045..FR-049)
+- [x] T085 [US3] Extend review/summary tools to report single-groove geometry validity, image-azimuth availability, shadow rejection and datum-blocked mechanical guidance separately (FR-050)
+- [x] T086 Run the external 25-JPEG set in `single_real_groove`, generate Git-external overlays/review/summary, and record only de-identified counts/hashes/limits (FR-050/SC-018)
+- [x] T087 Run focused/full, Schema, legacy72, paired, CLI/batch/diff/pollution gates and commit locally without push/merge/PLC changes (FR-051/SC-001..SC-006)

@@ -14,12 +14,18 @@
 稳定错误码：`INPUT_INVALID`、`ASSET_MISMATCH`、`FACE_NOT_FOUND`、`SLOT_NOT_FOUND`、
 `SLOT_ROTATION_INCONSISTENT`、`SLOT_FIT_FAILED`、`QUALITY_REJECTED`、
 `SLOT_PAIR_NOT_FOUND`、`SLOT_PAIR_AMBIGUOUS`、`RING_TRUNCATED`、`TARGET_SEMANTICS_UNCONFIRMED`、
-`PHYSICAL_OUTER_CIRCLE_FAILED`、`ROLE_ASSIGNMENT_FAILED`、`ROLE_ASSIGNMENT_AMBIGUOUS`、`DATUM_DEFINITION_UNCONFIRMED`、
+`PHYSICAL_OUTER_CIRCLE_FAILED`、`GROOVE_RECOGNITION_FAILED`、`GROOVE_RECOGNITION_AMBIGUOUS`、
+`ROLE_ASSIGNMENT_FAILED`、`ROLE_ASSIGNMENT_AMBIGUOUS`、`DATUM_DEFINITION_UNCONFIRMED`、
 `FEATURE_MAPPING_UNCONFIRMED`、`OUTPUT_PURPOSE_UNCONFIRMED`、
 `POSE_CONVENTION_UNCONFIRMED`、`ANGLE_OUT_OF_RANGE`、`INTERNAL_ERROR`。
 
 多候选与paired数据仅增加在开放的`diagnostics`对象中，`schemaVersion`仍为`slot-pose-result/2`。
 旧消费者可忽略`diagnosticMode`、`angularProfile`、`candidates`、`candidateSummary`和`pairing`；
 任何诊断角均不是隐式PLC指令。
+
+`single_real_groove`中的`diagnostics.singleGroovePose.geometryValid=true`表示恰好一个真实槽通过
+单帧几何门，`imageMeasurement.azimuthDeg`是图像向上0°、顺时针正的绝对方位。它可以与顶层
+`result.valid=false`同时成立：前者是图像槽识别状态，后者仍是机械引导状态。datum未确认时
+必须返回`DATUM_DEFINITION_UNCONFIRMED`且正式角/置信度为空。
 
 下游必须先检查`taskId`和`result.valid`，失败或超时立即清除上一任务角度并走现场确认的安全动作。

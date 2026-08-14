@@ -82,6 +82,19 @@
       "min_groove_score": 0.62,
       "ambiguity_margin": 0.05
     },
+    "single_groove_pose": {
+      "schema_version": "single-real-groove-pose-config/1",
+      "output_schema_version": "slot-single-real-groove-pose/1",
+      "image_angle_schema_version": "slot-groove-image-angle/1",
+      "expected_accepted_groove_count": 1,
+      "target": {
+        "schema_version": "slot-groove-target/1",
+        "nominal_deg": 85.0,
+        "expected_quadrant": "lower_left",
+        "physical_datum_definition_id": null,
+        "angle_convention_id": null
+      }
+    },
     "pairing": {
       "min_candidates": 2,
       "max_candidates": 6,

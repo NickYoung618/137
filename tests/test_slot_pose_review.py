@@ -67,6 +67,11 @@ class SlotPoseReviewTests(unittest.TestCase):
                          "halfWidthDeg": 4.0, "prominence": 40.0, "startDeg": 86.0,
                          "endDeg": 94.0, "wrapsBoundary": False},
                     ],
+                    "singleGroovePose": {
+                        "schemaVersion": "slot-single-real-groove-pose/1",
+                        "status": "accepted", "geometryValid": True,
+                        "imageMeasurement": {"azimuthDeg": 5.0, "quadrant": "upper_right"},
+                    },
                     "roleAssignment": {
                         "unique": True,
                         "selectedRoleCandidateIds": {
@@ -98,6 +103,8 @@ class SlotPoseReviewTests(unittest.TestCase):
             self.assertTrue(record["angularProfile"]["completeRing"])
             self.assertEqual([], record["singleRayRoleHypotheses"])
             self.assertEqual(1, len(record["grooveCandidates"]))
+            self.assertTrue(record["singleGroovePose"]["geometryValid"])
+            self.assertEqual(5.0, record["singleGroovePose"]["imageMeasurement"]["azimuthDeg"])
             self.assertNotIn(str(root), json.dumps(summary))
             self.assertTrue((output / "overlays/0001.jpg").is_file())
             self.assertTrue((output / "contact-sheet.jpg").is_file())
