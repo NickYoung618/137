@@ -8,10 +8,18 @@ from unittest.mock import patch
 import numpy as np
 from PIL import Image, ImageDraw
 
-from algorithms.hole_2.main import ReferenceModel, ShapeModel, build_reference, extract_image, gaussian_blur
+from algorithms.hole_2.main import (
+    BoundaryDetection,
+    ReferenceModel,
+    ShapeModel,
+    build_reference,
+    extract_image,
+    gaussian_blur,
+)
 from algorithms.hole_2.current_capture import (
     SimilarityTransform,
     _detect_d7_tangent,
+    _d7_multiband_recovery,
     _detect_phi12_2,
     _ransac_circle,
     _v6_d7_fallback,
@@ -129,6 +137,11 @@ def _test_config():
             "max_fit_residual_target_px": 3.0,
             "min_edge_score": 4.0,
             "max_boundary_parallelism_deg": 12.0,
+            "band_offsets_target_px": [-12.0, 0.0, 12.0],
+            "band_strip_half_width_px": 6,
+            "band_strip_samples": 13,
+            "min_consistent_bands": 3,
+            "max_cross_band_length_deviation_px": 3.0,
         },
         "phi12_2": {
             "search_radius_px": 20, "min_radius_scale_ratio": 0.88,
@@ -145,6 +158,50 @@ def _test_config():
 
 
 class CurrentCaptureRegistrationTests(unittest.TestCase):
+    def test_d7_multiband_ignores_one_bad_parallel_strip(self):
+        config = _test_config()["d7"] | {
+            "band_offsets_target_px": [-24.0, -12.0, 0.0, 12.0, 24.0],
+            "min_consistent_bands": 3,
+        }
+
+        def boundary(_image, p1, _p2, endpoint, **kwargs):
+            bad = abs(p1[1] - 100.0) < 0.1
+            x = (45.0 if bad else 60.0) if endpoint == "p1" else (155.0 if bad else 140.0)
+            kwargs["diagnostics"].update({"failureStage": None, "acceptedEdgePoints": 13})
+            return BoundaryDetection((x, p1[1]), (1.0, 0.0, -x), 13, 0.5, 12.0, 0.0)
+
+        with patch("algorithms.hole_2.current_capture.detect_dimension_boundary", side_effect=boundary):
+            recovered, quality = _d7_multiband_recovery(
+                np.zeros((220, 220)), (60.0, 100.0), (140.0, 100.0),
+                (1.0, -1.0), config,
+            )
+
+        self.assertIsNotNone(recovered, quality)
+        self.assertEqual("multi_parallel_bands", quality["candidate_recovery_pass"])
+        self.assertEqual(4, quality["candidate_multiband_inlier_count"])
+        self.assertAlmostEqual(80.0, math.dist(*recovered), delta=0.1)
+
+    def test_d7_multiband_does_not_recover_inconsistent_lengths(self):
+        config = _test_config()["d7"] | {
+            "band_offsets_target_px": [-24.0, -12.0, 0.0, 12.0, 24.0],
+            "min_consistent_bands": 4,
+            "max_cross_band_length_deviation_px": 1.0,
+        }
+
+        def boundary(_image, p1, _p2, endpoint, **kwargs):
+            offset = p1[1] - 100.0
+            x = 60.0 if endpoint == "p1" else 140.0 + offset / 2.0
+            return BoundaryDetection((x, p1[1]), (1.0, 0.0, -x), 13, 0.5, 12.0, 0.0)
+
+        with patch("algorithms.hole_2.current_capture.detect_dimension_boundary", side_effect=boundary):
+            recovered, quality = _d7_multiband_recovery(
+                np.zeros((220, 220)), (60.0, 100.0), (140.0, 100.0),
+                (1.0, -1.0), config,
+            )
+
+        self.assertIsNone(recovered)
+        self.assertEqual("p2_consistency_below_gate", quality["candidate_multiband_failure"])
+
     def test_phi_multicircle_ransac_rejects_outliers_without_nominal_pull(self):
         angles = np.linspace(0.1, 2.8, 80)
         circle_points = np.column_stack([

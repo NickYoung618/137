@@ -44,7 +44,12 @@
     "min_boundary_points": 12,
     "max_fit_residual_target_px": 3.0,
     "min_edge_score": 4.0,
-    "max_boundary_parallelism_deg": 12.0
+    "max_boundary_parallelism_deg": 12.0,
+    "band_offsets_target_px": [-72.0, -48.0, -24.0, 0.0, 24.0, 48.0, 72.0],
+    "band_strip_half_width_px": 20,
+    "band_strip_samples": 31,
+    "min_consistent_bands": 3,
+    "max_cross_band_length_deviation_px": 3.0
   },
   "phi12_2": {
     "search_radius_px": 48,

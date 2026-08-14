@@ -48,3 +48,8 @@ scripts/run_hole2_full_regression.sh \
 `robust_multicircle`。每个特征顶层都输出 `sourceDetector`、`recoveryPass`和
 `quality`；`recoveryPass=null` 表示未触发恢复分支，是否有效始终以
 `measurementValid` 和 `quality` 为准。
+
+尺寸7的 `recoveryPass=multi_parallel_bands` 表示已执行多平行带聚合；
+它不表示必然有效。恢复失败后只有原v6结果本身通过
+`ok:dual_boundary_fit` 时才能回退，回退会记录
+`recoveryPass=v6_original_quality`。

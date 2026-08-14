@@ -33,6 +33,7 @@ from .main import (
     geometric_circle_fit,
     gradient_magnitude,
     inverse_xy,
+    line_axis_intersection,
     load_gray,
     radial_edge_at_angle,
     solve_similarity,
@@ -141,6 +142,16 @@ def load_registration_config(path: Path) -> dict[str, Any]:
         raise ValueError("phi12_2 multicircle RANSAC residual cannot loosen the fit gate")
     if not 0.0 < float(phi["min_angle_coverage_fraction"]) <= 1.0:
         raise ValueError("phi12_2 minimum angle coverage fraction is invalid")
+    d7 = config["d7"]
+    offsets = d7["band_offsets_target_px"]
+    if not isinstance(offsets, list) or len(offsets) < 3 or 0.0 not in [float(v) for v in offsets]:
+        raise ValueError("d7 parallel bands require at least three explicit offsets including zero")
+    if int(d7["min_consistent_bands"]) < 3 or int(d7["min_consistent_bands"]) > len(offsets):
+        raise ValueError("d7 min_consistent_bands is invalid")
+    if int(d7["band_strip_samples"]) < int(d7["min_boundary_points"]):
+        raise ValueError("d7 band strip samples cannot undercut the original point gate")
+    if float(d7["max_cross_band_length_deviation_px"]) <= 0.0:
+        raise ValueError("d7 cross-band length deviation gate must be positive")
     registration_recovery = config["registration_recovery"]
     recovery_refine_radius = float(registration_recovery["refine_search_radius_target_px"])
     primary_refine_radius = float(config["supports"]["refine_search_radius_target_px"])
@@ -872,8 +883,8 @@ def build_feature_outputs(
     d7_quality = _quality_subset(measurements, "d7")
     phi_quality = _quality_subset(measurements, "Phi12_2")
     d7_recovery_pass = (
-        d7_quality.get("candidate_recovery_pass")
-        or d7_quality.get("candidate_fallback_pass")
+        d7_quality.get("candidate_fallback_pass")
+        or d7_quality.get("candidate_recovery_pass")
     )
     phi_recovery_pass = phi_quality.get("candidate_recovery_pass")
     features = {
@@ -1387,6 +1398,223 @@ def _detect_phi12_2(
     }, quality
 
 
+def _d7_multiband_recovery(
+    image: np.ndarray,
+    p1_target: tuple[float, float],
+    p2_target: tuple[float, float],
+    polarities: tuple[float, float],
+    d7_config: dict[str, Any],
+) -> tuple[tuple[tuple[float, float], tuple[float, float]] | None, dict[str, Any]]:
+    """Recover two boundaries from independently fitted parallel scan bands."""
+    dx, dy = p2_target[0] - p1_target[0], p2_target[1] - p1_target[1]
+    length = math.hypot(dx, dy)
+    if length < 5.0:
+        return None, {
+            "candidate_recovery_pass": "multi_parallel_bands",
+            "candidate_multiband_failure": "axis_degenerate",
+            "candidate_multiband_bands": [],
+        }
+    axis = (dx / length, dy / length)
+    tangent = (-axis[1], axis[0])
+    bands: list[dict[str, Any]] = []
+    side_candidates: dict[str, list[dict[str, Any]]] = {"p1": [], "p2": []}
+    for band_offset in [float(value) for value in d7_config["band_offsets_target_px"]]:
+        shift = (band_offset * tangent[0], band_offset * tangent[1])
+        first_origin = (p1_target[0] + shift[0], p1_target[1] + shift[1])
+        second_origin = (p2_target[0] + shift[0], p2_target[1] + shift[1])
+        first_diagnostic: dict[str, Any] = {}
+        second_diagnostic: dict[str, Any] = {}
+        first = detect_dimension_boundary(
+            image, first_origin, second_origin, "p1", polarity=polarities[0],
+            strip_half_width=int(d7_config["band_strip_half_width_px"]),
+            strip_samples=int(d7_config["band_strip_samples"]),
+            min_edge_score=float(d7_config["min_edge_score"]),
+            min_points=int(d7_config["min_boundary_points"]),
+            diagnostics=first_diagnostic,
+        )
+        second = detect_dimension_boundary(
+            image, first_origin, second_origin, "p2", polarity=polarities[1],
+            strip_half_width=int(d7_config["band_strip_half_width_px"]),
+            strip_samples=int(d7_config["band_strip_samples"]),
+            min_edge_score=float(d7_config["min_edge_score"]),
+            min_points=int(d7_config["min_boundary_points"]),
+            diagnostics=second_diagnostic,
+        )
+        band: dict[str, Any] = {
+            "offsetTargetPx": band_offset,
+            "p1Strip": first_diagnostic,
+            "p2Strip": second_diagnostic,
+            "valid": False,
+            "failureReasons": [],
+        }
+        first_center = None if first is None else line_axis_intersection(
+            first.line, p1_target, axis
+        )
+        second_center = None if second is None else line_axis_intersection(
+            second.line, p2_target, axis
+        )
+        for side_name, boundary, center in (
+            ("p1", first, first_center), ("p2", second, second_center)
+        ):
+            if boundary is None or center is None:
+                continue
+            side_candidates[side_name].append({
+                "bandOffsetTargetPx": band_offset,
+                "centerTargetPx": [float(center[0][0]), float(center[0][1])],
+                "axisOffsetTargetPx": float(center[1]),
+                "line": [float(value) for value in boundary.line],
+                "pointCount": int(boundary.point_count),
+                "residualTargetPx": float(boundary.median_residual_px),
+                "edgePeak": float(boundary.median_edge_score),
+            })
+        if first is None or second is None:
+            band["failureReasons"].append("boundary_fit_failed")
+            band["failedSides"] = [
+                side for side, boundary in (("p1", first), ("p2", second))
+                if boundary is None
+            ]
+            bands.append(band)
+            continue
+        if first_center is None or second_center is None:
+            band["failureReasons"].append("central_axis_intersection_failed")
+            bands.append(band)
+            continue
+        parallelism = boundary_parallelism_deg(first.line, second.line)
+        reasons: list[str] = []
+        if min(first.point_count, second.point_count) < int(d7_config["min_boundary_points"]):
+            reasons.append("boundary_points_below_gate")
+        if max(first.median_residual_px, second.median_residual_px) > float(
+            d7_config["max_fit_residual_target_px"]
+        ):
+            reasons.append("fit_residual_above_gate")
+        if min(first.median_edge_score, second.median_edge_score) < float(
+            d7_config["min_edge_score"]
+        ):
+            reasons.append("edge_score_below_gate")
+        if parallelism > float(d7_config["max_boundary_parallelism_deg"]):
+            reasons.append("boundary_parallelism_above_gate")
+        center_first, center_second = first_center[0], second_center[0]
+        band.update({
+            "valid": not reasons,
+            "failureReasons": reasons,
+            "centerP1TargetPx": [float(center_first[0]), float(center_first[1])],
+            "centerP2TargetPx": [float(center_second[0]), float(center_second[1])],
+            "lengthTargetPx": float(math.dist(center_first, center_second)),
+            "parallelismDeg": float(parallelism),
+            "maxResidualTargetPx": float(max(
+                first.median_residual_px, second.median_residual_px
+            )),
+            "minEdgePeak": float(min(first.median_edge_score, second.median_edge_score)),
+            "minPointCount": int(min(first.point_count, second.point_count)),
+        })
+        bands.append(band)
+
+    valid = [band for band in bands if band["valid"]]
+    minimum_bands = int(d7_config["min_consistent_bands"])
+    quality: dict[str, Any] = {
+        "candidate_recovery_pass": "multi_parallel_bands",
+        "candidate_multiband_bands": bands,
+        "candidate_multiband_valid_count": len(valid),
+        "candidate_multiband_inlier_count": 0,
+        "candidate_multiband_failure": None,
+    }
+
+    def aggregate_independent_sides() -> tuple[
+        tuple[tuple[float, float], tuple[float, float]] | None, dict[str, Any]
+    ]:
+        aggregates: dict[str, dict[str, Any]] = {}
+        gate = float(d7_config["max_cross_band_length_deviation_px"])
+        for side_name in ("p1", "p2"):
+            candidates = side_candidates[side_name]
+            quality[f"candidate_multiband_{side_name}_candidate_count"] = len(candidates)
+            if len(candidates) < minimum_bands:
+                quality["candidate_multiband_failure"] = f"{side_name}_bands_below_gate"
+                return None, quality
+            median_offset = float(np.median([
+                candidate["axisOffsetTargetPx"] for candidate in candidates
+            ]))
+            inlier_candidates = [
+                candidate for candidate in candidates
+                if abs(candidate["axisOffsetTargetPx"] - median_offset) <= gate
+            ]
+            quality[f"candidate_multiband_{side_name}_inlier_count"] = len(inlier_candidates)
+            quality[f"candidate_multiband_{side_name}_median_axis_offset_target_px"] = median_offset
+            if len(inlier_candidates) < minimum_bands:
+                quality["candidate_multiband_failure"] = f"{side_name}_consistency_below_gate"
+                return None, quality
+            points = np.asarray([
+                candidate["centerTargetPx"] for candidate in inlier_candidates
+            ], dtype=np.float64)
+            representative = min(
+                inlier_candidates,
+                key=lambda candidate: abs(candidate["axisOffsetTargetPx"] - median_offset),
+            )
+            aggregates[side_name] = {
+                "point": tuple(float(value) for value in np.median(points, axis=0)),
+                "line": tuple(representative["line"]),
+                "inliers": inlier_candidates,
+            }
+        parallelism = boundary_parallelism_deg(
+            aggregates["p1"]["line"], aggregates["p2"]["line"]
+        )
+        quality["candidate_multiband_independent_parallelism_deg"] = float(parallelism)
+        if parallelism > float(d7_config["max_boundary_parallelism_deg"]):
+            quality["candidate_multiband_failure"] = "independent_parallelism_above_gate"
+            return None, quality
+        all_inliers = aggregates["p1"]["inliers"] + aggregates["p2"]["inliers"]
+        quality["candidate_multiband_independent_residual_max_target_px"] = float(max(
+            candidate["residualTargetPx"] for candidate in all_inliers
+        ))
+        quality["candidate_multiband_independent_edge_peak_min"] = float(min(
+            candidate["edgePeak"] for candidate in all_inliers
+        ))
+        quality["candidate_multiband_inlier_count"] = min(
+            len(aggregates["p1"]["inliers"]), len(aggregates["p2"]["inliers"])
+        )
+        quality["candidate_multiband_aggregation"] = "independent_side_median"
+        quality["candidate_multiband_failure"] = None
+        return (aggregates["p1"]["point"], aggregates["p2"]["point"]), quality
+
+    if len(valid) < minimum_bands:
+        quality["candidate_multiband_failure"] = "valid_paired_bands_below_gate"
+        return aggregate_independent_sides()
+    lengths = np.asarray([band["lengthTargetPx"] for band in valid], dtype=np.float64)
+    median_length = float(np.median(lengths))
+    deviation_gate = float(d7_config["max_cross_band_length_deviation_px"])
+    inliers = [
+        band for band in valid
+        if abs(float(band["lengthTargetPx"]) - median_length) <= deviation_gate
+    ]
+    quality["candidate_multiband_median_length_target_px"] = median_length
+    quality["candidate_multiband_max_length_deviation_target_px"] = float(
+        max(abs(float(band["lengthTargetPx"]) - median_length) for band in valid)
+    )
+    quality["candidate_multiband_inlier_count"] = len(inliers)
+    if len(inliers) < minimum_bands:
+        quality["candidate_multiband_failure"] = "consistent_paired_bands_below_gate"
+        return aggregate_independent_sides()
+    first_points = np.asarray([band["centerP1TargetPx"] for band in inliers], dtype=np.float64)
+    second_points = np.asarray([band["centerP2TargetPx"] for band in inliers], dtype=np.float64)
+    aggregated_first = tuple(float(value) for value in np.median(first_points, axis=0))
+    aggregated_second = tuple(float(value) for value in np.median(second_points, axis=0))
+    quality.update({
+        "candidate_multiband_aggregation": "paired_band_median",
+        "candidate_multiband_parallelism_max_deg": float(max(
+            band["parallelismDeg"] for band in inliers
+        )),
+        "candidate_multiband_residual_max_target_px": float(max(
+            band["maxResidualTargetPx"] for band in inliers
+        )),
+        "candidate_multiband_edge_peak_min": float(min(
+            band["minEdgePeak"] for band in inliers
+        )),
+        "candidate_multiband_length_target_px": float(math.dist(
+            aggregated_first, aggregated_second
+        )),
+    })
+    return (aggregated_first, aggregated_second), quality
+
+
 def _detect_d7_tangent(
     target: np.ndarray,
     reference: ReferenceModel,
@@ -1467,19 +1695,39 @@ def _detect_d7_tangent(
         image, p1_shifted, p2_shifted, "p2", polarity=polarities[1],
         diagnostics=second_diagnostic,
     )
+
+    def recover_multiband(
+        primary_quality: dict[str, Any],
+    ) -> tuple[dict[str, float] | None, dict[str, Any]]:
+        recovered, recovery_quality = _d7_multiband_recovery(
+            image, p1_shifted, p2_shifted, polarities, d7_config
+        )
+        combined = {**primary_quality, **recovery_quality}
+        if recovered is None:
+            return None, combined
+        recovered_first, recovered_second = recovered
+        ref_first = transform.inverse(*recovered_first)
+        ref_second = transform.inverse(*recovered_second)
+        combined["candidate_failure"] = None
+        return {
+            "d7_x1": ref_first[0], "d7_y1": ref_first[1],
+            "d7_x2": ref_second[0], "d7_y2": ref_second[1],
+            "d7_length": math.dist(ref_first, ref_second),
+        }, combined
+
     if first is None or second is None:
         failed_sides = [
             side for side, boundary in (("p1", first), ("p2", second))
             if boundary is None
         ]
-        return None, {
+        return recover_multiband({
             "candidate_failure": "tangent_boundary_fit_failed",
             "candidate_reference_tangent_error_px": tangent_error_ref,
             "candidate_axis_shift_target_px": axis_shift,
             "candidate_failed_sides": failed_sides,
             "candidate_p1_strip": first_diagnostic,
             "candidate_p2_strip": second_diagnostic,
-        }
+        })
     parallelism = boundary_parallelism_deg(first.line, second.line)
     reasons: list[str] = []
     if min(first.point_count, second.point_count) < int(d7_config["min_boundary_points"]):
@@ -1492,6 +1740,7 @@ def _detect_d7_tangent(
         reasons.append("boundary_parallelism_above_gate")
     quality = {
         "candidate_failure": None if not reasons else ",".join(reasons),
+        "candidate_recovery_pass": None,
         "candidate_reference_tangent_error_px": tangent_error_ref,
         "candidate_axis_shift_target_px": axis_shift,
         "candidate_p1_edge_points": float(first.point_count),
@@ -1506,7 +1755,7 @@ def _detect_d7_tangent(
         "candidate_p2_strip": second_diagnostic,
     }
     if reasons:
-        return None, quality
+        return recover_multiband(quality)
     ref_first = transform.inverse(*first.feature_point)
     ref_second = transform.inverse(*second.feature_point)
     return {
@@ -1682,6 +1931,11 @@ def run_current_capture(
             d7_values, d7_quality = _detect_d7_tangent(
                 target, reference, transform, phi_values, config
             )
+            if (
+                d7_values is not None
+                and d7_quality.get("candidate_recovery_pass") == "multi_parallel_bands"
+            ):
+                d7_source = "hole2-v6-current-capture-multi-parallel-bands"
             if d7_values is None:
                 d7_values, d7_quality = _v6_d7_fallback(raw_measurements, d7_quality)
                 if d7_values is not None:
