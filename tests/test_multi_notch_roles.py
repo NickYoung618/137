@@ -37,6 +37,12 @@ class MultiNotchRoleIntegrationTests(unittest.TestCase):
                 self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
                 self.assertEqual("DATUM_DEFINITION_UNCONFIRMED", payload["error"]["code"])
                 assignment = payload["diagnostics"]["roleAssignment"]
+                physical = payload["diagnostics"]["physicalOuterCircle"]
+                self.assertEqual("accepted", physical["status"])
+                self.assertNotEqual(
+                    physical["alignmentCircle"]["radiusPx"],
+                    physical["physicalCircle"]["radiusPx"],
+                )
                 self.assertTrue(assignment["unique"], payload)
                 groove_ids = {item["candidateId"] for item in payload["diagnostics"]["grooveCandidates"]}
                 self.assertTrue(set(assignment["selectedRoleCandidateIds"].values()).issubset(groove_ids))

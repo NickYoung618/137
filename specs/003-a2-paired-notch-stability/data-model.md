@@ -1,5 +1,11 @@
 # Data Model: A2多槽候选、角色几何与真实数据验收
 
+## AlignmentCircle / PhysicalOuterCircle
+
+`AlignmentCircle`是历史全局配准输出的搜索先验，不表示壳体物理边界。`PhysicalOuterCircle`
+记录金属—背景最外跃迁点的稳健拟合圆及边界点数、内点数/比率、角覆盖率、P95残差、
+圆心偏移、半径比、阈值版本和失败项。只有`status=accepted`时才能进入`AngularProfile`。
+
 ## AngularProfile
 
 | Field | Type | Rule |
@@ -125,6 +131,6 @@ false-positive数/率、错误码和耗时，不含伪造的0度。
 
 ## State Transitions
 
-`received → face_located → profile_extracted → raw_candidates_extracted → grooves_recognized → roles_assessed → diagnostic_ready`。
+`received → alignment_circle_located → physical_outer_circle_refined → profile_extracted → raw_candidates_extracted → grooves_recognized → roles_assessed → diagnostic_ready`。
 任一阶段可进入`failed`终态。只有`diagnostic_ready`且目标语义、机械约定、质量门和角范围全部通过，
 才允许`pose_computed → succeeded`；否则仍以无角失败终止。

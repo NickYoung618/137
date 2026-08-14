@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "a2-physical-outer-circle-diagnostic/1",
+  "createdAt": "2026-08-14",
+  "algorithmVersion": "0.6.0",
+  "supersedes": "a2-first-25-groove-recognition-summary.json",
+  "input": {
+    "imageCount": 25,
+    "decodedAt5472x3648": 25,
+    "providedAndVerifiedDirectoryContentSha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "format": "JPEG diagnostic copy",
+    "originalBmpTruthAvailable": false
+  },
+  "semanticCorrection": {
+    "historicalCircle": "alignment prior only",
+    "refinedCircle": "physical housing outer-circle diagnostic",
+    "grooveGeometryMayUseHistoricalCircleDirectly": false,
+    "oldGrooveFindingsRetracted": true
+  },
+  "physicalOuterCircleRun": {
+    "acceptedCount": 25,
+    "failedCount": 0,
+    "inlierRatioRange": [0.9566666666666667, 0.9632107023411371],
+    "angularCoverageRange": [0.8611111111111112, 0.8888888888888888],
+    "residualP95PxRange": [1.256360933542874, 1.5919564377171014],
+    "centerShiftPxRange": [17.973322250982275, 19.983695023307682],
+    "radiusRatioToAlignmentRange": [1.0132824340406261, 1.0148809405115014],
+    "physicalCenterXRange": [2811.000603139806, 2812.5785320327004],
+    "physicalCenterYRange": [1835.877986724165, 1836.525730629337],
+    "physicalRadiusPxRange": [1647.8085622174801, 1649.1068175619541]
+  },
+  "downstreamDiagnostic": {
+    "rawCandidateCountDistribution": {"3": 25},
+    "acceptedGrooveCountDistribution": {"1": 25},
+    "errorCodeCounts": {"GROOVE_RECOGNITION_FAILED": 25},
+    "formalValidCount": 0,
+    "nonNullSignedRelativeRotationCount": 0,
+    "elapsedMs": {
+      "p50": 3375.341756036505,
+      "p95": 3469.829560024664,
+      "max": 3902.4416799657047
+    }
+  },
+  "visualAudit": {
+    "alignmentCircleStyle": "dashed orange",
+    "physicalOuterCircleStyle": "solid cyan",
+    "finding": "The solid cyan circle follows the unobstructed nominal outer housing boundary; the right fixture and top openings are treated as non-consensus arcs rather than circle support.",
+    "status": "DEVELOPMENT_EVIDENCE_ONLY"
+  },
+  "proven": [
+    "The historical alignment circle and physical outer circle are materially different on these 25 JPEG diagnostics.",
+    "The physical outer-circle fit passes its configured geometric quality gates in all 25 frames.",
+    "Candidate extraction and groove recognition now consume the accepted physical circle rather than the alignment radius.",
+    "All 25 frames remain fail-closed because only one groove candidate passes the development gate while two roles are configured."
+  ],
+  "notProven": [
+    "A passing circle fit does not prove which dark opening is the drawing datum or target groove.",
+    "The one accepted groove remains a non-authoritative development suggestion until field labeling.",
+    "JPEG copies do not establish original-BMP angular accuracy or acceptance performance.",
+    "The physical-circle thresholds are not production-frozen from only one repeated scene."
+  ],
+  "externalArtifactSha256": {
+    "resultsJsonl": "3ce7605317820df59e95ab981f72d70465048bdc75edfde2a77ebfe46288d22c",
+    "reviewJson": "a9d909ef2a8dc815813f5734d57de7989b6efa606e5326b9f7b37b62160e18ed",
+    "candidatesCsv": "5cf5517680974d0348f42c25f643c41b22771d046f0fff676dddd0e5da228e17",
+    "failuresCsv": "ed2d5a67b860bc26bb8d76735f6550a7d8f274e6472c01e9cc8b2cd359696540",
+    "contactSheetJpeg": "afe18ae5947abb9b0dc4022cf9cb6414e45c354498290e8a7518236abc2c01d4"
+  },
+  "productionStatus": "BLOCKED_GROOVE_LABEL_DATUM_ROLE_AND_ORIGINAL_BMP_TRUTH"
+}

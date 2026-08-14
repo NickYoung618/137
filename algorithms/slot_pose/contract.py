@@ -14,7 +14,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.5.0"
+ALGORITHM_VERSION = "0.6.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -28,6 +28,7 @@ ERROR_CODES = {
     "ROLE_ASSIGNMENT_AMBIGUOUS",
     "GROOVE_RECOGNITION_FAILED",
     "GROOVE_RECOGNITION_AMBIGUOUS",
+    "PHYSICAL_OUTER_CIRCLE_FAILED",
     "RING_TRUNCATED",
     "QUALITY_REJECTED",
     "TARGET_SEMANTICS_UNCONFIRMED",
@@ -96,12 +97,16 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if mode == "multi_notch_roles":
         from algorithms.slot_pose.angular_profile import validate_profile_config
         from algorithms.slot_pose.groove_recognition import merged_groove_config
+        from algorithms.slot_pose.physical_outer_circle import merged_physical_outer_circle_config
         from algorithms.slot_pose.role_assignment import validate_role_config
 
         if not isinstance(detector.get("profile"), dict) or not isinstance(detector.get("role_assignment"), dict):
             raise ValueError("multi-role mode requires detector.profile and detector.role_assignment objects")
         validate_profile_config(detector["profile"])
         detector["groove_recognition"] = merged_groove_config(detector.get("groove_recognition"))
+        detector["physical_outer_circle"] = merged_physical_outer_circle_config(
+            detector.get("physical_outer_circle")
+        )
         validate_role_config(detector["role_assignment"])
     return config
 

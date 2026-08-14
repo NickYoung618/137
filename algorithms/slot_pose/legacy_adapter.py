@@ -16,6 +16,7 @@ import numpy as np
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 from algorithms.slot_pose.groove_recognition import recognize_grooves
+from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
 from algorithms.slot_pose.role_assignment import assign_roles
 
 
@@ -387,15 +388,31 @@ class LegacyAEndFaceAdapter:
                     diagnostics,
                 )
         elif mode == "multi_notch_roles":
+            physical_outer = locate_physical_outer_circle(
+                target_gray, center, outer_radius, self.module.polar_resample,
+                self.module.robust_fit_circle, detector.get("physical_outer_circle"), pixel_scale=scale,
+            )
+            diagnostics["physicalOuterCircle"] = physical_outer
+            if physical_outer["status"] != "accepted":
+                raise LegacyAdapterError(
+                    "PHYSICAL_OUTER_CIRCLE_FAILED", "physical_outer_circle",
+                    f"physical outer circle failed: {physical_outer['failedChecks']}", diagnostics,
+                )
+            physical = physical_outer["physicalCircle"]
+            assert physical is not None
+            groove_center = (float(physical["centerX"]), float(physical["centerY"]))
+            groove_outer_radius = float(physical["radiusPx"])
             try:
-                target_roles = self._candidate_profile(target_gray, center, outer_radius, scale, "target")
+                target_roles = self._candidate_profile(
+                    target_gray, groove_center, groove_outer_radius, scale, "target physical outer circle",
+                )
             except LegacyAdapterError as exc:
                 diagnostics.update(exc.diagnostics)
                 exc.diagnostics = diagnostics
                 raise
             minimum_required = len(detector["role_assignment"]["assignments"])
             recognition, groove_candidates = self._recognize_target_grooves(
-                target_gray, center, outer_radius, scale, target_roles["candidates"], minimum_required,
+                target_gray, groove_center, groove_outer_radius, scale, target_roles["candidates"], minimum_required,
             )
             diagnostics.update({
                 "angularProfile": target_roles["angularProfile"],

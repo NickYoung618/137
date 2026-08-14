@@ -1,5 +1,7 @@
 {
   "schemaVersion": "a2-groove-recognition-diagnostic/1",
+  "status": "SUPERSEDED_INVALID_GEOMETRIC_BASIS",
+  "supersededReason": "The historical alignment circle was incorrectly rendered and consumed as the physical housing outer boundary. Candidate and groove conclusions in this file are retracted pending rerun with a separately fitted physical outer circle.",
   "createdAt": "2026-08-14",
   "algorithmVersion": "0.5.0",
   "input": {
@@ -74,7 +76,7 @@
   ],
   "visualAudit": {
     "contactSheetFinding": "The accepted ray coincides with the visually clear rectangular outer-edge opening in all three observed image states. The two rejected rays remain on the right-side adjacent fixture/occlusion contact region.",
-    "status": "DEVELOPMENT_EVIDENCE_ONLY",
+    "status": "RETRACTED_PENDING_PHYSICAL_OUTER_CIRCLE_RERUN",
     "provesDrawingRoleMapping": false,
     "provesGrooveGroundTruth": false
   },
@@ -85,6 +87,7 @@
     "Because the configured datum/target roles require at least two grooves, all 25 frames fail before role assignment with a null formal angle."
   ],
   "notProven": [
+    "All earlier groove acceptance/rejection findings used the historical alignment radius rather than a validated physical outer boundary and are therefore retracted.",
     "The accepted candidate is not yet an authoritative drawing datum or target groove.",
     "The rejected candidates are not ground-truth-labeled fixture regions.",
     "The development width-consistency threshold is not frozen for production.",

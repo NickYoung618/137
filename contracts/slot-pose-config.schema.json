@@ -100,6 +100,29 @@
             "ambiguity_margin": {"type": "number", "minimum": 0, "maximum": 1}
           }
         },
+        "physical_outer_circle": {
+          "type": "object",
+          "required": ["threshold_version", "n_angles", "n_radii", "inner_search_offset_px", "outer_search_offset_px", "edge_window_px", "edge_gap_px", "min_edge_contrast", "min_inner_intensity", "inlier_residual_px", "min_inlier_ratio", "angular_bin_count", "min_angular_coverage", "max_residual_p95_px", "max_center_shift_px", "min_radius_ratio", "max_radius_ratio"],
+          "properties": {
+            "threshold_version": {"type": "string", "minLength": 1},
+            "n_angles": {"type": "integer", "minimum": 36},
+            "n_radii": {"type": "integer", "minimum": 21},
+            "inner_search_offset_px": {"type": "number"},
+            "outer_search_offset_px": {"type": "number"},
+            "edge_window_px": {"type": "integer", "minimum": 1},
+            "edge_gap_px": {"type": "integer", "minimum": 1},
+            "min_edge_contrast": {"type": "number", "exclusiveMinimum": 0},
+            "min_inner_intensity": {"type": "number", "exclusiveMinimum": 0},
+            "inlier_residual_px": {"type": "number", "exclusiveMinimum": 0},
+            "min_inlier_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "angular_bin_count": {"type": "integer", "minimum": 4},
+            "min_angular_coverage": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "max_residual_p95_px": {"type": "number", "exclusiveMinimum": 0},
+            "max_center_shift_px": {"type": "number", "exclusiveMinimum": 0},
+            "min_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
+            "max_radius_ratio": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
         "pairing": {
           "type": "object",
           "required": ["min_candidates", "max_candidates", "min_separation_deg", "max_separation_deg", "expected_separation_deg", "min_width_ratio", "min_prominence_ratio", "min_pair_score", "min_score_margin"],
@@ -148,7 +171,7 @@
   "allOf": [
     {
       "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "multi_notch_roles"}}}}},
-      "then": {"properties": {"detector": {"required": ["profile", "role_assignment"]}}}
+      "then": {"properties": {"detector": {"required": ["profile", "physical_outer_circle", "role_assignment"]}}}
     }
   ]
 }

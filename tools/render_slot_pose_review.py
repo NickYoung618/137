@@ -129,6 +129,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
             "errorStage": (result.get("error") or {}).get("stage"),
         },
         "face": diagnostics.get("face"),
+        "physicalOuterCircle": diagnostics.get("physicalOuterCircle"),
         "candidateSummary": diagnostics.get("candidateSummary"),
         "candidates": raw_candidates,
         "rawCandidates": raw_candidates,
@@ -171,10 +172,18 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
         center = float(face["centerX"]), float(face["centerY"])
         radius = float(face["radiusPx"])
         width = max(5, image.width // 900)
-        draw.ellipse(
-            (center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius),
-            outline="#ff9f43", width=width,
-        )
+        bounds = (center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius)
+        for start in range(0, 360, 12):
+            draw.arc(bounds, start=start, end=start + 6, fill="#ff9f43", width=width)
+        physical_diagnostics = record.get("physicalOuterCircle") or {}
+        physical = physical_diagnostics.get("physicalCircle") if physical_diagnostics.get("status") == "accepted" else None
+        if physical and all(isinstance(physical.get(key), (int, float)) for key in ("centerX", "centerY", "radiusPx")):
+            center = float(physical["centerX"]), float(physical["centerY"])
+            radius = float(physical["radiusPx"])
+            draw.ellipse(
+                (center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius),
+                outline="#35c7ff", width=width,
+            )
         selected = (record.get("roleSuggestion") or {}).get("selectedRoleCandidateIds") or {}
         role_by_candidate = {candidate_id: role for role, candidate_id in selected.items()}
         assessments = {

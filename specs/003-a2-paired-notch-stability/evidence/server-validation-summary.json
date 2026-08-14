@@ -90,5 +90,23 @@
       "fullNormalAndBadSetsAvailable": false
     }
   },
-  "productionStatus": "BLOCKED_B001_B008"
+  "productionStatus": "BLOCKED_B001_B008",
+  "physicalOuterCircleCorrection": {
+    "unitTests": {"run": 57, "passed": 57, "skipped": 0},
+    "legacySweep72": {
+      "valid": 72,
+      "total": 72,
+      "maeDeg": 0.1561191377641921,
+      "p95Deg": 0.30187302208952926,
+      "maxDeg": 0.3498688679892439
+    },
+    "realA2Jpeg25": {
+      "physicalOuterCircleAccepted": 25,
+      "physicalOuterCircleFailed": 0,
+      "grooveRecognitionFailed": 25,
+      "formalMechanicalValid": 0,
+      "signedRelativeRotationDegAlwaysNull": true
+    },
+    "note": "The earlier groove summary is superseded because it consumed the historical alignment circle as if it were the physical boundary. Corrected diagnostics fit and gate a separate physical outer circle first."
+  }
 }

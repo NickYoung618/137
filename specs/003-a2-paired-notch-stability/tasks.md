@@ -200,3 +200,13 @@
 - [x] T062 [US1] Extend synthetic multi-notch fixtures and review artifacts to distinguish raw/rejected/accepted candidates with groove evidence in `tools/generate_synthetic_multi_notches.py`, `tools/render_slot_pose_review.py` and focused tests per FR-031/SC-013
 - [x] T063 Run the 25-frame external JPEG development diagnostic with the new single-frame gate, visually audit the contact sheet without assigning authoritative roles, and record only path-free aggregate evidence in `specs/003-a2-paired-notch-stability/evidence/` per FR-024/FR-034/SC-009
 - [x] T064 Re-run full unit, legacy and paired regressions plus schema/CLI/batch/pollution checks, then document the remaining original-BMP and field-label blockers per SC-001..SC-006/SC-009
+
+---
+
+## Phase 12: Physical Outer-Circle Correction
+
+- [x] T065 [US1] Retract the alignment-radius-as-physical-boundary assumption in spec, plan, model and prior 25-frame evidence per FR-035
+- [x] T066 [US1] Add test-first robust physical outer-circle refinement with offset prior, notch, fixture occlusion and missing-edge cases per FR-036/SC-014
+- [x] T067 [US2] Gate multi-role candidate extraction on physical-circle quality and add the stable `PHYSICAL_OUTER_CIRCLE_FAILED` contract/config path
+- [x] T068 [US1] Render alignment and physical circles distinctly, rerun the 25-frame external diagnostic, and visually inspect the corrected overlays
+- [x] T069 Run full regression, schema, pollution and diff checks; record bounded corrected evidence without media or absolute paths

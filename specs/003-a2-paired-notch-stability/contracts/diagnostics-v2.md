@@ -7,6 +7,11 @@ fields are unchanged. Consumers may ignore all fields below.
 diagnostics.diagnosticMode: legacy_single_notch | paired_notches_centerline | multi_notch_roles
 diagnostics.targetSemanticsConfirmed: boolean
 diagnostics.face.searchRoiNormalized: [x_min, y_min, x_max, y_max] | null
+diagnostics.physicalOuterCircle: {
+  status, thresholdVersion, alignmentCircle, physicalCircle,
+  edgePointCount, inlierCount, inlierRatio, angularCoverage,
+  residualP95Px, centerShiftPx, radiusRatioToAlignment, failedChecks
+}
 diagnostics.angularProfile: {
   sampleCount, radialSampleCount, shellInnerRadiusPx, shellOuterRadiusPx,
   medianIntensity, madIntensity, darkThreshold, completeRing
@@ -64,3 +69,6 @@ Diagnostic angles are image-frame observations and are never implicit machine co
 
 `diagnostics.candidates`作为旧诊断别名仍保留原始暗区；新消费者必须区分`rawCandidates`与
 `grooveCandidates`。`multi_notch_roles`的角色分配只允许引用`grooveCandidates`。
+
+`diagnostics.face.radiusPx`是历史配准半径，不是物理外圆。`multi_notch_roles`必须先获得
+`physicalOuterCircle.status=accepted`，才能用`physicalCircle`提取原始候选和评估凹入。
