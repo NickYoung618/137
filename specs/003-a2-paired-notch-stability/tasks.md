@@ -210,3 +210,14 @@
 - [x] T067 [US2] Gate multi-role candidate extraction on physical-circle quality and add the stable `PHYSICAL_OUTER_CIRCLE_FAILED` contract/config path
 - [x] T068 [US1] Render alignment and physical circles distinctly, rerun the 25-frame external diagnostic, and visually inspect the corrected overlays
 - [x] T069 Run full regression, schema, pollution and diff checks; record bounded corrected evidence without media or absolute paths
+
+---
+
+## Phase 13: Reuse gyj Physical-Circle Core
+
+- [x] T070 [US1] Add tests proving the physical-circle stage delegates every radial edge decision and robust fit to the locked gyj source inventory
+- [x] T071 [US1] Replace the parallel polar-threshold outer-circle implementation with gyj `outer_boundary_edge_point` + `robust_fit_circle`, retaining slot-specific coverage/residual gates
+- [x] T072 [US2] Emit source function/hash provenance and preserve `PHYSICAL_OUTER_CIRCLE_FAILED` before all groove stages
+- [x] T073 Run the 25-frame external JPEG diagnostic, generate overlays/contact sheet, and compare within-group/cross-group circle stability against the superseded implementation
+- [x] T074 Run full, legacy72, schema and pollution regression, record bounded evidence, and commit locally without push/merge
+- [x] T075 Add a path-safe, independently reviewed LabelMe manual-circle truth contract/exporter and focused tests

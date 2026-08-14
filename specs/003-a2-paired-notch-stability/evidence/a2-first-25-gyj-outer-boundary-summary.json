@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "a2-gyj-outer-boundary-diagnostic/1",
+  "createdAt": "2026-08-14",
+  "algorithmVersion": "0.7.0",
+  "supersedes": "a2-first-25-physical-outer-circle-summary.json",
+  "input": {
+    "imageCount": 25,
+    "decodedAt5472x3648": 25,
+    "providedAndVerifiedDirectoryContentSha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "format": "JPEG diagnostic copy",
+    "originalBmpLabelMeTruthAvailable": false
+  },
+  "lockedSource": {
+    "sourceInventory": "read-only gyj A-end-face module",
+    "sourceSha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
+    "delegatedFunctions": ["outer_boundary_edge_point", "robust_fit_circle"],
+    "slotSpecificAdditions": [
+      "edge point count",
+      "angular coverage",
+      "inlier ratio",
+      "residual P95",
+      "center shift",
+      "search-prior radius ratio"
+    ]
+  },
+  "physicalOuterCircleRun": {
+    "acceptedCount": 25,
+    "failedCount": 0,
+    "edgePointCountMinMedianMax": [628, 630, 632],
+    "inlierRatioMinMedianMax": [0.8971518987341772, 0.9015873015873016, 0.9044585987261147],
+    "angularCoverageMinMedianMax": [0.8333333333333334, 0.8333333333333334, 0.8888888888888888],
+    "residualP95PxMinMedianP95Max": [2.331416604057926, 4.80144262550103, 4.917842648185437, 5.019844575874101],
+    "centerShiftPxMinMedianMax": [18.245058822361713, 18.637855012372352, 21.429097184485666],
+    "radiusRatioToAlignmentMinMedianMax": [1.011274490977292, 1.0114016320028365, 1.013894928495894],
+    "physicalCenterXRange": [2810.6600454133195, 2812.181556498004],
+    "physicalCenterYRange": [1835.8966998274473, 1837.0109773001143],
+    "physicalRadiusPxRange": [1644.6614547408528, 1647.5046206221668]
+  },
+  "temporarySequenceGroupRepeatability": {
+    "warning": "Groups use visible capture filename suffixes only for development diagnostics; they are not accepted condition or truth labels.",
+    "suffix1To20": {
+      "count": 20,
+      "meanRadiusPx": 1644.7208574906076,
+      "radiusRangePx": 0.08774830143033796
+    },
+    "suffix21To23": {
+      "count": 3,
+      "meanRadiusPx": 1645.2083276095368,
+      "radiusRangePx": 0.03437439501681183
+    },
+    "suffix499To500": {
+      "count": 2,
+      "meanRadiusPx": 1647.4606749797758,
+      "radiusRangePx": 0.08789128478179009
+    },
+    "crossGroupMeanRadiusRangePx": 2.7398174891682174
+  },
+  "comparisonToSupersededParallelImplementation": {
+    "gyjMinusOldRadiusPxMinMedianMax": [-3.280696012431008, -3.18917049137508, -1.6021969397872908],
+    "centerDistancePxMinMedianMax": [0.5584834118702777, 0.6286261406913066, 0.7014104996515332],
+    "interpretation": "The implementations disagree systematically; without independent LabelMe truth, agreement, disagreement, or visual similarity cannot establish absolute accuracy."
+  },
+  "downstreamDiagnostic": {
+    "rawCandidateCountDistribution": {"3": 25},
+    "acceptedGrooveCountDistribution": {"1": 25},
+    "errorCodeCounts": {"GROOVE_RECOGNITION_FAILED": 25},
+    "formalValidCount": 0,
+    "nonNullSignedRelativeRotationCount": 0,
+    "elapsedMs": {
+      "p50": 3740.3422240167856,
+      "p95": 4814.81442716904,
+      "max": 4929.048400139436
+    }
+  },
+  "manualTruthGate": {
+    "requiredTool": "LabelMe",
+    "requiredImageFormat": "original BMP",
+    "requiredLabel": "physical_outer_circle_truth",
+    "independentAnnotatorAndReviewer": true,
+    "algorithmOutputMayBecomeTruth": false,
+    "twoPointCircleIsMetrologyCalibration": false
+  },
+  "visualAudit": {
+    "alignmentCircleStyle": "dashed orange",
+    "gyjPhysicalCircleStyle": "solid cyan",
+    "finding": "The cyan circle follows the visible nominal outer housing boundary consistently across the contact sheet; this is visual development evidence, not accuracy truth.",
+    "status": "DEVELOPMENT_EVIDENCE_ONLY"
+  },
+  "proven": [
+    "The 25 JPEG diagnostic copies all produced a quality-gated gyj physical-circle result.",
+    "Within each temporary same-scene suffix group, the fitted radius range is below 0.09 px.",
+    "All 25 frames remain fail-closed because only one groove candidate passes while two roles are configured.",
+    "No formal angle or zero fallback was emitted."
+  ],
+  "notProven": [
+    "No absolute center or radius accuracy is proven without independently reviewed LabelMe truth on original BMP images.",
+    "The 2.74 px cross-group mean-radius change cannot be classified as algorithm drift or physical scene change without truth and capture records.",
+    "The accepted groove is not an authoritative datum or target role.",
+    "JPEG diagnostic copies do not establish original-BMP angular acceptance performance."
+  ],
+  "externalArtifactSha256": {
+    "resultsJsonl": "449461380b363d456e24aaedffd44a565c8875d1eda262e4064ecbf6746b4dcb",
+    "reviewJson": "da88075019c59c628fb334e73bfa203ea17d30b8275b33a4a7f23bbfd206fd90",
+    "candidatesCsv": "ca9c4925e3121ed757b69fc1194307b97c2eb9042ba0712995cb1cf81accfc3d",
+    "failuresCsv": "ed2d5a67b860bc26bb8d76735f6550a7d8f274e6472c01e9cc8b2cd359696540",
+    "contactSheetJpeg": "1ffea46173bf41fa2511a2834e22535edb05cbcb1fd3de8c2ef49da5d6d3f8ae"
+  },
+  "productionStatus": "BLOCKED_LABELME_CIRCLE_TRUTH_GROOVE_ROLES_AND_MECHANICAL_CONTRACT"
+}

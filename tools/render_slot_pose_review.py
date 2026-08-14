@@ -204,8 +204,12 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
     error = record["result"].get("errorCode") or "NONE"
     count = len(record.get("candidates") or [])
     groove_count = len(record.get("grooveCandidates") or [])
-    draw.rectangle((0, 0, min(image.width, 1700), max(72, image.height // 24)), fill="#111111")
+    draw.rectangle((0, 0, min(image.width, 2400), max(110, image.height // 18)), fill="#111111")
     draw.text((18, 12), f"{record['imageId']}  raw={count} grooves={groove_count}  error={error}", fill="white", font=font)
+    draw.text(
+        (18, 56), "orange dashed=alignment prior; cyan solid=gyj physical-circle result",
+        fill="white", font=font,
+    )
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path, quality=90)

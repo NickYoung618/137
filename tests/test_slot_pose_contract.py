@@ -135,7 +135,7 @@ class SlotPoseContractTests(unittest.TestCase):
             loaded = load_config(path)
             self.assertEqual("groove-geometry-v1", loaded["detector"]["groove_recognition"]["threshold_version"])
             self.assertEqual(
-                "physical-outer-circle-v1",
+                "gyj-outer-boundary+slot-quality-v2",
                 loaded["detector"]["physical_outer_circle"]["threshold_version"],
             )
             config["detector"]["groove_recognition"] = {"min_radial_depth_ratio": 2.0}

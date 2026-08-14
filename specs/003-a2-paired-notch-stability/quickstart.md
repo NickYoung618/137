@@ -90,3 +90,19 @@ uv run python tools/summarize_slot_pose_diagnostics.py \
 
 B-006图纸datum、B-007输出用途、B-008 A2特征映射及B-001至B-005未关闭时，
 报告可提供诊断统计，但所有正式引导角仍为空，不接入PLC。
+
+## 6. 用LabelMe制作物理外圆标准答案
+
+在原始BMP上人工创建一个`circle`，标签必须为`physical_outer_circle_truth`；不要把算法圆
+复制成标注。标注完成后在LabelMe JSON的根级`flags`中设置
+`human_verified=true`和`independent_from_algorithm=true`，再由另一人复核：
+
+```bash
+uv run python tools/build_labelme_circle_truth.py \
+  --annotation "$LABELME_JSON" --image-root "$A2_BMP_ROOT" \
+  --annotator "$ANNOTATOR" --reviewer "$REVIEWER" \
+  --truth-version a2-circle-v1 --output "$CIRCLE_TRUTH_JSON"
+```
+
+输出只保存受控相对路径和哈希。JPEG诊断副本上的重复性不是绝对精度；圆心/半径精度比较必须回到这份
+原始BMP人工truth。

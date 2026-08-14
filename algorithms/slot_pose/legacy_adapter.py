@@ -22,6 +22,7 @@ from algorithms.slot_pose.role_assignment import assign_roles
 
 REQUIRED_FUNCTIONS = (
     "robust_fit_circle",
+    "outer_boundary_edge_point",
     "object_bbox_center",
     "polar_resample",
     "find_outer_notch_angle",
@@ -388,9 +389,31 @@ class LegacyAEndFaceAdapter:
                     diagnostics,
                 )
         elif mode == "multi_notch_roles":
+            outer_model = next(
+                (
+                    model for model in self.reference_model.shapes
+                    if model.label == self.reference_model.outer_label and model.circle is not None
+                ),
+                None,
+            )
+            if outer_model is None:
+                raise LegacyAdapterError(
+                    "PHYSICAL_OUTER_CIRCLE_FAILED", "physical_outer_circle",
+                    "locked reference model has no physical outer-circle anchor", diagnostics,
+                )
+            search_center = transform.apply_point((outer_model.circle[0], outer_model.circle[1]))
+            search_radius = transform.apply_radius(outer_model.circle[2])
             physical_outer = locate_physical_outer_circle(
-                target_gray, center, outer_radius, self.module.polar_resample,
-                self.module.robust_fit_circle, detector.get("physical_outer_circle"), pixel_scale=scale,
+                target_gray,
+                center,
+                outer_radius,
+                (float(search_center[0]), float(search_center[1])),
+                float(search_radius),
+                self.module.outer_boundary_edge_point,
+                self.module.robust_fit_circle,
+                detector.get("physical_outer_circle"),
+                source_sha256=self.expected_hashes[self.paths.source],
+                pixel_scale=scale,
             )
             diagnostics["physicalOuterCircle"] = physical_outer
             if physical_outer["status"] != "accepted":

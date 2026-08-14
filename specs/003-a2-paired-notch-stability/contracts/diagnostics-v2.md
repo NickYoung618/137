@@ -8,9 +8,11 @@ diagnostics.diagnosticMode: legacy_single_notch | paired_notches_centerline | mu
 diagnostics.targetSemanticsConfirmed: boolean
 diagnostics.face.searchRoiNormalized: [x_min, y_min, x_max, y_max] | null
 diagnostics.physicalOuterCircle: {
-  status, thresholdVersion, alignmentCircle, physicalCircle,
+  status, thresholdVersion, sourceAlgorithm, sourceSha256,
+  alignmentCircle, searchPriorCircle, physicalCircle,
   edgePointCount, inlierCount, inlierRatio, angularCoverage,
-  residualP95Px, centerShiftPx, radiusRatioToAlignment, failedChecks
+  residualP95Px, centerShiftPx, radiusRatioToSearchPrior,
+  radiusRatioToAlignment, failedChecks
 }
 diagnostics.angularProfile: {
   sampleCount, radialSampleCount, shellInnerRadiusPx, shellOuterRadiusPx,
@@ -72,3 +74,5 @@ Diagnostic angles are image-frame observations and are never implicit machine co
 
 `diagnostics.face.radiusPx`是历史配准半径，不是物理外圆。`multi_notch_roles`必须先获得
 `physicalOuterCircle.status=accepted`，才能用`physicalCircle`提取原始候选和评估凹入。
+`sourceAlgorithm`/`sourceSha256`标识实际复用的gyj源函数和锁定源文件；该算法圆是
+诊断输出，不得被当作LabelMe人工外圆truth。

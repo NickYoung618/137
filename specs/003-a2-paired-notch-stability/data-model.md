@@ -3,8 +3,15 @@
 ## AlignmentCircle / PhysicalOuterCircle
 
 `AlignmentCircle`是历史全局配准输出的搜索先验，不表示壳体物理边界。`PhysicalOuterCircle`
-记录金属—背景最外跃迁点的稳健拟合圆及边界点数、内点数/比率、角覆盖率、P95残差、
-圆心偏移、半径比、阈值版本和失败项。只有`status=accepted`时才能进入`AngularProfile`。
+记录由指纹锁定的gyj径向亚像素边缘与稳健拟圆核心生成的算法圆，并附源函数/哈希、
+搜索先验、边界点数、内点数/比率、角覆盖率、P95残差、圆心偏移、半径比、阈值版本和失败项。
+只有`status=accepted`时才能进入`AngularProfile`。
+
+## PhysicalCircleTruth
+
+`PhysicalCircleTruth`是在原始BMP上用LabelMe独立人工创建并由第二人复核的外圆真值。
+它记录固定标签、标注员/复核员、truth版本、原图与LabelMe JSON的SHA-256、图像尺寸及
+人工圆心/半径。`PhysicalOuterCircle`与其他算法叠加圆都不得反填或自动确认为truth。
 
 ## AngularProfile
 

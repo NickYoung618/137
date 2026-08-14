@@ -2,6 +2,9 @@
   "schemaVersion": "a2-physical-outer-circle-diagnostic/1",
   "createdAt": "2026-08-14",
   "algorithmVersion": "0.6.0",
+  "status": "SUPERSEDED",
+  "supersededBy": "a2-first-25-gyj-outer-boundary-summary.json",
+  "supersededReason": "This run used the slot repository's parallel polar-threshold outer-circle implementation. The implementation was removed in favor of direct delegation to the locked gyj edge and robust-fit core; neither output is manual truth.",
   "supersedes": "a2-first-25-groove-recognition-summary.json",
   "input": {
     "imageCount": 25,

@@ -108,5 +108,30 @@
       "signedRelativeRotationDegAlwaysNull": true
     },
     "note": "The earlier groove summary is superseded because it consumed the historical alignment circle as if it were the physical boundary. Corrected diagnostics fit and gate a separate physical outer circle first."
+  },
+  "gyjOuterBoundaryReuse": {
+    "algorithmVersion": "0.7.0",
+    "unitTests": {"run": 59, "passed": 59, "skipped": 0},
+    "lockedSourceSha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
+    "delegatedFunctions": ["outer_boundary_edge_point", "robust_fit_circle"],
+    "legacySweep72": {
+      "valid": 72,
+      "total": 72,
+      "maeDeg": 0.1561191377641921,
+      "p95Deg": 0.30187302208952926,
+      "maxDeg": 0.3498688679892439
+    },
+    "realA2Jpeg25": {
+      "physicalOuterCircleAccepted": 25,
+      "physicalOuterCircleFailed": 0,
+      "grooveRecognitionFailed": 25,
+      "formalMechanicalValid": 0,
+      "signedRelativeRotationDegAlwaysNull": true,
+      "elapsedP50Ms": 3740.3422240167856,
+      "elapsedP95Ms": 4814.81442716904,
+      "elapsedMaxMs": 4929.048400139436
+    },
+    "manualTruthStatus": "NOT_EVALUATED_NO_REVIEWED_LABELME_CIRCLE_ON_ORIGINAL_BMP",
+    "note": "The locked gyj core shows strong within-scene repeatability, but its absolute circle accuracy remains unproven until compared with independently reviewed LabelMe truth on original BMP images."
   }
 }
