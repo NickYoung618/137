@@ -56,7 +56,9 @@ def _signed_delta(value: float, reference: float) -> float:
 
 
 def _role_hypotheses(diagnostics: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    candidates = diagnostics.get("candidates") or []
+    candidates = diagnostics.get("grooveCandidates")
+    if candidates is None:
+        candidates = diagnostics.get("candidates") or []
     role_config = diagnostics.get("quality", {}).get("thresholds", {}).get("role_assignment", {})
     nominal = role_config.get("drawing_nominal_angle_deg")
     ray_hypotheses: list[dict[str, Any]] = []
@@ -113,6 +115,8 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "ambiguous_or_rejected" if assignment else "not_available"
     )
     ray_hypotheses, axis_hypotheses = _role_hypotheses(diagnostics)
+    raw_candidates = diagnostics.get("rawCandidates") or diagnostics.get("candidates") or []
+    groove_recognition = diagnostics.get("grooveRecognition") or {}
     return {
         "imageId": manifest_item["imageId"],
         "relativePath": manifest_item["relativePath"],
@@ -126,7 +130,10 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         },
         "face": diagnostics.get("face"),
         "candidateSummary": diagnostics.get("candidateSummary"),
-        "candidates": diagnostics.get("candidates") or [],
+        "candidates": raw_candidates,
+        "rawCandidates": raw_candidates,
+        "grooveRecognition": groove_recognition,
+        "grooveCandidates": diagnostics.get("grooveCandidates") or [],
         "roleSuggestion": {
             "status": role_status,
             "selectedRoleCandidateIds": selected,
@@ -170,19 +177,26 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
         )
         selected = (record.get("roleSuggestion") or {}).get("selectedRoleCandidateIds") or {}
         role_by_candidate = {candidate_id: role for role, candidate_id in selected.items()}
+        assessments = {
+            item["candidateId"]: item
+            for item in (record.get("grooveRecognition") or {}).get("assessments") or []
+        }
         for candidate in record.get("candidates") or []:
             candidate_id = str(candidate["candidateId"])
             role = role_by_candidate.get(candidate_id)
-            color = ROLE_COLORS.get(role, "#ffe14f")
+            assessment = assessments.get(candidate_id)
+            color = ROLE_COLORS.get(role, "#ffe14f" if assessment is None else ("#38d66b" if assessment.get("accepted") else "#ff5d73"))
             angle = float(candidate["centerDeg"])
             endpoint = _point(center, radius, angle)
             draw.line((center, endpoint), fill=color, width=width)
+            groove_label = "" if assessment is None else f" G={float(assessment['grooveScore']):.2f} {'ACCEPT' if assessment.get('accepted') else 'REJECT'}"
             label = candidate_id if role is None else f"{candidate_id} / {role}"
-            draw.text(endpoint, f" {label} {angle:.2f}deg", fill=color, font=font, stroke_width=2, stroke_fill="black")
+            draw.text(endpoint, f" {label} {angle:.2f}deg{groove_label}", fill=color, font=font, stroke_width=2, stroke_fill="black")
     error = record["result"].get("errorCode") or "NONE"
     count = len(record.get("candidates") or [])
+    groove_count = len(record.get("grooveCandidates") or [])
     draw.rectangle((0, 0, min(image.width, 1700), max(72, image.height // 24)), fill="#111111")
-    draw.text((18, 12), f"{record['imageId']}  candidates={count}  error={error}", fill="white", font=font)
+    draw.text((18, 12), f"{record['imageId']}  raw={count} grooves={groove_count}  error={error}", fill="white", font=font)
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path, quality=90)
@@ -246,24 +260,38 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
     with (output_dir / "candidates.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
             "image_id", "relative_path", "candidate_id", "rank", "center_deg", "half_width_deg",
-            "prominence", "start_deg", "end_deg", "wraps_boundary", "suggested_role", "authoritative",
+            "prominence", "start_deg", "end_deg", "wraps_boundary", "groove_score", "accepted",
+            "rejection_reasons", "radial_depth_px", "tangential_width_px", "paired_edge_support",
+            "contour_continuity", "threshold_version", "suggested_role", "authoritative",
         ])
         writer.writeheader()
         for record in records:
             selected = record["roleSuggestion"].get("selectedRoleCandidateIds") or {}
             role_by_candidate = {candidate_id: role for role, candidate_id in selected.items()}
+            assessments = {
+                item["candidateId"]: item
+                for item in (record.get("grooveRecognition") or {}).get("assessments") or []
+            }
             for candidate in record["candidates"]:
+                assessment = assessments.get(candidate["candidateId"]) or {}
                 writer.writerow({
                     "image_id": record["imageId"], "relative_path": record["relativePath"],
                     "candidate_id": candidate["candidateId"], "rank": candidate["rank"],
                     "center_deg": candidate["centerDeg"], "half_width_deg": candidate["halfWidthDeg"],
                     "prominence": candidate["prominence"], "start_deg": candidate["startDeg"],
                     "end_deg": candidate["endDeg"], "wraps_boundary": candidate["wrapsBoundary"],
+                    "groove_score": assessment.get("grooveScore"), "accepted": assessment.get("accepted"),
+                    "rejection_reasons": "|".join(assessment.get("rejectionReasons") or []),
+                    "radial_depth_px": assessment.get("radialDepthPx"),
+                    "tangential_width_px": assessment.get("tangentialWidthPx"),
+                    "paired_edge_support": assessment.get("pairedEdgeSupport"),
+                    "contour_continuity": assessment.get("contourContinuity"),
+                    "threshold_version": assessment.get("thresholdVersion"),
                     "suggested_role": role_by_candidate.get(candidate["candidateId"]), "authoritative": False,
                 })
     with (output_dir / "failures.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
-            "image_id", "relative_path", "error_code", "error_stage", "candidate_count", "role_status",
+            "image_id", "relative_path", "error_code", "error_stage", "candidate_count", "groove_count", "role_status",
         ])
         writer.writeheader()
         for record in records:
@@ -275,6 +303,7 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                 "error_code": record["result"]["errorCode"],
                 "error_stage": record["result"]["errorStage"],
                 "candidate_count": len(record["candidates"]),
+                "groove_count": len(record["grooveCandidates"]),
                 "role_status": record["roleSuggestion"]["status"],
             })
     render_contact_sheet(overlays, output_dir / "contact-sheet.jpg")

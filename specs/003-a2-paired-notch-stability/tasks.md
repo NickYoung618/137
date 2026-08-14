@@ -188,3 +188,15 @@
 - [x] T055 Validate the 25-frame external JPEG diagnostic set, run both full-frame and development-ROI `multi_notch_roles` batches, and record only path-free hashes, aggregate results and bounded conclusions in repository evidence per FR-014/FR-020 and Constitution IV (partial)
 - [x] T056 Extend `tools/render_slot_pose_review.py` to emit a deterministic failure-sample index and cover recursive JPEG manifests plus failed-result review artifacts in `tests/test_slot_pose_review.py` per FR-004/FR-027
 - [x] T057 Add circular cross-frame candidate clustering, angle/prominence stability, circle/ring/role success rates, error distributions and latency P50/P95/max with tests and an external full-frame-versus-ROI summary per FR-018/FR-020 and Constitution III/IV
+
+---
+
+## Phase 11: Convergence — Single-Frame Groove Recognition
+
+- [x] T058 [US1] Add test-first controlled polar evidence cases for true grooves, shadows, shallow fixture contacts, multiple grooves, weak/ambiguous grooves and 359/0 wrapping in `tests/test_groove_recognition.py` per FR-030..FR-033/SC-013
+- [x] T059 [US1] Implement deterministic single-frame radial-depth, paired-edge, local-contrast and contour-consistency groove assessment in `algorithms/slot_pose/groove_recognition.py` per FR-031/FR-032
+- [x] T060 [US2] Add groove-recognition configuration validation, safe defaults, v2 diagnostic contract fields and stable failure codes in `algorithms/slot_pose/contract.py`, `contracts/slot-pose-config.schema.json`, `config/inspection.example.json` and contract tests per FR-010/FR-013/FR-033
+- [x] T061 [US1] Integrate raw-candidate → groove-filter → accepted-only role assignment in `algorithms/slot_pose/legacy_adapter.py`, preserving legacy/paired paths, and add multi-role integration tests proving rejected shadows cannot fill roles per FR-001/FR-030/FR-033
+- [x] T062 [US1] Extend synthetic multi-notch fixtures and review artifacts to distinguish raw/rejected/accepted candidates with groove evidence in `tools/generate_synthetic_multi_notches.py`, `tools/render_slot_pose_review.py` and focused tests per FR-031/SC-013
+- [x] T063 Run the 25-frame external JPEG development diagnostic with the new single-frame gate, visually audit the contact sheet without assigning authoritative roles, and record only path-free aggregate evidence in `specs/003-a2-paired-notch-stability/evidence/` per FR-024/FR-034/SC-009
+- [x] T064 Re-run full unit, legacy and paired regressions plus schema/CLI/batch/pollution checks, then document the remaining original-BMP and field-label blockers per SC-001..SC-006/SC-009

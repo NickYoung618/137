@@ -44,6 +44,9 @@ def make_paired_face(
     brightness: float = 1.0,
     noise: float = 1.0,
     notch_centers: list[float] | None = None,
+    shadow_centers: list[float] | None = None,
+    fixture_contact_centers: list[float] | None = None,
+    weak_notch_centers: list[float] | None = None,
 ) -> Image.Image:
     rng = np.random.default_rng(seed)
     center = (size / 2.0 + offset[0], size / 2.0 + offset[1])
@@ -60,6 +63,12 @@ def make_paired_face(
     centers = notch_centers if notch_centers is not None else [centerline_deg - 20.0, centerline_deg + 20.0]
     for notch_center in centers:
         draw.polygon(_wedge(center, 145.0 * scale, 184.0 * scale, notch_center, 5.5), fill=12)
+    for shadow_center in shadow_centers or []:
+        draw.polygon(_wedge(center, 145.0 * scale, 165.0 * scale, shadow_center, 5.5), fill=45)
+    for fixture_center in fixture_contact_centers or []:
+        draw.polygon(_wedge(center, 170.0 * scale, 184.0 * scale, fixture_center, 5.5), fill=12)
+    for weak_center in weak_notch_centers or []:
+        draw.polygon(_wedge(center, 145.0 * scale, 184.0 * scale, weak_center, 5.5), fill=160)
     mark_angle = math.radians(centerline_deg + 103.0)
     mark_radius = 130.0 * scale
     mx = cx + mark_radius * math.cos(mark_angle)

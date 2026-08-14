@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "a2-groove-recognition-diagnostic/1",
+  "createdAt": "2026-08-14",
+  "algorithmVersion": "0.5.0",
+  "input": {
+    "imageCount": 25,
+    "decodedAt5472x3648": 25,
+    "providedAndVerifiedDirectoryContentSha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "format": "JPEG diagnostic copy",
+    "originalBmpTruthAvailable": false,
+    "explicitConditionGroupingAvailable": false
+  },
+  "pipeline": [
+    "historical_face_localization",
+    "raw_dark_candidate_extraction",
+    "single_frame_groove_recognition",
+    "accepted_groove_only_role_assignment",
+    "gated_pose_angle"
+  ],
+  "developmentThresholds": {
+    "thresholdVersion": "groove-geometry-v1",
+    "maxWidthCoefficientOfVariation": 0.185,
+    "selectionStatus": "DEVELOPMENT_DIAGNOSTIC_NOT_FROZEN",
+    "note": "The threshold is a conservative single-frame parallel-edge/width-consistency gate selected from development diagnostics. It is not an authoritative groove label or an acceptance threshold."
+  },
+  "finalDevelopmentRoiRun": {
+    "rawCandidateCountDistribution": {"3": 25},
+    "acceptedGrooveCountDistribution": {"1": 25},
+    "grooveRecognitionStatusCounts": {"failed": 25},
+    "errorCodeCounts": {"GROOVE_RECOGNITION_FAILED": 25},
+    "rejectionReasonCounts": {"width_variation_too_high": 50},
+    "formalValidCount": 0,
+    "nonNullSignedRelativeRotationCount": 0,
+    "elapsedMs": {
+      "mean": 3941.5116801392287,
+      "p50": 3947.8859880473465,
+      "p95": 4715.377379907295,
+      "max": 6140.54742990993
+    }
+  },
+  "candidateTrackGeometry": [
+    {
+      "candidateId": "candidate-001",
+      "acceptedFrames": 0,
+      "widthCoefficientOfVariationRange": [0.20188605381106503, 0.22312796539782523],
+      "radialDepthPxRange": [72.74649386438162, 79.07148649792863],
+      "localMetalContrastRange": [82.79861441725754, 92.86848937508978],
+      "rejectionReasonCounts": {"width_variation_too_high": 25},
+      "authoritativeRole": false
+    },
+    {
+      "candidateId": "candidate-002",
+      "acceptedFrames": 25,
+      "angleModeCounts": {
+        "about_291_31_deg": 20,
+        "about_172_59_deg": 2,
+        "about_113_22_deg": 3
+      },
+      "widthCoefficientOfVariationRange": [0.11518312772588438, 0.17638618639511744],
+      "radialDepthPxRange": [94.8116979930049, 126.52512649019283],
+      "localMetalContrastRange": [182.49895422917427, 198.11426837402087],
+      "grooveScoreRange": [0.850055004727926, 0.8995527376495615],
+      "authoritativeRole": false
+    },
+    {
+      "candidateId": "candidate-003",
+      "acceptedFrames": 0,
+      "widthCoefficientOfVariationRange": [0.1912532813989183, 0.24828487090550158],
+      "radialDepthPxRange": [91.72241392709999, 99.63106768382701],
+      "localMetalContrastRange": [69.12682154064876, 129.5627630174994],
+      "rejectionReasonCounts": {"width_variation_too_high": 25},
+      "authoritativeRole": false
+    }
+  ],
+  "visualAudit": {
+    "contactSheetFinding": "The accepted ray coincides with the visually clear rectangular outer-edge opening in all three observed image states. The two rejected rays remain on the right-side adjacent fixture/occlusion contact region.",
+    "status": "DEVELOPMENT_EVIDENCE_ONLY",
+    "provesDrawingRoleMapping": false,
+    "provesGrooveGroundTruth": false
+  },
+  "proven": [
+    "Raw dark regions and accepted groove candidates are now separate diagnostics.",
+    "Role assignment cannot consume a rejected raw dark candidate.",
+    "The single-frame geometric gate retains exactly one candidate in each of the 25 JPEG diagnostics without using candidate IDs, fixed azimuths or cross-frame motion as inputs.",
+    "Because the configured datum/target roles require at least two grooves, all 25 frames fail before role assignment with a null formal angle."
+  ],
+  "notProven": [
+    "The accepted candidate is not yet an authoritative drawing datum or target groove.",
+    "The rejected candidates are not ground-truth-labeled fixture regions.",
+    "The development width-consistency threshold is not frozen for production.",
+    "JPEG copies cannot establish original-image angle accuracy or normal/bad acceptance performance."
+  ],
+  "minimumFieldActions": [
+    "Confirm on the contact sheet whether the green accepted opening is a real housing groove in all three observed states.",
+    "Confirm whether both red rejected regions are fixture/occlusion contacts rather than housing grooves.",
+    "Identify the additional real groove or datum axis required to compute the drawing angle, if it is visible in the A2 view.",
+    "Provide original-BMP role labels and capture/truth grouping before freezing thresholds or reporting angle accuracy."
+  ],
+  "externalArtifactSha256": {
+    "resultsJsonl": "696b62b16ebb67f20401d62e0a16bec43e9b81c274626c0d62393fad33f9e849",
+    "reviewJson": "9e5b6a83a30168f5cbfb82afbe3509865302d49816348f2f4c438291904087f9",
+    "candidatesCsv": "d663e87ae23b9762afe52232c81820211b1c80ce901e04eff664392253493216",
+    "failuresCsv": "ed2d5a67b860bc26bb8d76735f6550a7d8f274e6472c01e9cc8b2cd359696540",
+    "contactSheetJpeg": "0204d7f53238477ad70466829e840b3805beaed9027f724bc8c2848fc077ab8c",
+    "comparisonJson": "a575d61ccdca7b40f837b3c413455cda1bf0aeb9a4ee8cd59a9a4c1caa316d9f"
+  },
+  "productionStatus": "BLOCKED_GROOVE_LABEL_DATUM_ROLE_AND_ORIGINAL_BMP_TRUTH"
+}

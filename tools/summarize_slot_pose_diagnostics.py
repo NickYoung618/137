@@ -168,6 +168,16 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
     total = len(records)
     error_counts = Counter(record.get("result", {}).get("errorCode") or "NONE" for record in records)
     candidate_counts = Counter(len(record.get("candidates") or []) for record in records)
+    groove_candidate_counts = Counter(len(record.get("grooveCandidates") or []) for record in records)
+    groove_status_counts = Counter(
+        (record.get("grooveRecognition") or {}).get("status") or "not_available" for record in records
+    )
+    groove_rejections = Counter(
+        reason
+        for record in records
+        for assessment in (record.get("grooveRecognition") or {}).get("assessments") or []
+        for reason in assessment.get("rejectionReasons") or []
+    )
     role_status_counts = Counter(record.get("roleSuggestion", {}).get("status") or "not_available" for record in records)
     role_signatures = Counter(
         json.dumps(record.get("roleSuggestion", {}).get("selectedRoleCandidateIds"), sort_keys=True)
@@ -192,6 +202,12 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         "candidateCountDistribution": {str(key): value for key, value in sorted(candidate_counts.items())},
         "candidateClusters": candidate_clusters(records, threshold_deg),
         "candidateIdTracks": candidate_id_tracks(records, threshold_deg),
+        "grooveCandidateCountDistribution": {str(key): value for key, value in sorted(groove_candidate_counts.items())},
+        "grooveCandidateClusters": candidate_clusters(
+            [{**record, "candidates": record.get("grooveCandidates") or []} for record in records], threshold_deg,
+        ),
+        "grooveRecognitionStatusCounts": dict(sorted(groove_status_counts.items())),
+        "grooveRejectionReasonCounts": dict(sorted(groove_rejections.items())),
         "roleAssignmentUnique": {"count": role_unique_count, "rate": role_unique_count / total if total else 0.0},
         "roleStatusCounts": dict(sorted(role_status_counts.items())),
         "selectedRoleSignatureCounts": dict(sorted(role_signatures.items())),

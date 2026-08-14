@@ -55,6 +55,7 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
 - 可选归一化圆搜索ROI（默认关闭）用于屏蔽相邻工装；它只改变历史圆链的对齐输入，不修改候选原图。
 - `tools/render_slot_pose_review.py`在仓库外生成候选编号叠加图、联系表、候选/`failures.csv`和非权威角色假设表。
 - `tools/summarize_slot_pose_diagnostics.py`比较多个审阅包的环形候选簇、跨帧稳定性、门控成功率、错误码和P50/P95/max耗时；稳定候选仍不等于已确认业务角色。
+- `multi_notch_roles`现在先将环形暗区输出为`rawCandidates`，再用径向深度、局部对比、成对边缘和轮廓一致性生成`grooveCandidates`；datum/target分配只消费后者。
 
 服务器paired合成冒烟：
 

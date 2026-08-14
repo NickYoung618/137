@@ -82,6 +82,7 @@ class SlotPoseContractTests(unittest.TestCase):
             "SLOT_PAIR_NOT_FOUND", "SLOT_PAIR_AMBIGUOUS", "RING_TRUNCATED",
             "TARGET_SEMANTICS_UNCONFIRMED",
             "ROLE_ASSIGNMENT_FAILED", "ROLE_ASSIGNMENT_AMBIGUOUS",
+            "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS",
             "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED",
         }.issubset(ERROR_CODES))
 
@@ -116,6 +117,26 @@ class SlotPoseContractTests(unittest.TestCase):
                 path.write_text(json.dumps(config), encoding="utf-8")
                 with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "face_search_roi_normalized"):
                     load_config(path)
+
+    def test_multi_role_config_gets_safe_groove_defaults_and_rejects_invalid_thresholds(self) -> None:
+        from tools.generate_synthetic_multi_notches import build_dataset
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            try:
+                built = build_dataset(root, 137)
+            except FileNotFoundError as exc:
+                self.skipTest(f"historical source unavailable: {exc}")
+            path = Path(built["config"])
+            config = json.loads(path.read_text(encoding="utf-8"))
+            config["detector"].pop("groove_recognition", None)
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertEqual("groove-geometry-v1", loaded["detector"]["groove_recognition"]["threshold_version"])
+            config["detector"]["groove_recognition"] = {"min_radial_depth_ratio": 2.0}
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "min_radial_depth_ratio"):
+                load_config(path)
 
     def test_valid_result_requires_confirmed_target_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

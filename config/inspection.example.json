@@ -47,6 +47,28 @@
       "min_half_width_deg": 1.0,
       "max_half_width_deg": 30.0
     },
+    "groove_recognition": {
+      "threshold_version": "groove-geometry-v1",
+      "n_radii": 81,
+      "radial_span_px": 120.0,
+      "shoulder_width_deg": 4.0,
+      "shoulder_gap_deg": 1.0,
+      "search_margin_deg": 8.0,
+      "min_local_contrast": 20.0,
+      "min_edge_contrast": 15.0,
+      "min_radial_depth_px": 35.0,
+      "min_radial_depth_ratio": 0.25,
+      "min_paired_edge_support": 0.55,
+      "min_contour_continuity": 0.72,
+      "max_width_coefficient_of_variation": 0.185,
+      "max_center_drift_ratio": 0.35,
+      "min_tangential_width_px": 8.0,
+      "max_tangential_width_px": 1200.0,
+      "outer_connection_tolerance_px": 12.0,
+      "max_gap_rows": 2,
+      "min_groove_score": 0.62,
+      "ambiguity_margin": 0.05
+    },
     "pairing": {
       "min_candidates": 2,
       "max_candidates": 6,

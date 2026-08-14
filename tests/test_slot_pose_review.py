@@ -41,6 +41,32 @@ class SlotPoseReviewTests(unittest.TestCase):
                          "halfWidthDeg": 5.0, "prominence": 35.0, "startDeg": 170.0,
                          "endDeg": 180.0, "wrapsBoundary": False},
                     ],
+                    "rawCandidates": [
+                        {"candidateId": "candidate-001", "rank": 1, "centerDeg": 90.0,
+                         "halfWidthDeg": 4.0, "prominence": 40.0, "startDeg": 86.0,
+                         "endDeg": 94.0, "wrapsBoundary": False},
+                        {"candidateId": "candidate-002", "rank": 2, "centerDeg": 175.0,
+                         "halfWidthDeg": 5.0, "prominence": 35.0, "startDeg": 170.0,
+                         "endDeg": 180.0, "wrapsBoundary": False},
+                    ],
+                    "grooveRecognition": {
+                        "status": "failed", "acceptedCount": 1,
+                        "assessments": [
+                            {"candidateId": "candidate-001", "grooveScore": 0.9, "accepted": True,
+                             "rejectionReasons": [], "radialDepthPx": 20.0, "tangentialWidthPx": 8.0,
+                             "pairedEdgeSupport": 0.9, "contourContinuity": 0.9,
+                             "thresholdVersion": "groove-geometry-v1"},
+                            {"candidateId": "candidate-002", "grooveScore": 0.3, "accepted": False,
+                             "rejectionReasons": ["radial_depth_too_small"], "radialDepthPx": 2.0,
+                             "tangentialWidthPx": 9.0, "pairedEdgeSupport": 0.2,
+                             "contourContinuity": 0.4, "thresholdVersion": "groove-geometry-v1"},
+                        ],
+                    },
+                    "grooveCandidates": [
+                        {"candidateId": "candidate-001", "rank": 1, "centerDeg": 90.0,
+                         "halfWidthDeg": 4.0, "prominence": 40.0, "startDeg": 86.0,
+                         "endDeg": 94.0, "wrapsBoundary": False},
+                    ],
                     "roleAssignment": {
                         "unique": True,
                         "selectedRoleCandidateIds": {
@@ -70,13 +96,14 @@ class SlotPoseReviewTests(unittest.TestCase):
             self.assertAlmostEqual(0.8, record["diagnosticConfidence"])
             self.assertEqual(123.0, record["elapsedMs"])
             self.assertTrue(record["angularProfile"]["completeRing"])
-            self.assertEqual(2, len(record["singleRayRoleHypotheses"]))
-            self.assertAlmostEqual(0.0, record["singleRayRoleHypotheses"][0]["drawingNominalDeviationDeg"])
-            self.assertFalse(record["singleRayRoleHypotheses"][0]["authoritative"])
+            self.assertEqual([], record["singleRayRoleHypotheses"])
+            self.assertEqual(1, len(record["grooveCandidates"]))
             self.assertNotIn(str(root), json.dumps(summary))
             self.assertTrue((output / "overlays/0001.jpg").is_file())
             self.assertTrue((output / "contact-sheet.jpg").is_file())
-            self.assertIn("candidate-001", (output / "candidates.csv").read_text(encoding="utf-8"))
+            candidates_csv = (output / "candidates.csv").read_text(encoding="utf-8")
+            self.assertIn("candidate-001", candidates_csv)
+            self.assertIn("radial_depth_too_small", candidates_csv)
             failures = (output / "failures.csv").read_text(encoding="utf-8")
             self.assertIn("nested/frame.jpg", failures)
             self.assertIn("DATUM_DEFINITION_UNCONFIRMED", failures)

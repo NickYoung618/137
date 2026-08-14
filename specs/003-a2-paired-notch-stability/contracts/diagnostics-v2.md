@@ -15,6 +15,26 @@ diagnostics.candidates: [{
   candidateId, centerDeg, halfWidthDeg, startDeg, endDeg,
   wrapsBoundary, prominence, deficitArea, rank
 }]
+diagnostics.rawCandidates: [{
+  candidateId, centerDeg, halfWidthDeg, startDeg, endDeg,
+  wrapsBoundary, prominence, deficitArea, rank
+}]
+diagnostics.grooveRecognition: {
+  thresholdVersion, minimumRequiredCount, acceptedCount, status,
+  assessments: [{
+    candidateId, grooveScore, accepted, rejectionReasons,
+    radialDepthPx, radialDepthRatio, angularWidthDeg, tangentialWidthPx,
+    localMetalContrast, leftEdgeContrast, rightEdgeContrast,
+    pairedEdgeSupport, contourContinuity, widthCoefficientOfVariation,
+    centerDriftDeg, outerConnected, thresholdVersion
+  }]
+}
+diagnostics.grooveCandidates: [{
+  candidateId, centerDeg, halfWidthDeg, startDeg, endDeg,
+  wrapsBoundary, prominence, deficitArea, rank,
+  grooveScore, radialDepthPx, tangentialWidthPx,
+  pairedEdgeSupport, contourContinuity, thresholdVersion
+}]
 diagnostics.candidateSummary: {count, bestCandidateId, secondCandidateId, prominenceGap}
 diagnostics.pairing: {
   selectedCandidateIds, centerlineDeg, separationDeg, widthRatio,
@@ -41,3 +61,6 @@ diagnostics.drawingEvidence: {
 For every invalid result, `result.signedRelativeRotationDeg` and `result.confidence` remain `null`.
 Diagnostic angles are image-frame observations and are never implicit machine commands.
 `drawingAngle.toleranceStatus`与`result.signedRelativeRotationDeg`分属尺寸判定和机械纠偏契约，不得互相代替。
+
+`diagnostics.candidates`作为旧诊断别名仍保留原始暗区；新消费者必须区分`rawCandidates`与
+`grooveCandidates`。`multi_notch_roles`的角色分配只允许引用`grooveCandidates`。

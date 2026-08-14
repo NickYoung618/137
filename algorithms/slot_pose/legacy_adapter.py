@@ -15,6 +15,7 @@ import numpy as np
 
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
+from algorithms.slot_pose.groove_recognition import recognize_grooves
 from algorithms.slot_pose.role_assignment import assign_roles
 
 
@@ -181,6 +182,40 @@ class LegacyAEndFaceAdapter:
             "candidateSummary": summary,
             "pairing": pairing,
         }
+
+    def _recognize_target_grooves(
+        self,
+        gray: Any,
+        center: tuple[float, float],
+        outer_radius: float,
+        scale: float,
+        raw_candidates: list[dict[str, Any]],
+        minimum_required_count: int,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        config = self.config["detector"]["groove_recognition"]
+        radial_span = float(config["radial_span_px"]) * scale
+        inner_radius = outer_radius - radial_span
+        if inner_radius <= 0.0:
+            raise LegacyAdapterError(
+                "GROOVE_RECOGNITION_FAILED", "groove_recognition",
+                "groove recognition radial span exceeds the located face radius",
+            )
+        polar = self.module.polar_resample(
+            gray, center, inner_radius, outer_radius,
+            int(config["n_radii"]), int(self.config["detector"]["profile"]["n_angles"]),
+        )
+        candidate_objects = [_candidate_from_dict(item) for item in raw_candidates]
+        recognition = recognize_grooves(
+            polar, candidate_objects, outer_radius, radial_span, config,
+            minimum_required_count, pixel_scale=scale,
+        )
+        by_id = {item["candidateId"]: item for item in recognition["assessments"]}
+        accepted: list[dict[str, Any]] = []
+        for raw in raw_candidates:
+            assessment = by_id[raw["candidateId"]]
+            if assessment["accepted"]:
+                accepted.append({**raw, **assessment})
+        return recognition, accepted
 
     def estimate(self, image_path: Path) -> dict[str, Any]:
         started = time.perf_counter()
@@ -358,25 +393,41 @@ class LegacyAEndFaceAdapter:
                 diagnostics.update(exc.diagnostics)
                 exc.diagnostics = diagnostics
                 raise
-            role_assignment = assign_roles(
-                [
-                    _candidate_from_dict(item)
-                    for item in target_roles["candidates"]
-                ],
-                detector["role_assignment"],
-                expected_offset_deg=math.degrees(float(polar_rotation)),
+            minimum_required = len(detector["role_assignment"]["assignments"])
+            recognition, groove_candidates = self._recognize_target_grooves(
+                target_gray, center, outer_radius, scale, target_roles["candidates"], minimum_required,
             )
             diagnostics.update({
                 "angularProfile": target_roles["angularProfile"],
                 "candidates": target_roles["candidates"],
+                "rawCandidates": target_roles["candidates"],
                 "candidateSummary": target_roles["candidateSummary"],
-                "roleAssignment": role_assignment,
+                "grooveRecognition": recognition,
+                "grooveCandidates": groove_candidates,
                 "drawingEvidence": {
                     "kind": "drawing_geometry_intent_only",
                     "label": "85°±5° (Z106)",
                     "provesA2FeatureMapping": False,
                 },
             })
+            if recognition["status"] != "accepted":
+                code = (
+                    "GROOVE_RECOGNITION_AMBIGUOUS"
+                    if recognition["status"] == "ambiguous"
+                    else "GROOVE_RECOGNITION_FAILED"
+                )
+                raise LegacyAdapterError(
+                    code, "groove_recognition",
+                    f"accepted grooves {recognition['acceptedCount']} are insufficient for "
+                    f"{recognition['minimumRequiredCount']} configured roles",
+                    diagnostics,
+                )
+            role_assignment = assign_roles(
+                [_candidate_from_dict(item) for item in groove_candidates],
+                detector["role_assignment"],
+                expected_offset_deg=math.degrees(float(polar_rotation)),
+            )
+            diagnostics["roleAssignment"] = role_assignment
             if not role_assignment["unique"]:
                 code = (
                     "ROLE_ASSIGNMENT_AMBIGUOUS"

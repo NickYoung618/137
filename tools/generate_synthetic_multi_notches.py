@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools.dataset_common import sha256_file, write_json
+from algorithms.slot_pose.groove_recognition import DEFAULT_GROOVE_RECOGNITION_CONFIG
 from tools.generate_synthetic_paired_notches import make_paired_face
 from tools.generate_synthetic_slot_pose import DEFAULT_SOURCE, reference_annotation
 
@@ -37,7 +38,10 @@ def build_dataset(output_dir: Path, seed: int, source: Path = DEFAULT_SOURCE) ->
         "normal_translate": (30.0, _rotated(REFERENCE_ROLES, 30.0), {"offset": (7.0, -5.0)}),
         "normal_wrap": (179.0, _rotated(REFERENCE_ROLES, 179.0), {"noise": 1.5}),
         "bad_missing_target": (0.0, [90.0, 270.0, 330.0], {}),
-        "bad_ambiguous_target": (0.0, [90.0, 168.0, 182.0, 270.0, 330.0], {}),
+        "bad_ambiguous_target": (0.0, [90.0, 163.5, 186.5, 270.0, 330.0], {}),
+        "bad_shadow_target": (0.0, [90.0, 270.0], {"shadow_centers": [175.0]}),
+        "bad_fixture_target": (0.0, [90.0, 270.0], {"fixture_contact_centers": [175.0]}),
+        "bad_weak_target": (0.0, [90.0, 270.0], {"weak_notch_centers": [175.0]}),
     }
     for index, (name, (_, centers, options)) in enumerate(cases.items(), start=1):
         make_paired_face(0.0, seed + index, notch_centers=centers, **options).save(images / f"{name}.png")
@@ -68,6 +72,7 @@ def build_dataset(output_dir: Path, seed: int, source: Path = DEFAULT_SOURCE) ->
                 "smoothing_window": 7, "mad_multiplier": 3.0, "min_prominence": 12.0,
                 "min_half_width_deg": 2.0, "max_half_width_deg": 12.0,
             },
+            "groove_recognition": {**DEFAULT_GROOVE_RECOGNITION_CONFIG, "min_local_contrast": 30.0},
             "role_assignment": {
                 "datum_definition": "opposed_candidates_axis", "min_score_margin": 0.08,
                 "max_opposition_error_deg": 8.0, "drawing_nominal_angle_deg": 85.0,

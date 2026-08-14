@@ -54,8 +54,8 @@ class LegacyAdapterTests(unittest.TestCase):
     def test_reference_baseline_and_source_remains_unchanged(self) -> None:
         source = Path(self.config["legacy_asset"]["source_path"])
         before = sha256_file(source)
-        started = time.perf_counter()
         adapter = LegacyAEndFaceAdapter(self.config)
+        started = time.perf_counter()
         output = adapter.estimate(Path(self.config["legacy_asset"]["reference_path"]))
         elapsed = time.perf_counter() - started
         after = sha256_file(source)

@@ -72,6 +72,8 @@ uv run python tools/render_slot_pose_review.py \
 
 输出含`review.json`、`candidates.csv`、`failures.csv`、`overlays/`和`contact-sheet.jpg`。其中角色组合只是现场勾选用假设，
 `roleSuggestionsAreAuthoritative=false`固定表示它们不是业务真值。
+新审阅图中绿色表示通过单帧几何门的`grooveCandidates`，红色表示被拒绝的原始暗区；
+颜色仅表示几何过滤结果，不表示已确认datum/target角色。
 
 比较全画面与开发ROI的跨帧候选稳定性、门控成功率、错误码和耗时（输出仍必须在仓库外）：
 

@@ -125,3 +125,9 @@ tests/
 - 主检测模型改为全部多槽候选→显式角色窗口→全排列评分→唯一分配→datum/target环形夹角。
 - datum定义可配置为单候选射线或对置候选轴；`paired_notches_centerline`仅保留为回归/对照诊断。
 - `DrawingAngleObservation`、尺寸公差状态与`result.signedRelativeRotationDeg`分契约、分门控。
+
+## 2026-08-14 Groove-Recognition Gate
+
+- `multi_notch_roles`改为：历史圆/壳体定位 → 原始环形暗区 → 单帧真实凹槽几何识别 → 仅对已接受凹槽分配角色 → 诊断夹角/受门控机械角。
+- 凹槽识别复用同一圆心和polar坐标，在更深的内侧环带评估外缘连通径向深度、局部金属对比、左右成对边缘、宽度一致性和中心漂移。
+- 所有门槛可配置且带版本；不使用固定候选ID/方位或跨帧移动性。组合分用于证据强度，不绕过硬门。

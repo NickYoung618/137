@@ -19,6 +19,16 @@ def record(image_id: str, angles: list[float], *, error: str = "ROLE_ASSIGNMENT_
             }
             for index, angle in enumerate(angles)
         ],
+        "grooveRecognition": {
+            "status": "accepted",
+            "assessments": [{"candidateId": "candidate-001", "accepted": True, "rejectionReasons": []}],
+        },
+        "grooveCandidates": [
+            {
+                "candidateId": "candidate-001", "centerDeg": angles[0], "halfWidthDeg": 4.0,
+                "prominence": 40.0, "rank": 1,
+            }
+        ] if angles else [],
         "roleSuggestion": {"status": "ambiguous_or_rejected", "selectedRoleCandidateIds": None},
         "elapsedMs": elapsed,
     }
@@ -40,12 +50,15 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         records[1]["angularProfile"] = {"completeRing": False}
         records[1]["candidateSummary"] = None
         records[1]["candidates"] = []
+        records[1]["grooveCandidates"] = []
         summary = build_summary([("roi", {"records": records})], 5.0)
         run = summary["runs"][0]
         self.assertEqual({"1": 1, "0": 1}, run["candidateCountDistribution"])
         self.assertEqual(2, run["circleEstimateAvailable"]["count"])
         self.assertEqual(1, run["completeRingAccepted"]["count"])
         self.assertEqual(1, run["candidateExtractionCompleted"]["count"])
+        self.assertEqual({"1": 1, "0": 1}, run["grooveCandidateCountDistribution"])
+        self.assertEqual({"accepted": 2}, run["grooveRecognitionStatusCounts"])
         self.assertEqual({"ROLE_ASSIGNMENT_FAILED": 2}, run["errorCodeCounts"])
         self.assertEqual(150.0, run["elapsedMs"]["p50"])
         self.assertEqual(195.0, run["elapsedMs"]["p95"])

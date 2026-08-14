@@ -38,6 +38,8 @@ class MultiNotchRoleIntegrationTests(unittest.TestCase):
                 self.assertEqual("DATUM_DEFINITION_UNCONFIRMED", payload["error"]["code"])
                 assignment = payload["diagnostics"]["roleAssignment"]
                 self.assertTrue(assignment["unique"], payload)
+                groove_ids = {item["candidateId"] for item in payload["diagnostics"]["grooveCandidates"]}
+                self.assertTrue(set(assignment["selectedRoleCandidateIds"].values()).issubset(groove_ids))
                 self.assertGreaterEqual(payload["diagnostics"]["candidateSummary"]["count"], 4)
                 self.assertAlmostEqual(85.0, assignment["drawingAngle"]["includedAngleDeg"], delta=1.0)
                 self.assertEqual("NOT_EVALUATED", assignment["drawingAngle"]["toleranceStatus"])
@@ -53,6 +55,32 @@ class MultiNotchRoleIntegrationTests(unittest.TestCase):
                 self.assertFalse(payload["result"]["valid"])
                 self.assertEqual(code, payload["error"]["code"], payload)
                 self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
+
+    def test_rejected_shadow_fixture_and_weak_dark_region_cannot_fill_target_role(self) -> None:
+        for case_id in ("bad_shadow_target", "bad_fixture_target", "bad_weak_target"):
+            with self.subTest(case_id=case_id):
+                payload = run(self.images / f"{case_id}.png", self.config, f"roles:{case_id}")
+                self.assertFalse(payload["result"]["valid"])
+                self.assertIn(payload["error"]["code"], {"GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS"})
+                self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
+                recognition = payload["diagnostics"]["grooveRecognition"]
+                rejected = {item["candidateId"] for item in recognition["assessments"] if not item["accepted"]}
+                self.assertTrue(rejected)
+                assignment = payload["diagnostics"].get("roleAssignment")
+                if assignment is not None:
+                    used = set((assignment.get("selectedRoleCandidateIds") or {}).values())
+                    self.assertTrue(used.isdisjoint(rejected))
+
+    def test_borderline_groove_evidence_returns_ambiguous_before_role_assignment(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["groove_recognition"].update({"min_groove_score": 0.99, "ambiguity_margin": 0.1})
+        path = self.root / "ambiguous-groove.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        payload = run(self.images / "normal_base.png", path, "roles:ambiguous-groove")
+        self.assertEqual("GROOVE_RECOGNITION_AMBIGUOUS", payload["error"]["code"])
+        self.assertEqual("ambiguous", payload["diagnostics"]["grooveRecognition"]["status"])
+        self.assertNotIn("roleAssignment", payload["diagnostics"])
+        self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
 
     def test_multi_role_profile_does_not_require_legacy_single_notch(self) -> None:
         adapter = LegacyAEndFaceAdapter(load_config(self.config))

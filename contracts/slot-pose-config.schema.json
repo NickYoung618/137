@@ -74,6 +74,32 @@
             "max_half_width_deg": {"type": "number", "exclusiveMinimum": 0}
           }
         },
+        "groove_recognition": {
+          "type": "object",
+          "required": ["threshold_version", "n_radii", "radial_span_px", "shoulder_width_deg", "shoulder_gap_deg", "search_margin_deg", "min_local_contrast", "min_edge_contrast", "min_radial_depth_px", "min_radial_depth_ratio", "min_paired_edge_support", "min_contour_continuity", "max_width_coefficient_of_variation", "max_center_drift_ratio", "min_tangential_width_px", "max_tangential_width_px", "outer_connection_tolerance_px", "max_gap_rows", "min_groove_score", "ambiguity_margin"],
+          "properties": {
+            "threshold_version": {"type": "string", "minLength": 1},
+            "n_radii": {"type": "integer", "minimum": 16},
+            "radial_span_px": {"type": "number", "exclusiveMinimum": 0},
+            "shoulder_width_deg": {"type": "number", "exclusiveMinimum": 0},
+            "shoulder_gap_deg": {"type": "number", "exclusiveMinimum": 0},
+            "search_margin_deg": {"type": "number", "exclusiveMinimum": 0},
+            "min_local_contrast": {"type": "number", "exclusiveMinimum": 0},
+            "min_edge_contrast": {"type": "number", "exclusiveMinimum": 0},
+            "min_radial_depth_px": {"type": "number", "exclusiveMinimum": 0},
+            "min_radial_depth_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_paired_edge_support": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_contour_continuity": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_width_coefficient_of_variation": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_center_drift_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_tangential_width_px": {"type": "number", "exclusiveMinimum": 0},
+            "max_tangential_width_px": {"type": "number", "exclusiveMinimum": 0},
+            "outer_connection_tolerance_px": {"type": "number", "exclusiveMinimum": 0},
+            "max_gap_rows": {"type": "integer", "minimum": 0},
+            "min_groove_score": {"type": "number", "minimum": 0, "maximum": 1},
+            "ambiguity_margin": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
         "pairing": {
           "type": "object",
           "required": ["min_candidates", "max_candidates", "min_separation_deg", "max_separation_deg", "expected_separation_deg", "min_width_ratio", "min_prominence_ratio", "min_pair_score", "min_score_margin"],

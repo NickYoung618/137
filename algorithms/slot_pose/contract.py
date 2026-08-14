@@ -14,7 +14,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.4.1"
+ALGORITHM_VERSION = "0.5.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -26,6 +26,8 @@ ERROR_CODES = {
     "SLOT_PAIR_AMBIGUOUS",
     "ROLE_ASSIGNMENT_FAILED",
     "ROLE_ASSIGNMENT_AMBIGUOUS",
+    "GROOVE_RECOGNITION_FAILED",
+    "GROOVE_RECOGNITION_AMBIGUOUS",
     "RING_TRUNCATED",
     "QUALITY_REJECTED",
     "TARGET_SEMANTICS_UNCONFIRMED",
@@ -93,11 +95,13 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError("max_polar_pair_disagreement_deg must be in (0, 180]")
     if mode == "multi_notch_roles":
         from algorithms.slot_pose.angular_profile import validate_profile_config
+        from algorithms.slot_pose.groove_recognition import merged_groove_config
         from algorithms.slot_pose.role_assignment import validate_role_config
 
         if not isinstance(detector.get("profile"), dict) or not isinstance(detector.get("role_assignment"), dict):
             raise ValueError("multi-role mode requires detector.profile and detector.role_assignment objects")
         validate_profile_config(detector["profile"])
+        detector["groove_recognition"] = merged_groove_config(detector.get("groove_recognition"))
         validate_role_config(detector["role_assignment"])
     return config
 

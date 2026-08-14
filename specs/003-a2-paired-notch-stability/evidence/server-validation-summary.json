@@ -22,7 +22,7 @@
     }
   },
   "postChangeValidation": {
-    "unitTests": {"run": 48, "passed": 48, "skipped": 0},
+    "unitTests": {"run": 55, "passed": 55, "skipped": 0},
     "legacySweep72": {
       "manifestValid": true,
       "valid": 72,
@@ -72,19 +72,18 @@
       "fullFrameFailureCodes": {"RING_TRUNCATED": 25},
       "developmentRoiCompleteRingAccepted": 25,
       "developmentRoiCandidateCountDistribution": {"3": 25},
-      "developmentRoiFailureCodes": {
-        "DATUM_DEFINITION_UNCONFIRMED": 3,
-        "ROLE_ASSIGNMENT_FAILED": 22
-      },
+      "developmentRoiAcceptedGrooveCountDistribution": {"1": 25},
+      "developmentRoiFailureCodes": {"GROOVE_RECOGNITION_FAILED": 25},
+      "developmentRoiRejectedRawCandidateReasons": {"width_variation_too_high": 50},
       "formalMechanicalValid": 0,
       "signedRelativeRotationDegAlwaysNull": true,
       "elapsedMs": {
         "fullFrameP50": 3604.3130038306117,
         "fullFrameP95": 4221.652029082179,
         "fullFrameMax": 4391.536319162697,
-        "developmentRoiP50": 3510.8498549088836,
-        "developmentRoiP95": 4106.919303955509,
-        "developmentRoiMax": 4295.790374977514
+        "developmentRoiP50": 3947.8859880473465,
+        "developmentRoiP95": 4715.377379907295,
+        "developmentRoiMax": 6140.54742990993
       },
       "roleMappingConfirmed": false,
       "originalBmpTruthAvailable": false,

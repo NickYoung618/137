@@ -23,6 +23,30 @@
 | deficitArea | positive number | 阈值下亮度亏损积分，用于排名 |
 | rank | positive integer | 按prominence、deficitArea、centerDeg确定性排名 |
 
+`NotchCandidate`在新管线中是`RawDarkCandidate`，仅表示达到环形暗区门槛，不表示已证明为凹槽。
+
+## GrooveAssessment
+
+| Field | Type | Rule |
+|---|---|---|
+| candidateId | string | 引用一个`RawDarkCandidate` |
+| grooveScore | number | `[0,1]`可解释组合分，不替代硬门 |
+| accepted | boolean | 所有必要几何门和组合分均通过时为true |
+| rejectionReasons | string list | 深度、宽度、对比、边缘、连续性、外缘连通或已知遮挡冲突 |
+| radialDepthPx, radialDepthRatio | number | 从壳体外缘向内连通的局部暗部深度 |
+| angularWidthDeg, tangentialWidthPx | number | 环形宽度及外圆处弧长 |
+| localMetalContrast | number | 候选内部与两侧金属肩部的稳健亮度差 |
+| pairedEdgeSupport | number | 同时存在左/右边缘证据的径向比例 |
+| contourContinuity | number | 有效边缘在径向的连续程度 |
+| widthCoefficientOfVariation | number/null | 逐径向宽度变化，用于拒绝扇形/工装边界 |
+| centerDriftDeg | number/null | 逐径向中心漂移，用于拒绝倾斜/遮挡边界 |
+| outerConnected | boolean | 凹入证据连到标称外缘邻域 |
+| thresholdVersion | string | 生成该评估的阈值集版本 |
+
+## AcceptedGrooveCandidate
+
+`AcceptedGrooveCandidate`是`GrooveAssessment.accepted=true`的原始候选及证据联合视图。`RoleAssignmentResult`的输入只能来自此集合。
+
 ## RoleRule
 
 | Field | Type | Rule |
@@ -67,6 +91,7 @@
 | profile | object | 角度/径向样本数、环带宽、平滑窗、MAD倍数和最小显著度 |
 | pairing | object | 候选数、宽度/显著度、间距、比率、最佳得分和次优差距门槛 |
 | maxPolarPairDisagreementDeg | positive number | paired rotation与polar rotation的最大环形差 |
+| grooveRecognition | object | 单帧径向/边缘/轮廓门槛、歧义带及阈值版本 |
 | roleAssignment | object | 角色窗口、datum定义、分配差距、对置误差及图纸标注 |
 
 ## A2ManifestRecord
@@ -100,6 +125,6 @@ false-positive数/率、错误码和耗时，不含伪造的0度。
 
 ## State Transitions
 
-`received → face_located → profile_extracted → candidates_extracted → roles_assessed → diagnostic_ready`。
+`received → face_located → profile_extracted → raw_candidates_extracted → grooves_recognized → roles_assessed → diagnostic_ready`。
 任一阶段可进入`failed`终态。只有`diagnostic_ready`且目标语义、机械约定、质量门和角范围全部通过，
 才允许`pose_computed → succeeded`；否则仍以无角失败终止。
