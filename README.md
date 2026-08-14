@@ -52,6 +52,8 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
 - paired候选数、两侧宽度/显著度、角间距、唯一性、环带完整性、圆心/尺度和polar一致性门控。
 - 任意数量候选到`datum_primary`/`datum_secondary`/`target_left`的显式分配、唯一性和环形夹角。
 - v2向后兼容诊断、外置A2 Manifest/truth契约、正常/坏图分报告和Mac一键验收CLI。
+- 可选归一化圆搜索ROI（默认关闭）用于屏蔽相邻工装；它只改变历史圆链的对齐输入，不修改候选原图。
+- `tools/render_slot_pose_review.py`在仓库外生成候选编号叠加图、联系表、CSV和非权威角色假设表。
 
 服务器paired合成冒烟：
 
@@ -72,7 +74,8 @@ uv run python tools/run_slot_pose_batch.py \
 
 ## Mac A2后续验证
 
-真实数据仍只在`/Users/daizekai/Desktop/壳体项目/A2.rar`，不上传服务器、不提交Git。同步本仓库到Mac后：
+服务器现只有1张A2代表图及一份非datum/target的短线标注；完整正常/坏图集仍在Mac外置存储，不提交Git。
+同步本仓库到Mac后：
 
 1. 将配置的`legacy_asset`路径改为Mac同源源码、标注和参考图，并核对内容SHA-256。
 2. 在外置目录解压/流式读取A2，先生成Manifest，再补目标槽、机械真值、样品和split标注。
@@ -97,7 +100,7 @@ uv sync
 uv run python -m unittest discover -s tests -v
 uv run python tools/generate_synthetic_slot_pose.py \
   --output-dir /tmp/slot-pose-synthetic --angles=0,30,90 --repeats 1 --seed 137 \
-  --legacy-source '/Users/daizekai/Desktop/壳体项目/work/算法原始/A端面/repeatability_evaluation.py'
+  --legacy-source "$A2_LEGACY_SOURCE"
 uv run python algorithms/slot_pose/main.py \
   --image /tmp/slot-pose-synthetic/synthetic/sample_synthetic/angle_pos_030p00/repeat_001.png \
   --config /tmp/slot-pose-synthetic/synthetic-config.json --task-id mac-smoke --strict

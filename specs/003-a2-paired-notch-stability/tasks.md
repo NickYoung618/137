@@ -171,3 +171,12 @@
 - [x] T048 [US2] Prove drawing inspection cannot become mechanical correction in `tests/test_multi_notch_roles.py`
 - [x] T049 Update example configuration and workflow in `config/inspection.example.json` and `specs/003-a2-paired-notch-stability/quickstart.md`
 - [x] T050 Run full regression, consistency analysis, pollution checks, and update `specs/003-a2-paired-notch-stability/evidence/server-validation-summary.json`
+
+---
+
+## Phase 9: Convergence
+
+- [x] T051 Decouple `multi_notch_roles` profile/candidate extraction from the legacy single-notch success gate in `algorithms/slot_pose/legacy_adapter.py`, while preserving the unchanged legacy path and fail-closed result semantics per FR-003/FR-005/FR-007 (contradicts)
+- [x] T052 Add a deterministic external-evidence review CLI with candidate-number overlays, candidate/role-hypothesis tables, confidence and ambiguity summaries, plus focused tests in `tools/render_slot_pose_review.py` and `tests/test_slot_pose_review.py` per FR-004 and Constitution III/IV (partial)
+- [x] T053 Run the real A2 server inventory and diagnostic workflow outside Git, then record only path-free hashes, counts, failure distribution, bounded findings and minimum field questions in `specs/003-a2-paired-notch-stability/evidence/a2-server-diagnostic-summary.json` per FR-014/FR-024/SC-009 (partial)
+- [x] T054 Add an optional normalized face-search ROI that masks adjacent fixtures before calling the unchanged historical circle/scale chain, including config validation, diagnostics and tests, while leaving it disabled by default per FR-001/FR-002/FR-027 (partial)

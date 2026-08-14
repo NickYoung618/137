@@ -1,7 +1,7 @@
 {
   "schemaVersion": "a2-paired-notch-server-validation/1",
   "createdAt": "2026-08-14",
-  "scope": "server synthetic and read-only historical asset validation; real Mac A2 not evaluated",
+  "scope": "server synthetic, read-only historical assets, and one server-available real A2 development frame; full Mac A2 not evaluated",
   "preChangeBaseline": {
     "unitTests": {"run": 12, "passed": 12, "skipped": 0},
     "legacySweep72": {
@@ -22,14 +22,15 @@
     }
   },
   "postChangeValidation": {
-    "unitTests": {"run": 42, "passed": 42, "skipped": 0},
+    "unitTests": {"run": 46, "passed": 46, "skipped": 0},
     "legacySweep72": {
       "manifestValid": true,
       "valid": 72,
       "total": 72,
       "maeDeg": 0.1561191377641921,
       "p95Deg": 0.30187302208952926,
-      "maxDeg": 0.3498688679892439
+      "maxDeg": 0.3498688679892439,
+      "elapsedP95Ms": 1038.4771236334927
     },
     "legacyRepeat60": {
       "manifestValid": true,
@@ -63,6 +64,17 @@
       "negativeTotal": 2,
       "formalMechanicalValid": 0,
       "failureCodes": ["DATUM_DEFINITION_UNCONFIRMED", "ROLE_ASSIGNMENT_AMBIGUOUS", "ROLE_ASSIGNMENT_FAILED"]
+    },
+    "realA2ServerDiagnostic": {
+      "availableImages": 1,
+      "fullFrameFailureCode": "RING_TRUNCATED",
+      "developmentRoiCandidateCount": 3,
+      "developmentRoiFailureCode": "ROLE_ASSIGNMENT_FAILED",
+      "formalMechanicalValid": 0,
+      "signedRelativeRotationDeg": null,
+      "elapsedMs": 3073.1053929775953,
+      "roleMappingConfirmed": false,
+      "fullNormalAndBadSetsAvailable": false
     }
   },
   "productionStatus": "BLOCKED_B001_B008"

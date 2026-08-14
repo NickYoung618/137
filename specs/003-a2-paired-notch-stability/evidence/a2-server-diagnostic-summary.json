@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "a2-server-diagnostic-summary/1",
+  "createdAt": "2026-08-14",
+  "scope": "server-available real A2 assets only; no Mac archive or full normal/bad set",
+  "inventory": {
+    "realA2Images": 1,
+    "imageSha256": "72912fb27a7127c7db3e425d896c9337d6a227a673b8396dc6026dab40c4b5b3",
+    "imageWidth": 5472,
+    "imageHeight": 3648,
+    "imageMode": "L",
+    "shortLineAnnotations": 1,
+    "shortLineAnnotationSha256": "a175dd831fbc94913f9b9c69a04f81b0be7b58c0355118551c4447b967b3271c",
+    "shortLineLabels": ["19", "30"],
+    "annotationProvesDatumTargetMapping": false,
+    "captureGroupingAvailable": false,
+    "angleTruthAvailable": false,
+    "fullNormalSetAvailable": false,
+    "fullBadSetAvailable": false
+  },
+  "diagnosticRuns": {
+    "defaultFullFrameAlignment": {
+      "images": 1,
+      "valid": 0,
+      "failureCounts": {"RING_TRUNCATED": 1},
+      "finding": "Adjacent right-side fixtures pull the historical full-frame alignment circle away from the main A face; the strict ring gate correctly rejects it."
+    },
+    "developmentRoiAlignment": {
+      "roiNormalized": [0.0, 0.0, 0.82, 1.0],
+      "roiStatus": "development diagnostic only; not frozen for production",
+      "images": 1,
+      "valid": 0,
+      "formalAngles": 0,
+      "failureCounts": {"ROLE_ASSIGNMENT_FAILED": 1},
+      "elapsedMs": 3073.1053929775953,
+      "polarScore": 4.685392133742674,
+      "candidateCount": 3,
+      "candidates": [
+        {"candidateId": "candidate-001", "centerDeg": 31.566901376083084, "halfWidthDeg": 9.375, "prominence": 139.9196654950993, "rank": 2},
+        {"candidateId": "candidate-002", "centerDeg": 291.3098830497482, "halfWidthDeg": 11.75, "prominence": 184.23537668449433, "rank": 1},
+        {"candidateId": "candidate-003", "centerDeg": 327.79564147797066, "halfWidthDeg": 11.125, "prominence": 136.77117746721024, "rank": 3}
+      ],
+      "candidateProminenceGap": 44.31571118939502,
+      "roleAssignmentUnique": false,
+      "signedRelativeRotationDeg": null,
+      "resultValid": false
+    }
+  },
+  "boundedInterpretation": [
+    "The overlay visually associates candidate-002 and candidate-003 with the two visible upper gaps, but this is a review observation, not drawing-role truth.",
+    "Candidate-001 overlaps the right/lower interference boundary and must be confirmed as a real shell feature or rejected as occlusion.",
+    "The three single-ray pair included angles are approximately 100.257, 63.771 and 36.486 degrees; none is within the drawing label 85 +/- 5 degrees.",
+    "An opposed-axis combination can appear numerically close to 85 degrees only while its datum opposition error is about 143.514 degrees, so it is geometrically invalid and must not be accepted.",
+    "One development image cannot establish ROI stability, candidate repeatability, failure rates, normal accuracy or bad-image false-positive rate."
+  ],
+  "externalReviewArtifacts": {
+    "manifestSha256": "64156a55fc7e7e23b382ca6266a94b29049d2d58f81fdf27f710fb4b6e2a5014",
+    "resultsSha256": "909cb44e8cffab4889f1fe523b66faf25f75c93e86a1a0419a80e588e95f3a7f",
+    "reviewSha256": "715566b1540337daab39b957d3e095601a5f742e6267d0d59a76f44436673712",
+    "contactSheetSha256": "5016c5aee177b79ff71db55610ad99764292bbfe2f1d3280730219f5beade190",
+    "containsAbsolutePath": false,
+    "committedMedia": false
+  },
+  "minimumFieldQuestions": [
+    "On the numbered overlay, fill exactly: datum_primary candidate ID; datum_secondary candidate ID or NONE; target_left candidate ID; interference candidate IDs.",
+    "Confirm whether the datum is one slot ray, an upper/lower opposed-slot axis, or another explicitly marked geometry; if another, mark it on the same frame.",
+    "Confirm whether 85 +/- 5 degrees is a drawing OK/NG tolerance or an input to mechanical correction; if correction, provide the formula separately from the measured angle.",
+    "Provide at least 20 representative frames spanning expected part positions to confirm or reject the development ROI before freezing it.",
+    "Provide capture grouping and independent truth for the full normal set, plus the full bad-image set, before accuracy and false-positive acceptance."
+  ],
+  "productionStatus": "FAIL_CLOSED_BLOCKED_B002_B008"
+}

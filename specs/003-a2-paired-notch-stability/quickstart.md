@@ -62,6 +62,17 @@ uv run python tools/run_a2_acceptance.py \
 该命令按顺序生成并验证Manifest、运行批处理、校验truth，然后分别生成`normal-report.json`和
 `bad-report.json`。所有路径由命令行提供；原图、压缩包和派生大图不写入仓库。
 
+将批处理结果生成人工核对包（必须指向仓库外目录）：
+
+```bash
+uv run python tools/render_slot_pose_review.py \
+  --manifest "$A2_MANIFEST" --results "$A2_RESULTS_JSONL" \
+  --data-root "$A2_DATA_ROOT" --output-dir "$A2_REVIEW_DIR"
+```
+
+输出含`review.json`、`candidates.csv`、`overlays/`和`contact-sheet.jpg`。其中角色组合只是现场勾选用假设，
+`roleSuggestionsAreAuthoritative=false`固定表示它们不是业务真值。
+
 ## 5. 正式结论门禁
 
 B-006图纸datum、B-007输出用途、B-008 A2特征映射及B-001至B-005未关闭时，

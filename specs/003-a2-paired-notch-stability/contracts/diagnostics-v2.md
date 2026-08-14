@@ -6,6 +6,7 @@ fields are unchanged. Consumers may ignore all fields below.
 ```text
 diagnostics.diagnosticMode: legacy_single_notch | paired_notches_centerline | multi_notch_roles
 diagnostics.targetSemanticsConfirmed: boolean
+diagnostics.face.searchRoiNormalized: [x_min, y_min, x_max, y_max] | null
 diagnostics.angularProfile: {
   sampleCount, radialSampleCount, shellInnerRadiusPx, shellOuterRadiusPx,
   medianIntensity, madIntensity, darkThreshold, completeRing
