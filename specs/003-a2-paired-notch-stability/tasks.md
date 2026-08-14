@@ -1,0 +1,156 @@
+# Tasks: A2双缺口槽姿态稳定检测与真实数据验收
+
+**Input**: Design documents from `specs/003-a2-paired-notch-stability/`
+
+**Prerequisites**: `plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`
+
+**Tests**: 用户明确要求测试先行，覆盖Schema、CLI、批处理、失败分支、历史legacy回归和paired独立真值。
+
+**Organization**: 任务按用户故事组织，但因本次由单一实施者且共享文件较多，默认按顺序执行。
+
+## Format: `[ID] [P?] [Story] Description`
+
+## Phase 1: Setup and Compatibility Baseline
+
+**Purpose**: 固定分支基线、配置边界和不可修改资产。
+
+- [ ] T001 在`config/inspection.example.json`加入显式诊断模式、目标语义未确认标志和paired门槛的fail-closed默认值（FR-005, FR-011, FR-012）
+- [ ] T002 在`contracts/slot-pose-config.schema.json`扩展可向后读取的profile/pairing配置约束，禁止未知模式和非法门槛（FR-005, FR-009）
+- [ ] T003 [P] 在`config/README.md`记录诊断模式与生产语义确认的分离规则（FR-011, FR-012）
+- [ ] T004 在`tests/test_slot_pose_contract.py`先写旧配置安全默认、新配置错误和未确认语义测试（FR-009..FR-013）
+
+---
+
+## Phase 2: Foundational Circular Geometry
+
+**Purpose**: 为多候选、配对和评估建立单一环形数学语义。
+
+- [ ] T005 在`tests/test_angular_profile.py`先写环形差、环形中点、跨边界连通段和确定性排序测试（FR-004, FR-007）
+- [ ] T006 在`algorithms/slot_pose/angular_profile.py`实现无I/O的环形角工具、候选和配对数据类型（FR-004, FR-007）
+- [ ] T007 在`tests/test_slot_pose_evaluation.py`先写±180°环绕、静态环形展开和跨真值组残差统计测试（FR-018, FR-019）
+- [ ] T008 在`tools/evaluate_slot_pose.py`提供共用环形均值/展开和残差分组统计，失败不产生角度样本（FR-018, FR-019）
+
+**Checkpoint**: 角度边界、候选边界和评估残差共享一致的环形语义。
+
+---
+
+## Phase 3: User Story 1 — 外缘多候选和双缺口诊断 (Priority: P1) 🎯 MVP
+
+**Goal**: 从已有A端面外缘环带提取所有暗区并返回唯一双缺口中心线诊断。
+
+**Independent Test**: 受控双缺口剖面和图像上的候选字段、配对中心线、唯一性和polar一致性可数值核对。
+
+### Tests for User Story 1
+
+- [ ] T009 [US1] 在`tests/test_angular_profile.py`先写全暗区提取、中心/半宽/显著度/边界、次候选差距和多组合配对测试（FR-003, FR-004, FR-006）
+- [ ] T010 [US1] 在`tests/test_paired_slot_pose.py`先写平移、缩放、亮度/噪声和±180°环绕的paired独立真值测试（SC-002）
+- [ ] T011 [US1] 在`tests/test_legacy_adapter.py`先写两种显式模式的编排、参考/目标paired rotation和polar一致性测试（FR-001, FR-005, FR-008）
+
+### Implementation for User Story 1
+
+- [ ] T012 [US1] 在`algorithms/slot_pose/angular_profile.py`实现环形平滑、中位数/MAD阈值、全连通暗区提取和可数值核对的候选摘要（FR-003, FR-004, SC-004）
+- [ ] T013 [US1] 在`algorithms/slot_pose/angular_profile.py`实现全组合硬门、得分、最佳/次佳差距、唯一性和环形中心线（FR-006, FR-007）
+- [ ] T014 [US1] 在`algorithms/slot_pose/legacy_adapter.py`调用历史`polar_resample`提取外缘剖面，先验证圆心/尺度/环带完整性，不新建圆/配准链（FR-002, FR-003, FR-008）
+- [ ] T015 [US1] 在`algorithms/slot_pose/legacy_adapter.py`保留legacy原路径并接入参考/目标paired、paired rotation、polar一致性及诊断输出（FR-001, FR-005, FR-008）
+- [ ] T016 [US1] 在`tools/generate_synthetic_paired_notches.py`生成小型paired参考、独立真值、变换正样本和不进Git的运行资产（SC-002, SC-009）
+
+**Checkpoint**: paired正样本可独立通过，旧legacy模式的同源路径未改变。
+
+---
+
+## Phase 4: User Story 2 — 不可靠时安全失败 (Priority: P1)
+
+**Goal**: 任何候选、配对、图像、一致性、配置或外部决策失败都不带正式角或旧值。
+
+**Independent Test**: 缺一槽、多余暗区、双配对歧义、裁切、错误配置和未确认语义均得到稳定错误码和空角。
+
+### Tests for User Story 2
+
+- [ ] T017 [US2] 在`tests/test_angular_profile.py`先写缺一槽、多余暗区、等价双配对、宽度/显著度/间距越界测试（FR-006, FR-009, SC-003）
+- [ ] T018 [US2] 在`tests/test_paired_slot_pose.py`先写裁切环带、圆心/尺度异常、polar不一致和未确认目标/机械语义测试（FR-008..FR-012）
+- [ ] T019 [US2] 在`tests/test_slot_pose_cli.py`先写错误模式/门槛配置、strict退出码和连续任务不复用旧角测试（FR-009, FR-010）
+
+### Implementation for User Story 2
+
+- [ ] T020 [US2] 在`algorithms/slot_pose/contract.py`增加配置语义验证和稳定paired失败码，保持无效结果角/置信度为空（FR-009..FR-013）
+- [ ] T021 [US2] 在`algorithms/slot_pose/legacy_adapter.py`将候选/配对/裁切/一致性失败映射为稳定阶段和诊断（FR-008..FR-010）
+- [ ] T022 [US2] 在`algorithms/slot_pose/legacy_adapter.py`和`algorithms/slot_pose/main.py`对目标语义与机械约定分别门控，禁止技术模式自动成为机械角（FR-010..FR-012）
+
+**Checkpoint**: 所有聚焦失败样本100% fail-closed，诊断可保留但不含正式角。
+
+---
+
+## Phase 5: User Story 3 — Mac A2批量验收 (Priority: P2)
+
+**Goal**: 以外置Manifest和truth在Mac上分别评估正常集精度/稳定性和坏图误引导。
+
+**Independent Test**: 小型外置目录、分组CSV、truth CSV和JSONL结果可完成一键流程，并拒绝分组/指纹/split污染。
+
+### Tests for User Story 3
+
+- [ ] T023 [US3] 在`tests/test_data_tools.py`先写显式condition映射、dataset class、时序字段、不猜25×20和Manifest/truth一致性测试（FR-014..FR-017）
+- [ ] T024 [US3] 在`tests/test_slot_pose_evaluation.py`先写正常报告全指标、坏图false-positive、失败不填0和不完整状态测试（FR-018..FR-022）
+- [ ] T025 [US3] 在`tests/test_slot_pose_batch.py`先写单图失败不中断整批、逐图任务ID和一键产物测试（FR-010, FR-023, SC-006）
+
+### Implementation for User Story 3
+
+- [ ] T026 [US3] 在`tools/make_manifest.py`支持显式分组映射、normal/bad、condition、capture timestamp/sequence和split，未分组时不猜测（FR-014, FR-015）
+- [ ] T027 [US3] 在`tools/validate_dataset.py`校验Manifest/truth指纹、分组、序号、数据集类别和物理样品/split隔离（FR-016, FR-017, SC-007）
+- [ ] T028 [US3] 在`tools/evaluate_slot_pose.py`分别生成正常/坏图报告，增加有效率、静态环形极差、跨组残差和false-positive指标（FR-018, FR-019, FR-020, FR-021, FR-022, SC-008）
+- [ ] T029 [US3] 在`tools/run_slot_pose_batch.py`确保逐图捕获输入/配置失败并持续处理，失败结果仍可追溯（FR-010, SC-006）
+- [ ] T030 [US3] 在`tools/run_a2_acceptance.py`组合Manifest生成/验证、批处理、truth校验和正常/坏图分报告的一键CLI（FR-023）
+- [ ] T031 [P] [US3] 在`data/README.md`和`specs/003-a2-paired-notch-stability/quickstart.md`固化Mac外置数据命令、分组证据和不入Git规则（FR-014, FR-015, FR-023, FR-024）
+
+**Checkpoint**: 不含A2原图的小数据可完整演练Mac一键验收。
+
+---
+
+## Phase 6: User Story 4 — v2兼容与集成边界 (Priority: P3)
+
+**Goal**: 旧v2消费者可忽略新诊断，且不产生任何PLC编码或写入。
+
+**Independent Test**: 现有顶层/result/error断言和Schema对带新diagnostics的有效/无效样例仍成立。
+
+### Tests for User Story 4
+
+- [ ] T032 [US4] 在`tests/test_slot_pose_contract.py`先写v2必填字段不变、新diagnostics可忽略、无效角不变量和无PLC字段测试（FR-010, FR-013, FR-025）
+
+### Implementation for User Story 4
+
+- [ ] T033 [US4] 在`algorithms/slot_pose/contract.py`和`contracts/slot-pose-result.schema.json`保持result/2必填契约，将新数据限定为诊断扩展（FR-013）
+- [ ] T034 [P] [US4] 在`contracts/slot-pose-output.md`记录paired诊断向后兼容、过期结果禁用和PLC未确认禁写边界（FR-010, FR-013, FR-025）
+
+---
+
+## Phase 7: Polish and Full Validation
+
+**Purpose**: 复跑全量门禁，检查污染并记录外部BLOCKED。
+
+- [ ] T035 在`tests/test_legacy_adapter.py`和基线命令复跑72角legacy扫角及3×20重复性，对比修改前MAE/P95/max、有效率和耗时（SC-001, SC-006）
+- [ ] T036 运行`tools/generate_synthetic_paired_notches.py`产生的paired全部正/负合成集，验证真值精度、门控失败率和默认未确认配置（SC-002, SC-003, SC-010）
+- [ ] T037 运行全量`unittest`、JSON Schema解析、`compileall`、`git diff --check`和CLI/批处理/一键冒烟（SC-005）
+- [ ] T038 检查Git差异中的原图/压缩包/派生大文件、绝对数据路径和禁止工作区指纹，在`README.md`记录分支、验证命令和B-001..B-005（FR-024, FR-025, SC-009）
+
+---
+
+## Dependencies & Execution Order
+
+- Phase 1 → Phase 2 → US1 → US2 → US3 → US4 → Polish。
+- T004/T005/T007必须在对应配置/数学实现前先失败；每个用户故事的测试任务必须先于其实现任务。
+- T014是新模块调用历史`polar_resample`的唯一入口；`angular_profile.py`不直接动态加载历史源。
+- T022依赖T020/T021；T029/T030依赖US1/US2的稳定单图结果；T033依赖所有新诊断字段定型。
+- 文档任务T003/T031/T034可与不修改同文件的实现任务并行；本次单实施者仍按顺序完成。
+
+## Parallel Opportunities
+
+- T003与T004可并行，因为分别修改文档和测试。
+- T031可在T026-T030之后与报告验证并行。
+- T034可与T033并行，但必须在新诊断名称冻结后开始。
+
+## Implementation Strategy
+
+1. 先固定配置和环形数学不变量。
+2. 以US1交付多候选和双缺口诊断MVP，独立复跑legacy基线。
+3. 以US2完成所有fail-closed分支，再进入数据工具。
+4. 以US3完成Mac一键验收，以US4冻结v2兼容边界。
+5. 最后复跑全量和两套合成基线，只做本地提交，不推送、不合并main。
