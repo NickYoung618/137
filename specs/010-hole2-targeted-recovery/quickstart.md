@@ -57,3 +57,19 @@ scripts/run_hole2_full_regression.sh \
 `geometryConsistency.ratioSource=old_reference_annotation_geometry`；该检查只诊断或
 拒绝粗大错边，`outputAdjustmentApplied` 固定为 `false`。最终离群下降仍以
 Mac 2200张外置复验为准。
+
+## LabelMe 部分圆弧补全
+
+输入、原图和全部输出必须位于 Git 工作树外：
+
+```bash
+uv run python tools/complete_labelme_circle.py \
+  --annotation "$EXTERNAL_CIRCLE_DIR/partial-circle.json" \
+  --image "$EXTERNAL_CIRCLE_DIR/source.bmp" \
+  --config config/labelme_circle_completion.example.json \
+  --completed "$EXTERNAL_CIRCLE_DIR/completed-circle.json" \
+  --report "$EXTERNAL_CIRCLE_DIR/completion-report.json" \
+  --preview "$EXTERNAL_CIRCLE_DIR/completion-preview.jpg"
+```
+
+默认输入标签为 `outer_circle_visible_arc`，输出为闭合 `outer_circle_contour`。源圆弧必须不少于8个有限点、通过现有 `25 px` 中位径向残差门并覆盖至少 `120°`。输出点数由圆周长和源点中位间距计算；`auto_completed=true`、`human_verified=false` 表示必须回到 LabelMe 人工确认。

@@ -82,7 +82,7 @@
 
 ### Tests for User Story 3
 
-- [x] T019 [P] [US3] 先写哈希、标签、shape_type、2/77 点和真值泄漏拒绝红灯测试（FR-012/FR-013/SC-003）in `tests/test_current_capture_acceptance.py`
+- [x] T019 [P] [US3] 先写哈希、标签、shape_type、`7`两点、`Φ12.2`可变点数/圆残差和真值泄漏拒绝红灯测试（FR-012/FR-013/SC-003）in `tests/test_current_capture_acceptance.py`
 - [x] T020 [P] [US3] 先写 `7` 无序端点/长度与 `Φ12.2` 圆拟合误差红灯测试（FR-014）in `tests/test_current_capture_acceptance.py`
 
 ### Implementation for User Story 3

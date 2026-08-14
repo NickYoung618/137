@@ -45,7 +45,7 @@ uv run python tools/evaluate_current_capture.py \
   --out /path/to/external/outputs/current-capture-acceptance.json
 ```
 
-预期：严格接受且只接受 `7` 的两点 `line` 与 `Φ12.2` 的 77 点 `linestrip`，报告目标图像素误差。报告没有生产 PASS/FAIL，因为毫米标定、公差和重复性尚未确认。
+预期：严格接受且只接受 `7` 的两点 `line` 与 `Φ12.2` 不少于8个有限点、通过现有圆残差门的 `linestrip`，报告实际点数与目标图像素误差。历史77点不是契约。报告没有生产 PASS/FAIL，因为毫米标定、公差和重复性尚未确认。
 
 验收报告的 `detectionSummary` 同时保留算法/配置版本、耗时、选择方向、正/逆
 变换、所有候选分数/拒绝原因和两个特征的独立质量状态。`qualityStatus.state`

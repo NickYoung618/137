@@ -23,3 +23,10 @@
 - `tolerance.confirmed=false`：表示不得用于正式OK/NG。
 - `repeatability.tiers`：需求中的0.10、0.05、0.03 mm档；当前模板暂以极差评估，口径待确认。
 - `current_capture_registration.v1.json` 中 `Φ12.2` 主半径下限固定为 `0.88`；只有主候选在下界饱和时才以 `recovery_min_radius_scale_ratio=0.84` 执行一次恢复搜索。
+
+LabelMe 部分圆弧补全使用 `labelme_circle_completion.example.json`：
+
+- `minimumSourcePoints` 不得低于8。
+- `maximumMedianResidualPx` 不得高于核心 `CIRCLE_RESIDUAL_PX=25 px`，配置不能放宽核心门。
+- `minimumArcCoverageDeg` 默认 `120°`，用于拒绝不稳定短弧。
+- `maximumCompletedUniquePoints` 只是资源安全上限；实际点数始终由圆周长和源点中位间距推导，不是固定契约。

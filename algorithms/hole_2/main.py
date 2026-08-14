@@ -55,8 +55,9 @@ d12 telling how far the chosen near-end is from the anchored point.
 Output is a CSV with one row per image: alignment metadata followed by
 the measurements of every shape, all expressed in reference-frame pixels
 (circle/arc: cx, cy, r; line: x1, y1, x2, y2, length). The confirmed
-``ψ12.2``/damaged-source equivalent is a 77-point LabelMe ``linestrip``
-fitted as a circle and additionally emits ``Phi12_2_diameter_px = 2*r``.
+``ψ12.2``/damaged-source equivalent is a variable-point LabelMe ``linestrip``
+with at least eight finite points passing the existing circle-residual gate; it
+is fitted as a circle and additionally emits ``Phi12_2_diameter_px = 2*r``.
 
 Layout for the input directory tree:
 

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "labelme-circle-completion-config/1",
+  "inputLabel": "outer_circle_visible_arc",
+  "outputLabel": "outer_circle_contour",
+  "minimumSourcePoints": 8,
+  "maximumMedianResidualPx": 25.0,
+  "minimumArcCoverageDeg": 120.0,
+  "maximumCompletedUniquePoints": 4096
+}

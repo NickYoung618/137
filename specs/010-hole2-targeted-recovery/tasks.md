@@ -35,6 +35,15 @@
 - [x] T019 运行 unittest、compileall、Schema、SpecKit analyze、Git资产门禁（FR-018/SC-004）
 - [x] T020 提交推送并给出 Mac 2200 张复跑命令（SC-005）
 
+## Phase 6 - 可变点数圆验收与 LabelMe 补圆
+
+- [x] T021 删除验收和规范中的固定77点契约，改为至少8个有限点和现有圆残差门（FR-019/SC-006）
+- [x] T022 先增加可变点数、少于8点、非圆折线、覆盖不足与闭合标记测试（FR-019–FR-023/SC-006–SC-007）
+- [x] T023 复用现有拟圆实现确定性 LabelMe 部分圆弧补全 CLI 与配置/报告契约（FR-020–FR-024）
+- [x] T024 外置实跑55点圆弧，保留两轴、删除遮挡多边形并生成补全JSON/报告/预览（FR-024–FR-025/SC-007–SC-008）
+- [x] T025 更新 README/quickstart/脱敏证据并执行完整测试、Schema、diff和污染门（FR-025）
+- [x] T026 本地提交且不 push、不修改 PLC/上位机（FR-025）
+
 ## Final verification evidence
 
 - `uv run python -m unittest discover -s tests -v`: 100 tests passed, 7 skipped;
@@ -45,3 +54,12 @@
   absolute error `0.1372 px`.
 - External nine-frame result: registration `9/9`, d7 `5/9`, `Φ12.2` `8/9`,
   technicalComplete `5/9`; 500/521/620 control transforms and measurements unchanged.
+- Phase 6 full gate: `uv run python -m unittest discover -s tests -v` passed
+  `110` tests with `9` optional-Schema skips; the explicit `jsonschema` gate passed
+  `18/18` tests.
+- External partial-circle completion: `55` source points, `216.052850°` visible
+  coverage and `1.704781/4.695070/5.368897 px` median/P95/max source radial
+  residuals; the spacing-derived output contains `91` unique fitted-circle points
+  plus one repeated closing point. Completed-point maximum radial residual is below
+  `5e-13 px`. These are automated fit diagnostics, not human truth or production
+  accuracy.

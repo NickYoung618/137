@@ -253,3 +253,26 @@ bash scripts/smoke_reference.sh
 `Φ12.2` 使用受控两阶段半径搜索：主下限保持 `0.88`，只有主候选在
 下界饱和时才以 `0.84` 下限恢复一次，并在质量字段中显式记录。尺寸7
 的新切线双边界失败时，只允许回退到已通过原 v6 双边界质量状态的有限结果。
+
+### 可变点数圆验收与 LabelMe 补圆
+
+`Φ12.2` 验收不再要求固定77点。合法输入是 `shape_type=linestrip`、至少8个有限点，
+并通过现有 `CIRCLE_RESIDUAL_PX`/`circular_residual` 圆拟合质量门；历史资产恰好77点
+仅是数据事实。
+
+仓库已有圆拟合能力，但此前没有“读取部分圆弧并写回完整 LabelMe 圆”的工具。现在可在
+Git 外置目录运行：
+
+```bash
+uv run python tools/complete_labelme_circle.py \
+  --annotation "$EXTERNAL_CIRCLE_DIR/partial-circle.json" \
+  --image "$EXTERNAL_CIRCLE_DIR/source.bmp" \
+  --config config/labelme_circle_completion.example.json \
+  --completed "$EXTERNAL_CIRCLE_DIR/completed-circle.json" \
+  --report "$EXTERNAL_CIRCLE_DIR/completion-report.json" \
+  --preview "$EXTERNAL_CIRCLE_DIR/completion-preview.jpg"
+```
+
+工具复用 Kasa 初值、稳健筛点和几何圆拟合；要求可见弧覆盖至少 `120°`，按圆周长与源点
+中位间距自动推导完整圆点数，并重复首点闭合。输出固定标记
+`auto_completed=true`、`human_verified=false`，只能作为 LabelMe 人工复核底稿，不是人工真值。

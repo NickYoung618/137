@@ -9,15 +9,23 @@ from PIL import Image
 
 from tools.evaluate_current_capture import evaluate_current_capture
 
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _truth(radius=25.0):
+def _truth(radius=25.0, point_count=77):
     points = [
         [80.0 + radius * math.cos(a), 70.0 + radius * math.sin(a)]
-        for a in [2.0 * math.pi * i / 77 for i in range(77)]
+        for a in [2.0 * math.pi * i / point_count for i in range(point_count)]
     ]
     return {
         "imagePath": "target.bmp",
@@ -128,15 +136,54 @@ class CurrentCaptureAcceptanceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "image SHA-256"):
                 evaluate_current_capture(result_path, image_path, truth_path, "0" * 64, _sha(truth_path))
 
-    def test_truth_shape_type_and_point_count_are_strict(self):
+    def test_variable_circle_point_count_is_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             image_path, truth_path, result_path = self._assets(root)
-            truth = _truth()
-            truth["shapes"][1]["points"] = truth["shapes"][1]["points"][:-1]
+            truth_path.write_text(json.dumps(_truth(point_count=19)), encoding="utf-8")
+            report = evaluate_current_capture(
+                result_path, image_path, truth_path, _sha(image_path), _sha(truth_path)
+            )
+            self.assertEqual("evaluated", report["status"])
+            self.assertAlmostEqual(0.0, report["metrics"]["Phi12.2"]["diameterAbsoluteErrorPx"], places=6)
+            self.assertEqual(19, report["truthValidation"]["Phi12.2"]["pointCount"])
+            self.assertTrue(report["truthValidation"]["Phi12.2"]["circleResidualValid"])
+
+    def test_circle_with_fewer_than_eight_points_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image_path, truth_path, result_path = self._assets(root)
+            truth = _truth(point_count=7)
             truth_path.write_text(json.dumps(truth), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "77 points"):
+            with self.assertRaisesRegex(ValueError, "at least 8 finite points"):
                 evaluate_current_capture(result_path, image_path, truth_path, _sha(image_path), _sha(truth_path))
+
+    def test_obviously_non_circular_linestrip_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image_path, truth_path, result_path = self._assets(root)
+            Image.new("L", (500, 500), 100).save(image_path)
+            result_path.write_text(json.dumps(_result(_sha(image_path))), encoding="utf-8")
+            truth = _truth()
+            truth["shapes"][1]["points"] = [
+                [30.0, 30.0], [90.0, 450.0], [150.0, 30.0], [210.0, 450.0],
+                [270.0, 30.0], [330.0, 450.0], [390.0, 30.0], [450.0, 450.0],
+            ]
+            truth_path.write_text(json.dumps(truth), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "circle residual"):
+                evaluate_current_capture(result_path, image_path, truth_path, _sha(image_path), _sha(truth_path))
+
+    def test_non_finite_circle_point_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image_path, truth_path, result_path = self._assets(root)
+            truth = _truth(point_count=12)
+            truth["shapes"][1]["points"][5][0] = float("nan")
+            truth_path.write_text(json.dumps(truth), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "at least 8 finite points"):
+                evaluate_current_capture(
+                    result_path, image_path, truth_path, _sha(image_path), _sha(truth_path)
+                )
 
     def test_runtime_truth_leakage_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -147,6 +194,19 @@ class CurrentCaptureAcceptanceTests(unittest.TestCase):
             result_path.write_text(json.dumps(result), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "target annotation leaked"):
                 evaluate_current_capture(result_path, image_path, truth_path, _sha(image_path), _sha(truth_path))
+
+    @unittest.skipIf(jsonschema is None, "jsonschema is installed by the explicit Schema gate")
+    def test_acceptance_report_matches_updated_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path, truth_path, result_path = self._assets(Path(tmp))
+            report = evaluate_current_capture(
+                result_path, image_path, truth_path, _sha(image_path), _sha(truth_path)
+            )
+        schema = json.loads((
+            ROOT / "specs/002-current-capture-registration/contracts/current-capture-acceptance-v1.schema.json"
+        ).read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator.check_schema(schema)
+        jsonschema.validate(report, schema)
 
 
 if __name__ == "__main__":

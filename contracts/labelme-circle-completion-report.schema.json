@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "labelme-circle-completion-report/1",
+  "title": "LabelMe partial-circle completion report",
+  "type": "object",
+  "required": [
+    "schemaVersion", "status", "source", "fit", "completed",
+    "preservedLabels", "removedLabels", "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "labelme-circle-completion-report/1"},
+    "status": {"const": "AUTO_COMPLETED_REQUIRES_HUMAN_REVIEW"},
+    "source": {"$ref": "#/$defs/source"},
+    "fit": {"$ref": "#/$defs/fit"},
+    "completed": {"$ref": "#/$defs/completed"},
+    "preservedLabels": {"type": "array", "items": {"type": "string"}},
+    "removedLabels": {"type": "array", "items": {"type": "string"}},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "residual": {
+      "type": "object",
+      "required": ["median", "p95", "max"],
+      "properties": {
+        "median": {"type": "number", "minimum": 0},
+        "p95": {"type": "number", "minimum": 0},
+        "max": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "annotationFile", "annotationSha256", "imageFile", "imageSha256",
+        "imageFormat", "imageWidth", "imageHeight", "label", "pointCount",
+        "medianAdjacentSpacingPx", "angularCoverageDeg", "radialResidualPx"
+      ],
+      "properties": {
+        "annotationFile": {"type": "string", "minLength": 1},
+        "annotationSha256": {"$ref": "#/$defs/sha256"},
+        "imageFile": {"type": "string", "minLength": 1},
+        "imageSha256": {"$ref": "#/$defs/sha256"},
+        "imageFormat": {"type": ["string", "null"]},
+        "imageWidth": {"type": "integer", "minimum": 1},
+        "imageHeight": {"type": "integer", "minimum": 1},
+        "label": {"type": "string", "minLength": 1},
+        "pointCount": {"type": "integer", "minimum": 8},
+        "medianAdjacentSpacingPx": {"type": "number", "exclusiveMinimum": 0},
+        "angularCoverageDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 360},
+        "radialResidualPx": {"$ref": "#/$defs/residual"}
+      },
+      "additionalProperties": false
+    },
+    "fit": {
+      "type": "object",
+      "required": [
+        "method", "circleResidualGate", "initialKasaCircleResidualPx",
+        "refinedCircleResidualPx", "maximumMedianResidualPx",
+        "minimumArcCoverageDeg", "centerX", "centerY", "radiusPx"
+      ],
+      "properties": {
+        "method": {"const": "fit_circle_kasa+robust_fit_circle+geometric_circle_fit"},
+        "circleResidualGate": {"const": "circular_residual(fit_circle_kasa)"},
+        "initialKasaCircleResidualPx": {"type": "number", "minimum": 0},
+        "refinedCircleResidualPx": {"type": "number", "minimum": 0},
+        "maximumMedianResidualPx": {"type": "number", "exclusiveMinimum": 0, "maximum": 25.0},
+        "minimumArcCoverageDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 360},
+        "centerX": {"type": "number"},
+        "centerY": {"type": "number"},
+        "radiusPx": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "completed": {
+      "type": "object",
+      "required": [
+        "annotationFile", "annotationSha256", "previewFile", "previewSha256",
+        "label", "pointCount", "uniquePointCount", "closedByRepeatedFirstPoint",
+        "medianAdjacentSpacingPx", "angularCoverageDeg", "radialResidualPx",
+        "autoCompleted", "humanVerified"
+      ],
+      "properties": {
+        "annotationFile": {"type": "string", "minLength": 1},
+        "annotationSha256": {"$ref": "#/$defs/sha256"},
+        "previewFile": {"type": "string", "minLength": 1},
+        "previewSha256": {"$ref": "#/$defs/sha256"},
+        "label": {"type": "string", "minLength": 1},
+        "pointCount": {"type": "integer", "minimum": 9},
+        "uniquePointCount": {"type": "integer", "minimum": 8},
+        "closedByRepeatedFirstPoint": {"const": true},
+        "medianAdjacentSpacingPx": {"type": "number", "exclusiveMinimum": 0},
+        "angularCoverageDeg": {"const": 360.0},
+        "radialResidualPx": {"$ref": "#/$defs/residual"},
+        "autoCompleted": {"const": true},
+        "humanVerified": {"const": false}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

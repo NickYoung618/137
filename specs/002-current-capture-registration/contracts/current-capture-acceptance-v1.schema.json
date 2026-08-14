@@ -12,10 +12,23 @@
       "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
     },
     "truthValidation": {
-      "type": "object", "required": ["valid", "shapeCount", "labels"],
+      "type": "object", "required": ["valid", "shapeCount", "labels", "Phi12.2"],
       "properties": {
         "valid": {"type": "boolean"}, "shapeCount": {"const": 2},
-        "labels": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}
+        "labels": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}},
+        "Phi12.2": {
+          "type": "object",
+          "required": ["shapeType", "pointCount", "minimumPointCount", "circleResidualPx", "maximumCircleResidualPx", "circleResidualValid"],
+          "properties": {
+            "shapeType": {"const": "linestrip"},
+            "pointCount": {"type": "integer", "minimum": 8},
+            "minimumPointCount": {"const": 8},
+            "circleResidualPx": {"type": "number", "minimum": 0},
+            "maximumCircleResidualPx": {"const": 25.0},
+            "circleResidualValid": {"const": true}
+          },
+          "additionalProperties": false
+        }
       }, "additionalProperties": true
     },
     "detectionSummary": {

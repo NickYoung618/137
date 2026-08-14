@@ -16,12 +16,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from algorithms.hole_2.main import fit_circle_kasa, geometric_circle_fit, read_labelme
+from algorithms.hole_2.main import (
+    CIRCLE_RESIDUAL_PX,
+    circular_residual,
+    fit_circle_kasa,
+    read_labelme,
+    robust_fit_circle,
+)
 from algorithms.hole_2.current_capture import validate_result_contract
 
 
 SCHEMA_VERSION = "hole2-current-capture-acceptance/1"
 SCOPE = "single_image_pixel_geometry_only_no_acceptance_tolerance_not_repeatability_mm_accuracy_or_production_ok_ng"
+MINIMUM_CIRCLE_POINTS = 8
 
 
 def _sha256(path: Path) -> str:
@@ -54,15 +61,47 @@ def _strict_truth(
     if line.get("shape_type") != "line" or len(line.get("points", [])) != 2:
         raise ValueError("7 must be a LabelMe line with exactly 2 points")
     arc = by_label["Φ12.2"]
-    if arc.get("shape_type") != "linestrip" or len(arc.get("points", [])) != 77:
-        raise ValueError("Φ12.2 must be a LabelMe linestrip with exactly 77 points")
-    return line["points"], arc["points"]
+    if arc.get("shape_type") != "linestrip":
+        raise ValueError("Φ12.2 must be a LabelMe linestrip")
+    points = _finite_circle_points(arc.get("points"))
+    residual = _circle_gate_residual(points)
+    if not math.isfinite(residual) or residual >= CIRCLE_RESIDUAL_PX:
+        raise ValueError(
+            f"Φ12.2 circle residual {residual:.6f}px must be below "
+            f"CIRCLE_RESIDUAL_PX={CIRCLE_RESIDUAL_PX:.6f}px"
+        )
+    return line["points"], points
+
+
+def _circle_gate_residual(points: list[list[float]]) -> float:
+    return circular_residual(points, fit_circle_kasa(np.asarray(points, dtype=np.float64)))
+
+
+def _finite_circle_points(raw_points: Any) -> list[list[float]]:
+    if not isinstance(raw_points, list) or len(raw_points) < MINIMUM_CIRCLE_POINTS:
+        raise ValueError("Φ12.2 linestrip must contain at least 8 finite points")
+    points: list[list[float]] = []
+    for point in raw_points:
+        if (
+            not isinstance(point, (list, tuple))
+            or len(point) != 2
+            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in point)
+        ):
+            raise ValueError("Φ12.2 linestrip must contain at least 8 finite points")
+        x, y = map(float, point)
+        if not math.isfinite(x) or not math.isfinite(y):
+            raise ValueError("Φ12.2 linestrip must contain at least 8 finite points")
+        points.append([x, y])
+    return points
 
 
 def _fit_truth_circle(points: list[list[float]]) -> tuple[float, float, float]:
     array = np.asarray(points, dtype=np.float64)
     initial = fit_circle_kasa(array)
-    return geometric_circle_fit(array, initial)
+    circle = tuple(map(float, robust_fit_circle(array, initial)))
+    if not all(math.isfinite(value) for value in circle) or circle[2] <= 0.0:
+        raise ValueError("Φ12.2 circle fit is invalid")
+    return circle
 
 
 def _line_metrics(truth: list[list[float]], prediction: dict[str, Any]) -> dict[str, float]:
@@ -185,6 +224,16 @@ def validate_acceptance_contract(report: dict[str, Any]) -> None:
         raise ValueError("invalid acceptance status")
     if set(report["metrics"]) != {"7", "Phi12.2"}:
         raise ValueError("acceptance metrics must contain exactly 7 and Phi12.2")
+    truth_circle = report.get("truthValidation", {}).get("Phi12.2", {})
+    if (
+        truth_circle.get("shapeType") != "linestrip"
+        or not isinstance(truth_circle.get("pointCount"), int)
+        or truth_circle["pointCount"] < MINIMUM_CIRCLE_POINTS
+        or truth_circle.get("minimumPointCount") != MINIMUM_CIRCLE_POINTS
+        or truth_circle.get("circleResidualValid") is not True
+        or truth_circle.get("maximumCircleResidualPx") != CIRCLE_RESIDUAL_PX
+    ):
+        raise ValueError("acceptance truthValidation Phi12.2 circle gate is invalid")
     summary = report["detectionSummary"]
     if not isinstance(summary, dict) or not {
         "algorithmVersion", "configVersion", "resultSchemaVersion", "timingMs",
@@ -220,6 +269,7 @@ def evaluate_current_capture(
     if len(target_inputs) != 1 or target_inputs[0].get("sha256") != image_sha:
         raise ValueError("detection result target image SHA-256 does not match acceptance image")
     truth_line, truth_arc = _strict_truth(target_annotation_path, target_image_path)
+    truth_circle_residual = _circle_gate_residual(truth_arc)
     features = result.get("features", {})
     line = features.get("7", {})
     circle = features.get("Phi12.2", {})
@@ -239,6 +289,14 @@ def evaluate_current_capture(
         },
         "truthValidation": {
             "valid": True, "shapeCount": 2, "labels": ["7", "Φ12.2"],
+            "Phi12.2": {
+                "shapeType": "linestrip",
+                "pointCount": len(truth_arc),
+                "minimumPointCount": MINIMUM_CIRCLE_POINTS,
+                "circleResidualPx": truth_circle_residual,
+                "maximumCircleResidualPx": CIRCLE_RESIDUAL_PX,
+                "circleResidualValid": truth_circle_residual < CIRCLE_RESIDUAL_PX,
+            },
         },
         "detectionSummary": _detection_summary(result),
         "metrics": metrics,
