@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "a2-paired-notch-server-validation/1",
+  "createdAt": "2026-08-14",
+  "scope": "server synthetic and read-only historical asset validation; real Mac A2 not evaluated",
+  "preChangeBaseline": {
+    "unitTests": {"run": 12, "passed": 12, "skipped": 0},
+    "legacySweep72": {
+      "valid": 72,
+      "total": 72,
+      "maeDeg": 0.1561191377641921,
+      "p95Deg": 0.30187302208952926,
+      "maxDeg": 0.3498688679892439
+    },
+    "legacyRepeat60": {
+      "valid": 60,
+      "total": 60,
+      "maeDeg": 0.1200708870909537,
+      "p95Deg": 0.1739111034947541,
+      "maxDeg": 0.17509016620829243,
+      "staticRangeDeg": [0.005840167798623952, 0.005814174332755329, 0.004234420276191031],
+      "elapsedP95Ms": 1886.9406770216297
+    }
+  },
+  "postChangeValidation": {
+    "unitTests": {"run": 34, "passed": 34, "skipped": 0},
+    "legacySweep72": {
+      "manifestValid": true,
+      "valid": 72,
+      "total": 72,
+      "maeDeg": 0.1561191377641921,
+      "p95Deg": 0.30187302208952926,
+      "maxDeg": 0.3498688679892439
+    },
+    "legacyRepeat60": {
+      "manifestValid": true,
+      "valid": 60,
+      "total": 60,
+      "maeDeg": 0.1200708870909537,
+      "p95Deg": 0.1739111034947541,
+      "maxDeg": 0.17509016620829243,
+      "staticRangeDeg": [0.005840167798623952, 0.005814174332755329, 0.004234420276191031],
+      "crossConditionResidualMeanRangeDeg": 0.3442903150114489,
+      "elapsedP95Ms": 933.3694194909184
+    },
+    "pairedControlled": {
+      "normalValid": 5,
+      "normalTotal": 5,
+      "maeDeg": 0.11638627711824938,
+      "p95Deg": 0.1807641365845029,
+      "maxDeg": 0.18510730851193102,
+      "badInvalid": 3,
+      "badTotal": 3,
+      "falsePositiveCount": 0,
+      "failureCodes": ["RING_TRUNCATED", "SLOT_PAIR_AMBIGUOUS", "SLOT_PAIR_NOT_FOUND"]
+    }
+  },
+  "productionStatus": "BLOCKED_B001_B005"
+}

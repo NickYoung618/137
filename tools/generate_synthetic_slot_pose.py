@@ -86,6 +86,7 @@ def build_dataset(output_dir: Path, angles: list[float], repeats: int, seed: int
 
     truth_rows: list[dict[str, object]] = []
     for angle_index, angle in enumerate(angles):
+        truth_angle = (float(angle) + 180.0) % 360.0 - 180.0
         label = f"angle_{angle:+07.2f}".replace("+", "pos_").replace("-", "neg_").replace(".", "p")
         group = dataset_root / "sample_synthetic" / label
         group.mkdir(parents=True, exist_ok=True)
@@ -100,9 +101,13 @@ def build_dataset(output_dir: Path, angles: list[float], repeats: int, seed: int
                 "sample": "sample_synthetic",
                 "position": label,
                 "repeat": repeat + 1,
-                "truth_angle_deg": angle,
+                "truth_angle_deg": truth_angle,
                 "truth_valid": "true",
                 "truth_source": "synthetic_configured_geometry",
+                "calibration_id": "synthetic-image-cw-v1",
+                "condition": label,
+                "split": "unassigned",
+                "dataset_class": "normal",
             })
             slot_json = image_path.with_suffix(".slot.json")
             center = 256.0
@@ -112,7 +117,7 @@ def build_dataset(output_dir: Path, angles: list[float], repeats: int, seed: int
                 "imageSha256": image_hash, "sampleId": "sample_synthetic", "position": label,
                 "repeatIndex": repeat + 1, "face": {"centerX": center, "centerY": center, "radiusPx": 180},
                 "slotPolygon": None, "slotCenterline": [[center, center], endpoint],
-                "truthAngleDeg": angle, "truthSource": "synthetic_configured_geometry",
+                "truthAngleDeg": truth_angle, "truthSource": "synthetic_configured_geometry",
                 "calibrationId": "synthetic-image-cw-v1", "split": "development",
             })
 

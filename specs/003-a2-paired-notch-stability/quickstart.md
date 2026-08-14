@@ -11,24 +11,28 @@ uv run python -m unittest discover -s tests -v
 
 ```bash
 uv run python tools/generate_synthetic_slot_pose.py \
-  --output-dir "$TMPDIR/slot-pose-legacy" --angles=-175,-170,-165,0,165,170,175 --repeats 1 --seed 137
+  --output-dir "${TMPDIR:-/tmp}/slot-pose-legacy" --angles=-175,-170,-165,0,165,170,175 --repeats 1 --seed 137
+uv run python tools/make_manifest.py \
+  --input "${TMPDIR:-/tmp}/slot-pose-legacy/synthetic" \
+  --output "${TMPDIR:-/tmp}/slot-pose-legacy/manifest.json" \
+  --dataset-id legacy-smoke --task slot_pose --expected-repeats 1
 uv run python tools/run_slot_pose_batch.py \
-  --manifest "$TMPDIR/slot-pose-legacy/manifest.json" \
-  --data-root "$TMPDIR/slot-pose-legacy/synthetic" \
-  --config "$TMPDIR/slot-pose-legacy/synthetic-config.json" \
-  --output "$TMPDIR/slot-pose-legacy/results.jsonl"
+  --manifest "${TMPDIR:-/tmp}/slot-pose-legacy/manifest.json" \
+  --data-root "${TMPDIR:-/tmp}/slot-pose-legacy/synthetic" \
+  --config "${TMPDIR:-/tmp}/slot-pose-legacy/synthetic-config.json" \
+  --output "${TMPDIR:-/tmp}/slot-pose-legacy/results.jsonl"
 ```
 
 ## 3. paired合成真值回归
 
 ```bash
 uv run python tools/generate_synthetic_paired_notches.py \
-  --output-dir "$TMPDIR/slot-pose-paired" --seed 137
+  --output-dir "${TMPDIR:-/tmp}/slot-pose-paired" --seed 137
 uv run python tools/run_slot_pose_batch.py \
-  --manifest "$TMPDIR/slot-pose-paired/manifest.json" \
-  --data-root "$TMPDIR/slot-pose-paired/images" \
-  --config "$TMPDIR/slot-pose-paired/config.json" \
-  --output "$TMPDIR/slot-pose-paired/results.jsonl"
+  --manifest "${TMPDIR:-/tmp}/slot-pose-paired/manifest.json" \
+  --data-root "${TMPDIR:-/tmp}/slot-pose-paired/images" \
+  --config "${TMPDIR:-/tmp}/slot-pose-paired/config.json" \
+  --output "${TMPDIR:-/tmp}/slot-pose-paired/results.jsonl"
 ```
 
 预期：平移、缩放、亮度/噪声和±180°环绕正样本通过；缺一槽、多余暗区、配对歧义、

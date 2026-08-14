@@ -37,11 +37,36 @@ uv run python algorithms/slot_pose/main.py \
   --task-id synthetic-30 --out /tmp/slot-pose-synthetic/result.json --strict
 ```
 
-已确认合成`+30°`冒烟输出约`+29.984°`。默认`config/inspection.example.json`故意保持机械语义未确认，
-对权威参考图返回`POSE_CONVENTION_UNCONFIRMED`、`valid=false`、正式角度`null`。
+已确认合成`+30°`冒烟输出约`+29.984°`。默认`config/inspection.example.json`故意保持目标实体和机械语义未确认，
+对权威参考图返回`TARGET_SEMANTICS_UNCONFIRMED`、`valid=false`、正式角度`null`。
 
 Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正式规格、方案、任务和历史数值
 证据位于`specs/002-slot-pose-estimation/`。
+
+## A2双缺口稳定性增量
+
+`003-a2-paired-notch-stability`在不替换历史圆心、尺度、极坐标和polar链的前提下，增加了：
+
+- `legacy_single_notch`历史对照模式和`paired_notches_centerline`双缺口中心线诊断模式。
+- 全外缘暗区候选的角中心、半宽、显著度、起止边界、环绕标志、排名和次候选差距。
+- paired候选数、两侧宽度/显著度、角间距、唯一性、环带完整性、圆心/尺度和polar一致性门控。
+- v2向后兼容诊断、外置A2 Manifest/truth契约、正常/坏图分报告和Mac一键验收CLI。
+
+服务器paired合成冒烟：
+
+```bash
+uv run python tools/generate_synthetic_paired_notches.py \
+  --output-dir "${TMPDIR:-/tmp}/slot-pose-paired" --seed 137
+uv run python tools/run_slot_pose_batch.py \
+  --manifest "${TMPDIR:-/tmp}/slot-pose-paired/manifest.json" \
+  --data-root "${TMPDIR:-/tmp}/slot-pose-paired/images" \
+  --config "${TMPDIR:-/tmp}/slot-pose-paired/config.json" \
+  --output "${TMPDIR:-/tmp}/slot-pose-paired/results.jsonl"
+```
+
+机械方未确认目标实体前，上述两种模式都只能作诊断；默认配置的
+`target_semantics_confirmed=false`，因此绝不输出正式机械角。完整规格和Mac命令见
+`specs/003-a2-paired-notch-stability/`。
 
 ## Mac A2后续验证
 
@@ -51,6 +76,17 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
 2. 在外置目录解压/流式读取A2，先生成Manifest，再补目标槽、机械真值、样品和split标注。
 3. 按样品隔离开发/调参/验证/验收；固定角度至少20次采集做静态重复性，至少2个换位组做动态重复性。
 4. 运行单图/批量结果与`tools/evaluate_slot_pose.py`，报告角度MAE/P95/max、成功/漏检/误检和节拍。
+
+采集记录和truth补齐后，一键命令为：
+
+```bash
+uv run python tools/run_a2_acceptance.py \
+  --normal-root "$A2_NORMAL_ROOT" --bad-root "$A2_BAD_ROOT" \
+  --grouping "$A2_GROUPING_CSV" --truth "$A2_TRUTH_CSV" \
+  --config "$A2_CONFIG" --output-dir "$A2_REPORT_DIR"
+```
+
+正常集组合必须来自采集记录、时序或显式映射，不因“约500张”就猜成25×20。
 
 无需A2即可先在Mac验证历史源码适配链（标注和参考图由工具生成的小图提供）：
 
@@ -70,10 +106,10 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
 
 ## 生产阻塞（不能由算法默认值代替）
 
-- B-001 现场/机械负责人：确认目标槽是否就是历史`find_outer_notch_angle`检测的外缘缺口。
-- B-002 戴泽楷：确认A2与历史参考图是否同工位、同视角、同方向。
+- B-001 现场/机械负责人：确认目标是单缺口、双缺口中的哪一个，还是两缺口夹持的凸台/槽中心线。
+- B-002 数据负责人：根据采集记录确认A2条件组、物理样品、split及与历史参考图的工位/视角/方向映射。
 - B-003 机械/机器人负责人：确认机械零位、正方向及图像到机械坐标映射。
-- B-004 质量负责人：确认角误差、重复性、成功率和节拍验收门限。
+- B-004 质量负责人：确认MAE/P95/max、静态极差、跨组残差、有效率、坏图误引导率和节拍门限。
 - B-005 PLC/机器人工程师：确认字段、地址、缩放、握手、超时和失败动作。
 
 关闭顺序：B-001/B-002 → B-003 → 冻结Mac验证集 → B-004验收 → B-005上线。全部关闭前，本MVP
