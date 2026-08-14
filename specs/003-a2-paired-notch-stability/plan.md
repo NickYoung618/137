@@ -14,14 +14,14 @@ truth CSV校验、环形残差评估和正常/坏图分报告，为Mac真实A2�
 
 ## Technical Context
 
-**Language/Version**: Python 3.12  
-**Primary Dependencies**: NumPy 2.4.4、Pillow 12.2.0；不新增视觉框架或学习依赖  
-**Storage**: 外置不可变原图目录；仓库只存JSON Schema、配置模板、Manifest/truth契约和小体积报告  
-**Testing**: Python `unittest`，历史合成扫角回归，paired合成真值、边界/失败分支、Schema/CLI/批处理测试  
-**Target Platform**: Linux服务器开发回归；macOS外置A2数据离线验收  
-**Project Type**: 单体Python算法库和CLI工具  
-**Performance Goals**: `5472×3648`单图P95不超过8.0秒；批处理逐图持久化且单图失败不中断整批  
-**Constraints**: fail-closed；目标语义/机械契约未确认时正式角为空；不改历史资产和两个外部工作区；不接PLC  
+**Language/Version**: Python 3.12
+**Primary Dependencies**: NumPy 2.4.4、Pillow 12.2.0；不新增视觉框架或学习依赖
+**Storage**: 外置不可变原图目录；仓库只存JSON Schema、配置模板、Manifest/truth契约和小体积报告
+**Testing**: Python `unittest`，历史合成扫角回归，paired合成真值、边界/失败分支、Schema/CLI/批处理测试
+**Target Platform**: Linux服务器开发回归；macOS外置A2数据离线验收
+**Project Type**: 单体Python算法库和CLI工具
+**Performance Goals**: `5472×3648`单图P95不超过8.0秒；批处理逐图持久化且单图失败不中断整批
+**Constraints**: fail-closed；目标语义/机械契约未确认时正式角为空；不改历史资产和两个外部工作区；不接PLC
 **Scale/Scope**: 服务器小型合成集；Mac端当前盘点约500张正常图和201张坏图，实际分组由采集记录确认
 
 ## Constitution Check
