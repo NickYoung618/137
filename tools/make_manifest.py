@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -36,12 +37,16 @@ def build_manifest(
     default_sample: str,
     default_position: str,
     reference_image: Path | None = None,
+    grouping_records: dict[str, dict] | None = None,
+    dataset_class: str = "normal",
 ) -> dict:
     input_root = input_root.resolve()
     if not input_root.is_dir():
         raise ValueError(f"input root is not a directory: {input_root}")
     if expected_repeats <= 0:
         raise ValueError("expected repeats must be positive")
+    if dataset_class not in {"normal", "bad"}:
+        raise ValueError("dataset_class must be 'normal' or 'bad'")
 
     paths = sorted(
         (path for path in input_root.rglob("*") if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES),
@@ -50,15 +55,24 @@ def build_manifest(
     if not paths:
         raise ValueError(f"no supported images found under {input_root}")
 
-    groups: dict[tuple[str, str, str], list[Path]] = defaultdict(list)
+    groups: dict[tuple[str, str, str], list[tuple[Path, dict]]] = defaultdict(list)
     for path in paths:
         relative = path.relative_to(input_root)
-        groups[infer_group(relative, default_sample, default_position)].append(path)
+        relative_value = relative.as_posix()
+        metadata = dict((grouping_records or {}).get(relative_value, {}))
+        if grouping_records is not None and not metadata:
+            raise ValueError(f"grouping record missing for image: {relative_value}")
+        inferred_sample, inferred_position, inferred_split = infer_group(relative, default_sample, default_position)
+        sample = str(metadata.get("sample_id") or inferred_sample)
+        position = str(metadata.get("condition_id") or metadata.get("position") or inferred_position)
+        split = str(metadata.get("split") or inferred_split)
+        groups[(sample, position, split)].append((path, metadata))
 
     images: list[dict] = []
     fingerprint = hashlib.sha256()
-    for (sample_id, position, split), group_paths in sorted(groups.items()):
-        for repeat_index, path in enumerate(group_paths, start=1):
+    for (sample_id, position, split), group_items in sorted(groups.items()):
+        for generated_repeat, (path, metadata) in enumerate(group_items, start=1):
+            repeat_index = int(metadata.get("repeat_index") or generated_repeat)
             relative = path.relative_to(input_root).as_posix()
             info = inspect_image(path)
             record = {
@@ -66,8 +80,13 @@ def build_manifest(
                 "relativePath": relative,
                 "sampleId": sample_id,
                 "position": position,
+                "conditionId": position,
+                "datasetClass": str(metadata.get("dataset_class") or dataset_class),
                 "split": split,
                 "repeatIndex": repeat_index,
+                "captureTimestamp": metadata.get("capture_timestamp") or None,
+                "captureSequence": int(metadata["capture_sequence"]) if metadata.get("capture_sequence") else None,
+                "sourceImageSha256": metadata.get("source_image_sha256") or None,
                 **info,
             }
             images.append(record)
@@ -103,10 +122,25 @@ def build_manifest(
             "expectedRepeatsPerGroup": expected_repeats,
             "allowedImageSuffixes": sorted(IMAGE_SUFFIXES),
             "rawImagesAreExternal": True,
+            "groupingExplicit": grouping_records is not None,
         },
         "reference": reference,
         "images": images,
-    }
+}
+
+
+def load_grouping_csv(path: Path) -> dict[str, dict]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    records: dict[str, dict] = {}
+    for row in rows:
+        relative = str(row.get("relative_path", "")).strip()
+        if not relative or relative in records:
+            raise ValueError(f"grouping relative_path is missing or duplicated: {relative!r}")
+        records[relative] = row
+    if not records:
+        raise ValueError("grouping CSV is empty")
+    return records
 
 
 def parse_args() -> argparse.Namespace:
@@ -119,12 +153,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--default-sample", default="sample_1")
     parser.add_argument("--default-position", default="pos_1")
     parser.add_argument("--reference-image", type=Path)
+    parser.add_argument("--grouping", type=Path, help="Explicit capture grouping CSV keyed by relative_path.")
+    parser.add_argument("--dataset-class", choices=("normal", "bad"), default="normal")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
+        grouping = load_grouping_csv(args.grouping) if args.grouping else None
         manifest = build_manifest(
             args.input,
             args.dataset_id,
@@ -133,6 +170,8 @@ def main() -> int:
             args.default_sample,
             args.default_position,
             args.reference_image,
+            grouping,
+            args.dataset_class,
         )
         write_json(args.output, manifest)
     except (OSError, ValueError) as exc:

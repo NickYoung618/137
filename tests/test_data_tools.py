@@ -71,6 +71,44 @@ class DataToolTests(unittest.TestCase):
             self.assertFalse(report["valid"])
             self.assertIn("SPLIT_LEAKAGE", {item["code"] for item in report["errors"]})
 
+    def test_explicit_grouping_and_truth_must_match_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = root / "frame_001.bmp"
+            Image.new("L", (8, 6), 10).save(image)
+            grouping = {
+                "frame_001.bmp": {
+                    "sample_id": "physical_7", "condition_id": "angle_a", "repeat_index": "3",
+                    "capture_sequence": "103", "capture_timestamp": "2026-08-14T01:02:03Z",
+                    "split": "validation", "dataset_class": "normal",
+                }
+            }
+            manifest = build_manifest(root, "explicit", "slot_pose", 1, "ignored", "ignored", grouping_records=grouping)
+            item = manifest["images"][0]
+            self.assertTrue(manifest["policy"]["groupingExplicit"])
+            self.assertEqual("physical_7", item["sampleId"])
+            self.assertEqual("angle_a", item["conditionId"])
+            self.assertEqual(3, item["repeatIndex"])
+            truth = [{
+                "image_sha256": item["sha256"], "truth_valid": "true", "truth_angle_deg": "10",
+                "truth_source": "indexer", "calibration_id": "cal-1", "sample": "physical_7",
+                "condition": "wrong_condition", "repeat": "3", "split": "validation", "dataset_class": "normal",
+            }]
+            report = validate_manifest(manifest, root, truth_rows=truth)
+            self.assertFalse(report["valid"])
+            self.assertIn("TRUTH_GROUP_MISMATCH", {issue["code"] for issue in report["errors"]})
+
+    def test_file_count_does_not_manufacture_twenty_frame_groups(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index in range(2):
+                Image.new("L", (8, 6), 10).save(root / f"frame_{index:03d}.bmp")
+            manifest = build_manifest(root, "ungrouped", "slot_pose", 20, "unknown_sample", "unknown_condition")
+            self.assertFalse(manifest["policy"]["groupingExplicit"])
+            self.assertEqual([1, 2], [item["repeatIndex"] for item in manifest["images"]])
+            report = validate_manifest(manifest, root)
+            self.assertIn("REPEAT_COUNT", {issue["code"] for issue in report["errors"]})
+
 
 if __name__ == "__main__":
     unittest.main()

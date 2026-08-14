@@ -27,3 +27,12 @@ Manifest中的`position`当前承载采集位置/角度组名称；机械真值�
 - 标注使用`contracts/slot-pose-annotation.schema.json`，真值角必须来自分度盘/编码器/受控设定，
   不能把算法输出反填成真值。
 - 按物理样品划分development/tuning/validation/acceptance；同一原图及其派生图只能出现在一个split。
+
+## A2显式分组和truth
+
+- 分组CSV列见`data/manifests/a2-grouping.example.csv`；`relative_path`相对于对应normal或bad数据根。
+- `condition_id`必须来自采集记录、时间序列证据或人工受控映射，不按文件总数猜测。
+- 角度truth列见`data/manifests/a2-angle-truth.example.csv`；正常图必须有外部真值来源和标定版本，
+  坏图`truth_valid=false`且角度留空。
+- 正常报告对环形误差/残差统计；跨不同真值组不对原始角均值求极差。坏图报告将任何
+  `valid=true`计为误引导。失败样本不填0度。

@@ -1,0 +1,3 @@
+relative_path,dataset_class,sample_id,condition_id,repeat_index,capture_timestamp,capture_sequence,split,source_image_sha256
+sample_001/frame_0001.bmp,normal,sample_001,condition_001,1,2026-01-01T00:00:00Z,1,development,
+bad_0001.bmp,bad,bad_unknown,bad_condition,1,2026-01-01T01:00:00Z,501,development,
