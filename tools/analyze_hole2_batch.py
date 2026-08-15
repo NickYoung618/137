@@ -169,7 +169,7 @@ def analyze_records(
         "consecutiveFailureRuns": {
             state: _failure_runs(
                 records,
-                [str(record.get("group", "unassigned")) for record in records],
+                groups,
                 state,
             )
             for state in ("registration", "7", "Phi12.2")

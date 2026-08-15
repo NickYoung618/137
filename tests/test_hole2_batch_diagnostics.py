@@ -33,8 +33,12 @@ class Hole2BatchDiagnosticTests(unittest.TestCase):
         groups = build_explicit_groups(records, group_size=2, manifest=None)
         report = analyze_records(records, groups, ratio_baseline=0.585984, ratio_thresholds=[0.02, 0.05])
         self.assertEqual([2, 2], [group["count"] for group in report["repeatabilityGroups"]])
-        self.assertEqual(1, len(report["consecutiveFailureRuns"]["registration"]))
-        self.assertEqual(2, report["consecutiveFailureRuns"]["registration"][0]["count"])
+        self.assertEqual(2, len(report["consecutiveFailureRuns"]["registration"]))
+        self.assertEqual(
+            ["normal/explicit-0000", "normal/explicit-0001"],
+            [item["group"] for item in report["consecutiveFailureRuns"]["registration"]],
+        )
+        self.assertEqual([1, 1], [item["count"] for item in report["consecutiveFailureRuns"]["registration"]])
         self.assertEqual(2, report["geometryConsistency"]["bothValidCount"])
         self.assertIn("0.02", report["geometryConsistency"]["absoluteDeviationCounts"])
 
