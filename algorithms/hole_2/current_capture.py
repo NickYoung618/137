@@ -46,7 +46,7 @@ from .main import (
 )
 
 
-ALGORITHM_VERSION = "hole2-current-capture-registration/3"
+ALGORITHM_VERSION = "hole2-current-capture-registration/4"
 RESULT_SCHEMA_VERSION = "hole2-current-capture-result/1"
 EVIDENCE_SCOPE = "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng"
 
@@ -966,8 +966,9 @@ def evaluate_geometry_consistency(
     features: dict[str, Any],
     reference: ReferenceModel,
     config: dict[str, Any],
+    registration: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Diagnose/reject gross wrong-edge pairs without changing any measurement."""
+    """Diagnose ratio outliers and reject only with independent risk evidence."""
     d7_shape = next((shape for shape in reference.shapes if shape.sanitized == "d7"), None)
     phi_shape = next((shape for shape in reference.shapes if shape.sanitized == "Phi12_2"), None)
     if (
@@ -975,9 +976,14 @@ def evaluate_geometry_consistency(
         or phi_shape is None or phi_shape.circle is None
     ):
         return {
-            "evaluated": False, "rejected": False,
+            "evaluated": False, "outlier": False, "rejected": False,
             "failureReason": "reference_geometry_missing",
+            "outlierReason": None,
             "ratioSource": "old_reference_annotation_geometry",
+            "decision": "not_evaluated",
+            "corroboratingEvidence": [],
+            "hardRejectionPolicy": "ratio_outlier_requires_independent_risk_evidence",
+            "outputAdjustmentApplied": False,
         }
     reference_ratio = math.dist(d7_shape.line_p1, d7_shape.line_p2) / (
         2.0 * float(phi_shape.circle[2])
@@ -985,13 +991,18 @@ def evaluate_geometry_consistency(
     gate = float(config["geometry_consistency"]["max_reference_ratio_absolute_deviation"])
     report: dict[str, Any] = {
         "evaluated": False,
+        "outlier": False,
         "rejected": False,
         "failureReason": None,
+        "outlierReason": None,
         "ratioSource": "old_reference_annotation_geometry",
         "referenceRatio": float(reference_ratio),
         "targetRatio": None,
         "absoluteDeviation": None,
         "maximumAbsoluteDeviation": gate,
+        "decision": "not_evaluated",
+        "corroboratingEvidence": [],
+        "hardRejectionPolicy": "ratio_outlier_requires_independent_risk_evidence",
         "outputAdjustmentApplied": False,
     }
     d7 = features["7"]
@@ -1001,13 +1012,46 @@ def evaluate_geometry_consistency(
         return report
     target_ratio = float(d7["target"]["lengthPx"]) / float(phi["target"]["diameterPx"])
     deviation = abs(target_ratio - reference_ratio)
-    rejected = deviation > gate
+    outlier = deviation > gate
+    corroborating_evidence: list[str] = []
+    registration_recovery = None if registration is None else registration.get(
+        "registrationRecoveryPass"
+    )
+    if registration_recovery:
+        corroborating_evidence.append(
+            "registration_recovery:" + str(registration_recovery)
+        )
+    if (
+        phi.get("recoveryPass") == "legacy_magnitude_quality_fallback"
+        or phi.get("sourceDetector")
+        == "hole2-v6-current-capture-legacy-magnitude-quality-fallback"
+    ):
+        corroborating_evidence.append("phi_legacy_magnitude_quality_fallback")
+    if d7.get("sourceDetector") == "hole2-v6-original-quality-fallback":
+        corroborating_evidence.append("d7_v6_original_quality_fallback")
+    rejected = outlier and bool(corroborating_evidence)
+    if rejected:
+        decision = "rejected_with_corroborating_evidence"
+        failure_reason = "geometry_ratio_inconsistent"
+        outlier_reason = "geometry_ratio_outlier"
+    elif outlier:
+        decision = "diagnostic_only_unconfirmed"
+        failure_reason = None
+        outlier_reason = "geometry_ratio_outlier_unconfirmed"
+    else:
+        decision = "consistent"
+        failure_reason = None
+        outlier_reason = None
     report.update({
         "evaluated": True,
+        "outlier": outlier,
         "rejected": rejected,
-        "failureReason": "geometry_ratio_inconsistent" if rejected else None,
+        "failureReason": failure_reason,
+        "outlierReason": outlier_reason,
         "targetRatio": target_ratio,
         "absoluteDeviation": deviation,
+        "decision": decision,
+        "corroboratingEvidence": corroborating_evidence,
     })
     for feature in (d7, phi):
         feature["quality"]["geometryConsistency"] = dict(report)
@@ -1650,6 +1694,8 @@ def _detect_phi12_2(
         if recovered is not None:
             selected = recovered
 
+    legacy_magnitude_edge_peak = float(selected["edge_peak"])
+    legacy_magnitude_prominence = float(selected["prominence"])
     phase_diagnostics: dict[str, Any] = {
         "candidate_edge_semantics": "gradient_magnitude_legacy",
         "candidate_reference_edge_phase_fraction": None,
@@ -1742,6 +1788,15 @@ def _detect_phi12_2(
         float(phi_config["recovery_min_radius_scale_ratio"])
         if recovery_pass == "expanded_radius" else main_min
     )
+    phase_refined = bool(selected.get("phase_refined", False))
+    acceptance_edge_peak = (
+        legacy_magnitude_edge_peak if phase_refined else float(selected["edge_peak"])
+    )
+    acceptance_prominence = (
+        legacy_magnitude_prominence if phase_refined else float(selected["prominence"])
+    )
+    edge_peak_gate = float(phi_config["min_edge_peak_normalized"])
+    prominence_gate = float(phi_config["min_edge_prominence_normalized"])
     reasons: list[str] = []
     if not (selected_min <= ratio <= float(phi_config["max_radius_scale_ratio"])):
         reasons.append("radius_scale_ratio_out_of_range")
@@ -1749,9 +1804,9 @@ def _detect_phi12_2(
         reasons.append("edge_points_below_gate")
     if fit_residual > float(phi_config["max_fit_residual_target_px"]):
         reasons.append("fit_residual_above_gate")
-    if float(selected["edge_peak"]) < float(phi_config["min_edge_peak_normalized"]):
+    if acceptance_edge_peak < edge_peak_gate:
         reasons.append("edge_peak_below_gate")
-    if float(selected["prominence"]) < float(phi_config["min_edge_prominence_normalized"]):
+    if acceptance_prominence < prominence_gate:
         reasons.append("edge_prominence_below_gate")
     if saturated:
         reasons.append("search_boundary_saturated")
@@ -1785,6 +1840,21 @@ def _detect_phi12_2(
         "candidate_angle_coverage_deg": angle_coverage_deg,
         "candidate_edge_peak_normalized": float(selected["edge_peak"]),
         "candidate_edge_prominence_normalized": float(selected["prominence"]),
+        "candidate_legacy_magnitude_edge_peak_normalized": legacy_magnitude_edge_peak,
+        "candidate_legacy_magnitude_edge_prominence_normalized": legacy_magnitude_prominence,
+        "candidate_legacy_magnitude_edge_peak_gate_passed": (
+            legacy_magnitude_edge_peak >= edge_peak_gate
+        ),
+        "candidate_legacy_magnitude_edge_prominence_gate_passed": (
+            legacy_magnitude_prominence >= prominence_gate
+        ),
+        "candidate_phase_evidence_gate_passed": (
+            phase_refined and phase_diagnostics.get("candidate_phase_failure") is None
+        ),
+        "candidate_acceptance_score_contract": (
+            "reference_phase_multi_evidence" if phase_refined
+            else "legacy_gradient_magnitude"
+        ),
         "candidate_median_edge_score": float(np.median(edge_scores)) if edge_scores else float("nan"),
         "candidate_search_boundary_saturated": saturated,
         "candidate_lower_radius_boundary_saturated": bool(selected["lower_radius_saturated"]),
@@ -2456,6 +2526,18 @@ def validate_result_contract(result: dict[str, Any]) -> None:
     )
     if bool(status["technicalValid"]) != expected_technical:
         raise ValueError("qualityStatus.technicalValid conflicts with registration/features")
+    geometry = result["geometryConsistency"]
+    geometry_required = {
+        "evaluated", "outlier", "rejected", "failureReason", "outlierReason",
+        "ratioSource", "decision", "corroboratingEvidence",
+        "hardRejectionPolicy", "outputAdjustmentApplied",
+    }
+    if not isinstance(geometry, dict) or not geometry_required <= geometry.keys():
+        raise ValueError("geometryConsistency object is incomplete")
+    if geometry["rejected"] and not geometry["outlier"]:
+        raise ValueError("geometryConsistency cannot reject a non-outlier")
+    if geometry["rejected"] and not geometry["corroboratingEvidence"]:
+        raise ValueError("geometryConsistency rejection requires corroborating evidence")
     if status["productionDisposition"] != "not_evaluated":
         raise ValueError("productionDisposition must remain not_evaluated")
     if not isinstance(result["timingMs"], dict) or float(result["timingMs"].get("total", -1)) < 0:
@@ -2485,9 +2567,13 @@ def run_current_capture(
     if not registration["registrationValid"]:
         features = _invalid_features("registration_invalid:" + str(registration["failureReason"]))
         geometry_consistency = {
-            "evaluated": False, "rejected": False,
+            "evaluated": False, "outlier": False, "rejected": False,
             "failureReason": "registration_invalid",
+            "outlierReason": None,
             "ratioSource": "old_reference_annotation_geometry",
+            "decision": "not_evaluated",
+            "corroboratingEvidence": [],
+            "hardRejectionPolicy": "ratio_outlier_requires_independent_risk_evidence",
             "outputAdjustmentApplied": False,
         }
     else:
@@ -2551,7 +2637,9 @@ def run_current_capture(
             phi_source_detector=phi_source,
             d7_source_detector=d7_source,
         )
-        geometry_consistency = evaluate_geometry_consistency(features, reference, config)
+        geometry_consistency = evaluate_geometry_consistency(
+            features, reference, config, registration=registration
+        )
 
     runtime_inputs = [
         {"role": "reference_annotation", "path": str(label_path), "sha256": sha256_file(label_path)},

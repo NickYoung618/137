@@ -249,6 +249,154 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertIn("phase", quality["candidate_failure"])
         self.assertTrue(quality["candidate_polarity_enforced"])
 
+    def test_phi_phase_evidence_does_not_reuse_legacy_normalized_peak_gate(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 12, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.35,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+            "phase_angle_extension_deg": 0.0,
+        })
+
+        def weak_but_consistent_phase(*args):
+            seed = dict(args[6])
+            seed.update({"edge_peak": 0.342, "phase_refined": True})
+            return seed, {
+                "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+                "candidate_reference_edge_phase_fraction": 0.6,
+                "candidate_polarity_enforced": True,
+                "candidate_phase_failure": None,
+                "candidate_phase_edge_points": 196,
+                "candidate_phase_fit_residual_target_px": 0.68,
+                "candidate_phase_polarity_support_fraction": 1.0,
+                "candidate_phase_angle_coverage_fraction": 0.98,
+                "candidate_phase_edge_peak_normalized": 0.342,
+                "candidate_phase_fallback": None,
+            }
+
+        with patch(
+            "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+            side_effect=weak_but_consistent_phase,
+        ):
+            values, quality = _detect_phi12_2(
+                reference_gray, reference,
+                SimilarityTransform(0.0, 0.0, 1.0, 0.0), config,
+            )
+
+        self.assertIsNotNone(values, quality)
+        self.assertLess(quality["candidate_phase_edge_peak_normalized"], 0.35)
+        self.assertGreaterEqual(
+            quality["candidate_legacy_magnitude_edge_peak_normalized"], 0.35
+        )
+        self.assertTrue(quality["candidate_legacy_magnitude_edge_peak_gate_passed"])
+        self.assertEqual(
+            "reference_phase_multi_evidence",
+            quality["candidate_acceptance_score_contract"],
+        )
+
+    def test_phi_unbounded_phase_quality_failures_do_not_fallback(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 12, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+        })
+        for failure in (
+            "phase_fit_residual_above_gate",
+            "phase_edge_points_below_gate",
+        ):
+            phase_quality = {
+                "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+                "candidate_reference_edge_phase_fraction": 0.6,
+                "candidate_polarity_enforced": True,
+                "candidate_phase_failure": failure,
+                "candidate_phase_edge_points": 20,
+                "candidate_phase_fit_residual_target_px": 0.5,
+            }
+            with self.subTest(failure=failure), patch(
+                "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+                return_value=(None, phase_quality),
+            ):
+                values, quality = _detect_phi12_2(
+                    reference_gray, reference,
+                    SimilarityTransform(0.0, 0.0, 1.0, 0.0), config,
+                )
+                self.assertIsNone(values, quality)
+                self.assertEqual(failure, quality["candidate_failure"])
+
+    def test_phi_phase_fallback_still_requires_legacy_magnitude_gate(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 12, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 2.0,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+        })
+        phase_quality = {
+            "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+            "candidate_reference_edge_phase_fraction": 0.6,
+            "candidate_polarity_enforced": True,
+            "candidate_phase_failure": "phase_polarity_support_below_gate",
+            "candidate_phase_edge_points": 120,
+            "candidate_phase_fit_residual_target_px": 0.5,
+        }
+
+        with patch(
+            "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+            return_value=(None, phase_quality),
+        ), patch(
+            "algorithms.hole_2.current_capture._phi_multicircle_recovery",
+            return_value=(None, {}),
+        ):
+            values, quality = _detect_phi12_2(
+                reference_gray, reference,
+                SimilarityTransform(0.0, 0.0, 1.0, 0.0), config,
+            )
+
+        self.assertIsNone(values, quality)
+        self.assertIn("edge_peak_below_gate", quality["candidate_failure"])
+        self.assertEqual(
+            "legacy_magnitude_quality_fallback", quality["candidate_phase_fallback"]
+        )
+
     def test_phi_bounded_phase_failure_can_preserve_old_quality_candidate(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
         yy, xx = np.indices((220, 220))
@@ -323,7 +471,7 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertGreaterEqual(first_diagnostic["pairSupport"], 12)
         self.assertAlmostEqual(8.0, first_diagnostic["pairWidthMedianPx"], delta=1.0)
 
-    def test_geometry_consistency_rejects_without_pulling_output(self):
+    def test_geometry_ratio_alone_is_diagnostic_without_pulling_output(self):
         d7 = ShapeModel(
             index=0, label="7", sanitized="d7", kind="line",
             points=[(0.0, 0.0), (50.0, 0.0)], line_p1=(0.0, 0.0),
@@ -351,10 +499,54 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
 
         report = evaluate_geometry_consistency(features, reference, _test_config())
 
-        self.assertTrue(report["rejected"])
+        self.assertTrue(report["outlier"])
+        self.assertFalse(report["rejected"])
+        self.assertEqual("diagnostic_only_unconfirmed", report["decision"])
+        self.assertIsNone(report["failureReason"])
+        self.assertEqual("geometry_ratio_outlier_unconfirmed", report["outlierReason"])
         self.assertEqual(0.5, report["referenceRatio"])
         self.assertEqual(0.9, report["targetRatio"])
         self.assertFalse(report["outputAdjustmentApplied"])
+        self.assertTrue(features["7"]["measurementValid"])
+        self.assertEqual(90.0, features["7"]["target"]["lengthPx"])
+
+    def test_geometry_outlier_with_registration_recovery_is_rejected(self):
+        d7 = ShapeModel(
+            index=0, label="7", sanitized="d7", kind="line",
+            points=[(0.0, 0.0), (50.0, 0.0)], line_p1=(0.0, 0.0),
+            line_p2=(50.0, 0.0),
+        )
+        phi = ShapeModel(
+            index=1, label="Φ12.2", sanitized="Phi12_2", kind="arc",
+            points=[], circle=(0.0, 0.0, 50.0),
+        )
+        reference = ReferenceModel({}, Path("reference.bmp"), np.zeros((10, 10)), [d7, phi], [])
+        features = {
+            "7": {
+                "measurementValid": True, "qualityStatus": "valid", "failureReason": None,
+                "sourceDetector": "test", "recoveryPass": None,
+                "reference": {"lengthPx": 90.0},
+                "target": {"lengthPx": 90.0}, "quality": {},
+            },
+            "Phi12.2": {
+                "measurementValid": True, "qualityStatus": "valid", "failureReason": None,
+                "sourceDetector": "test", "recoveryPass": None,
+                "reference": {"diameterPx": 100.0},
+                "target": {"diameterPx": 100.0}, "quality": {},
+            },
+        }
+
+        report = evaluate_geometry_consistency(
+            features, reference, _test_config(),
+            registration={"registrationRecoveryPass": "stable_multi_support"},
+        )
+
+        self.assertTrue(report["outlier"])
+        self.assertTrue(report["rejected"])
+        self.assertEqual(
+            ["registration_recovery:stable_multi_support"],
+            report["corroboratingEvidence"],
+        )
         self.assertFalse(features["7"]["measurementValid"])
         self.assertIsNone(features["7"]["target"])
 
@@ -527,6 +719,21 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
                     path.write_text(json.dumps(config), encoding="utf-8")
                     with self.assertRaisesRegex(ValueError, "must remain"):
                         load_registration_config(path)
+
+    def test_repository_config_keeps_legacy_and_geometry_thresholds(self):
+        config_path = (
+            Path(__file__).resolve().parents[1]
+            / "config"
+            / "current_capture_registration.v1.json"
+        )
+        config = load_registration_config(config_path)
+        self.assertEqual(0.35, config["phi12_2"]["min_edge_peak_normalized"])
+        self.assertEqual(
+            0.08,
+            config["geometry_consistency"][
+                "max_reference_ratio_absolute_deviation"
+            ],
+        )
 
     def test_four_discrete_orientations_are_recovered(self):
         with tempfile.TemporaryDirectory() as tmp:

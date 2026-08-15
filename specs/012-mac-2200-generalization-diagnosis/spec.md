@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-15
 
-**Status**: Diagnosis complete; implementation not started
+**Status**: Directed implementation complete; pending Mac 2200 acceptance
 
 **Input**: Mac 对 `79aa6a4` 与 `3ee4b4f` 的外置 2200 张逐图差异和批量质量汇总。
 
@@ -13,8 +13,8 @@
 - `normal` 是唯一检测率验收组，共 2000 张好样品。
 - `defective` 是独立观察组，共 200 张坏品；其有效数不得合并到 normal，也不得用于证明
   好样品检测率改善。
-- 本增量只提交证据驱动的规格、研究、分析、计划和任务清单，不修改
-  `algorithms/hole_2/current_capture.py`、配置、契约或测试门。
+- 诊断提交完成并获得明确实施授权后，本增量只实现分数契约分离与geometry多证据决策；
+  不修改配置门限，不放宽legacy `0.35`或比例偏差`0.08`。
 - 外置 JSON、图片、JSONL 和批量输出不进入 Git。
 
 ## Frozen evidence

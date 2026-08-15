@@ -2,7 +2,7 @@
 
 **Input**: `spec.md`、`research.md`、`plan.md`、`analysis.md`
 
-**Current scope**: 只完成纯诊断文档；测试和实现任务保持未开始。
+**Current scope**: 定向实现与服务器验证已完成；Mac 2200严格分组验收待执行。
 
 ## Phase 1 - Evidence intake and cohort control
 
@@ -36,22 +36,22 @@
 - [x] T019 提交并推送纯诊断文档到 `origin/main`
 - [x] T020 推送后确认worktree clean并停止等待实现授权
 
-## Phase 5 - Test-first implementation (blocked pending explicit approval)
+## Phase 5 - Test-first implementation
 
-- [ ] T021 [US2] 先增加phase与legacy score contract分离红灯测试
-- [ ] T022 [US2] 增加错误极性、低覆盖、高残差、少点、越界不误恢复测试
-- [ ] T023 [US3] 先增加geometry诊断与硬拒绝独立证据红灯测试
-- [ ] T024 [US1] 增加D7上游score耦合与paired contour自身失败区分测试
-- [ ] T025 锁定最新唯一真值E2E `7<=2 px`、`Phi<=1 px`
-- [ ] T026 实现A1 score contract分离，保持legacy 0.35不变
-- [ ] T027 实现B1 geometry多证据/诊断解耦，不直接放宽0.08
-- [ ] T028 只在A1/B1仍有证据支持时评估C1 Phi几何hint与测量有效性分离
-- [ ] T029 外置shadow复跑105/36/1/23分层和9帧控制
-- [ ] T030 运行unittest、compileall、Schema、SpecKit analyze和Git大文件门
+- [x] T021 [US2] 先增加phase与legacy score contract分离红灯测试
+- [x] T022 [US2] 增加错误极性、低覆盖、高残差、少点、越界不误恢复测试
+- [x] T023 [US3] 先增加geometry诊断与硬拒绝独立证据红灯测试
+- [x] T024 [US1] 增加D7上游score耦合与paired contour自身失败区分测试
+- [x] T025 锁定最新唯一真值E2E `7<=2 px`、`Phi<=1 px`
+- [x] T026 实现A1 score contract分离，保持legacy 0.35不变
+- [x] T027 实现B1 geometry多证据/诊断解耦，不直接放宽0.08
+- [x] T028 评估C1：A1/B1后无服务器证据要求拆分Phi几何hint，故不实现额外运行时路径
+- [x] T029 外置9帧shadow复跑并确认500/521/620控制帧状态和数值不变；105/36完整分层待Mac
+- [x] T030 运行unittest、compileall、Schema、SpecKit analyze和Git大文件门
 - [ ] T031 Mac严格分组复跑normal 2000与defective 200，并核验最终接受门
 
 ## Dependencies and stop condition
 
 - T018依赖T001–T017；T019依赖T018；T020依赖T019。
-- T021–T031全部依赖新的明确实现授权，本次不得开始。
-- 当前提交完成T020后停止，不得把诊断结论直接改成运行时行为。
+- T021–T030已在明确实施授权后完成；T031依赖Mac外置2200张资产。
+- 在T031完成前，只能称为服务器验证通过的候选，不得宣称normal 2000已达标。

@@ -1,7 +1,7 @@
 # SpecKit Analyze: Mac 2200 泛化退化诊断
 
 **Analyzed**: 2026-08-15
-**Status**: Pure diagnosis complete; implementation intentionally blocked
+**Status**: Directed implementation analyzed; Mac 2200 acceptance pending
 
 ## 1. Cross-artifact consistency
 
@@ -96,8 +96,20 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 
 这些缺口不阻断诊断结论，但阻止直接把全部lost强制恢复。
 
-## 8. Analyze verdict
+## 8. Post-implementation re-analysis
 
-012文档在需求、证据、代码历史、候选、测试和停止条件之间一致，没有发现应先改运行时才能
-完成的阻断项。结论支持进入“测试先行的定向修复”评审，但本轮授权只到纯诊断提交，故实现
-保持blocked并在推送文档后停止。
+- A1与诊断根因一致：配置中的legacy `0.35`未变；phase多证据与legacy幅值门分别命名、分别
+  判定，契约输出可审计。
+- B1没有放宽`0.08`或删除离群信息；硬拒绝新增独立风险证据要求，单纯未经真值证实的比例
+  离群不再清空两个已通过自身图像门的测量。
+- C1未实施，避免把未验证的Phi几何hint引入D7；D7自身质量门和v6回退规则没有放宽。
+- 单元负例覆盖错误极性、高残差、少点和fallback不绕过legacy门；Schema要求geometry决策、
+  离群与佐证字段一致。
+- 最新唯一真值单图和9帧控制通过，但105/36分层和normal 2000检测率只能由Mac外置资产确认。
+
+## 9. Analyze verdict
+
+012的诊断、测试、实现和契约一致，没有发现通过降低全局门限、读取目标真值或修改输出值来
+追求检测率的行为。服务器门禁支持将本候选推送给Mac执行T031，但不支持提前声称normal 2000
+达标。最终接受仍要求registration `>=1962`、7 `>=1863`、Phi `>=1922`、比例离群不增加且
+defective 200单列报告。

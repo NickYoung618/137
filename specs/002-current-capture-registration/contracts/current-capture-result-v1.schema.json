@@ -44,7 +44,23 @@
       }, "additionalProperties": false
     },
     "qualityStatus": {"$ref": "#/$defs/qualityStatus"},
-    "geometryConsistency": {"type": "object", "required": ["evaluated", "rejected", "failureReason", "ratioSource", "outputAdjustmentApplied"], "additionalProperties": true},
+    "geometryConsistency": {
+      "type": "object",
+      "required": ["evaluated", "outlier", "rejected", "failureReason", "outlierReason", "ratioSource", "decision", "corroboratingEvidence", "hardRejectionPolicy", "outputAdjustmentApplied"],
+      "properties": {
+        "evaluated": {"type": "boolean"},
+        "outlier": {"type": "boolean"},
+        "rejected": {"type": "boolean"},
+        "failureReason": {"type": ["string", "null"]},
+        "outlierReason": {"type": ["string", "null"]},
+        "ratioSource": {"const": "old_reference_annotation_geometry"},
+        "decision": {"enum": ["not_evaluated", "consistent", "diagnostic_only_unconfirmed", "rejected_with_corroborating_evidence"]},
+        "corroboratingEvidence": {"type": "array", "items": {"type": "string"}},
+        "hardRejectionPolicy": {"const": "ratio_outlier_requires_independent_risk_evidence"},
+        "outputAdjustmentApplied": {"const": false}
+      },
+      "additionalProperties": true
+    },
     "referenceMeasurements": {"type": "object"},
     "v6Measurements": {"type": "object"},
     "timingMs": {"type": "object", "required": ["total"], "properties": {"total": {"type": "number", "minimum": 0}}, "additionalProperties": {"type": "number"}},
