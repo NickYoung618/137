@@ -1528,9 +1528,13 @@ def _refine_phi_reference_phase(
         diagnostics.update({
             "candidate_phase_failure": "phase_circle_fit_failed",
             "candidate_phase_edge_points": len(points),
+            "candidate_phase_raw_points": len(points),
+            "candidate_phase_inlier_fraction": None,
         })
         return None, diagnostics
     circle, inliers, residual = fitted
+    inlier_count = int(inliers.sum())
+    inlier_fraction = float(inlier_count / len(points)) if points else 0.0
     cx, cy, radius = (float(value) for value in circle)
     inlier_angles = np.unwrap(np.asarray(point_angles, dtype=np.float64)[inliers])
     expected_extent = max(1e-9, abs(angle_end - angle_start))
@@ -1538,12 +1542,14 @@ def _refine_phi_reference_phase(
     coverage = min(1.0, coverage)
     offset_x = cx - predicted_center[0]
     offset_y = cy - predicted_center[1]
+    phase_seed_offset_x = cx - seed_center[0]
+    phase_seed_offset_y = cy - seed_center[1]
     center_limit = float(seed["center_boundary"]["limitPx"])
     center_boundary = {
-        "xLower": offset_x <= -center_limit,
-        "xUpper": offset_x >= center_limit,
-        "yLower": offset_y <= -center_limit,
-        "yUpper": offset_y >= center_limit,
+        "xLower": phase_seed_offset_x <= -center_limit,
+        "xUpper": phase_seed_offset_x >= center_limit,
+        "yLower": phase_seed_offset_y <= -center_limit,
+        "yUpper": phase_seed_offset_y >= center_limit,
         "limitPx": center_limit,
     }
     radius_min = float(seed["radius_lower_bound"])
@@ -1554,7 +1560,7 @@ def _refine_phi_reference_phase(
         reasons.append("phase_radius_out_of_bounds")
     if any(center_boundary[key] for key in ("xLower", "xUpper", "yLower", "yUpper")):
         reasons.append("phase_center_boundary_saturated")
-    if int(inliers.sum()) < int(phi_config["phase_min_points"]):
+    if inlier_count < int(phi_config["phase_min_points"]):
         reasons.append("phase_edge_points_below_gate")
     if residual > float(phi_config["max_fit_residual_target_px"]):
         reasons.append("phase_fit_residual_above_gate")
@@ -1564,9 +1570,25 @@ def _refine_phi_reference_phase(
         reasons.append("phase_polarity_support_below_gate")
     diagnostics.update({
         "candidate_phase_failure": None if not reasons else ",".join(reasons),
-        "candidate_phase_edge_points": int(inliers.sum()),
+        "candidate_phase_edge_points": inlier_count,
         "candidate_phase_raw_points": len(points),
+        "candidate_phase_inlier_fraction": inlier_fraction,
         "candidate_phase_fit_residual_target_px": float(residual),
+        "candidate_phase_seed_center_offset_x_target_px": phase_seed_offset_x,
+        "candidate_phase_seed_center_offset_y_target_px": phase_seed_offset_y,
+        "candidate_phase_seed_center_offset_target_px": math.hypot(
+            phase_seed_offset_x, phase_seed_offset_y
+        ),
+        "candidate_phase_seed_center_x_boundary": {
+            "lower": bool(center_boundary["xLower"]),
+            "upper": bool(center_boundary["xUpper"]),
+            "limitPx": center_limit,
+        },
+        "candidate_phase_seed_center_y_boundary": {
+            "lower": bool(center_boundary["yLower"]),
+            "upper": bool(center_boundary["yUpper"]),
+            "limitPx": center_limit,
+        },
         "candidate_phase_angle_coverage_fraction": coverage,
         "candidate_phase_polarity_support_fraction": polarity_support_fraction,
         "candidate_phase_angle_extension_deg": float(phi_config["phase_angle_extension_deg"]),
@@ -1592,6 +1614,32 @@ def _refine_phi_reference_phase(
         "phase_refined": True,
     })
     return refined, diagnostics
+
+
+def _phi_global_center_diagnostics(
+    candidate: dict[str, Any],
+    predicted_center: tuple[float, float],
+    phi_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Audit cumulative center motion against the original primary window."""
+    offset_x = float(candidate["target_cx"] - predicted_center[0])
+    offset_y = float(candidate["target_cy"] - predicted_center[1])
+    limit = float(phi_config["search_radius_px"]) * float(
+        phi_config["boundary_saturation_fraction"]
+    )
+    x_boundary = {"lower": offset_x <= -limit, "upper": offset_x >= limit, "limitPx": limit}
+    y_boundary = {"lower": offset_y <= -limit, "upper": offset_y >= limit, "limitPx": limit}
+    return {
+        "candidate_global_center_offset_x_target_px": offset_x,
+        "candidate_global_center_offset_y_target_px": offset_y,
+        "candidate_global_center_offset_target_px": math.hypot(offset_x, offset_y),
+        "candidate_global_center_x_boundary": x_boundary,
+        "candidate_global_center_y_boundary": y_boundary,
+        "candidate_global_center_boundary_saturated": bool(
+            x_boundary["lower"] or x_boundary["upper"]
+            or y_boundary["lower"] or y_boundary["upper"]
+        ),
+    }
 
 
 def _detect_phi12_2(
@@ -1696,6 +1744,10 @@ def _detect_phi12_2(
 
     legacy_magnitude_edge_peak = float(selected["edge_peak"])
     legacy_magnitude_prominence = float(selected["prominence"])
+    global_center_diagnostics = _phi_global_center_diagnostics(
+        selected, predicted_center, phi_config
+    )
+    phase_fallback_rejection: str | None = None
     phase_diagnostics: dict[str, Any] = {
         "candidate_edge_semantics": "gradient_magnitude_legacy",
         "candidate_reference_edge_phase_fraction": None,
@@ -1723,6 +1775,33 @@ def _detect_phi12_2(
                 )
             )
             if fallback_eligible:
+                phase_diagnostics["candidate_phase_fallback"] = (
+                    "legacy_magnitude_quality_fallback"
+                )
+            phase_inlier_fraction = phase_diagnostics.get(
+                "candidate_phase_inlier_fraction"
+            )
+            if (
+                fallback_eligible
+                and failure_parts == {"phase_polarity_support_below_gate"}
+                and phase_inlier_fraction is not None
+                and float(phase_inlier_fraction)
+                < float(phi_config["min_angle_coverage_fraction"])
+            ):
+                fallback_eligible = False
+                phase_fallback_rejection = "phase_inlier_fraction_below_gate"
+            if (
+                fallback_eligible
+                and recovery_pass == "center_recenter"
+                and bool(global_center_diagnostics[
+                    "candidate_global_center_boundary_saturated"
+                ])
+            ):
+                fallback_eligible = False
+                phase_fallback_rejection = (
+                    "global_center_displacement_requires_phase_evidence"
+                )
+            if fallback_eligible:
                 phase_diagnostics.update({
                     "candidate_edge_semantics": "legacy_gradient_magnitude_quality_fallback",
                     "candidate_polarity_enforced": False,
@@ -1732,16 +1811,24 @@ def _detect_phi12_2(
                     recovery_pass = "legacy_magnitude_quality_fallback"
             else:
                 return None, {
-                    "candidate_failure": phase_failure,
+                    "candidate_failure": (
+                        phase_failure if phase_fallback_rejection is None
+                        else f"{phase_failure},{phase_fallback_rejection}"
+                    ),
                     "candidate_recovery_pass": recovery_pass,
                     "candidate_main_lower_bound_saturated": bool(main["lower_radius_saturated"]),
                     "candidate_main_radius_scale_ratio": float(main["radius_scale_ratio"]),
+                    "candidate_phase_fallback_rejection": phase_fallback_rejection,
+                    **global_center_diagnostics,
                     **phase_diagnostics,
                     **multicircle_diagnostics,
                 }
         else:
             phase_diagnostics["candidate_phase_fallback"] = None
             selected = phase_selected
+            global_center_diagnostics = _phi_global_center_diagnostics(
+                selected, predicted_center, phi_config
+            )
 
     target_cx = float(selected["target_cx"])
     target_cy = float(selected["target_cy"])
@@ -1858,6 +1945,8 @@ def _detect_phi12_2(
         "candidate_median_edge_score": float(np.median(edge_scores)) if edge_scores else float("nan"),
         "candidate_search_boundary_saturated": saturated,
         "candidate_lower_radius_boundary_saturated": bool(selected["lower_radius_saturated"]),
+        "candidate_phase_fallback_rejection": phase_fallback_rejection,
+        **global_center_diagnostics,
         **phase_diagnostics,
         **multicircle_diagnostics,
     }

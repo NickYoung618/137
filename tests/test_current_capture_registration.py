@@ -376,6 +376,9 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
             "candidate_polarity_enforced": True,
             "candidate_phase_failure": "phase_polarity_support_below_gate",
             "candidate_phase_edge_points": 120,
+            "candidate_phase_raw_points": 125,
+            "candidate_phase_inlier_fraction": 0.96,
+            "candidate_phase_angle_coverage_fraction": 0.96,
             "candidate_phase_fit_residual_target_px": 0.5,
         }
 
@@ -395,6 +398,101 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertIn("edge_peak_below_gate", quality["candidate_failure"])
         self.assertEqual(
             "legacy_magnitude_quality_fallback", quality["candidate_phase_fallback"]
+        )
+
+    def test_phi_polarity_fallback_rejects_low_phase_inlier_fraction(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        config = _test_config()
+        config["phi12_2"].update({
+            "center_search_step_px": 2,
+            "radius_search_step_px": 1,
+            "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+        })
+        phase_quality = {
+            "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+            "candidate_reference_edge_phase_fraction": 0.6,
+            "candidate_polarity_enforced": True,
+            "candidate_phase_failure": "phase_polarity_support_below_gate",
+            "candidate_phase_edge_points": 76,
+            "candidate_phase_raw_points": 155,
+            "candidate_phase_inlier_fraction": 76.0 / 155.0,
+            "candidate_phase_angle_coverage_fraction": 0.76,
+            "candidate_phase_fit_residual_target_px": 0.5,
+        }
+        with patch(
+            "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+            return_value=(None, phase_quality),
+        ):
+            values, quality = _detect_phi12_2(
+                reference_gray, reference,
+                SimilarityTransform(0.0, 0.0, 1.0, 0.0), config,
+            )
+        self.assertIsNone(values, quality)
+        self.assertIn("phase_inlier_fraction_below_gate", quality["candidate_failure"])
+        self.assertEqual(
+            "phase_inlier_fraction_below_gate",
+            quality["candidate_phase_fallback_rejection"],
+        )
+
+    def test_phi_polarity_fallback_preserves_high_phase_inlier_fraction(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 160, endpoint=False)
+        yy, xx = np.indices((220, 220))
+        reference_gray = np.full((220, 220), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="circle",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        config = _test_config()
+        config["phi12_2"].update({
+            "center_search_step_px": 2,
+            "radius_search_step_px": 1,
+            "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+        })
+        phase_quality = {
+            "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+            "candidate_reference_edge_phase_fraction": 0.6,
+            "candidate_polarity_enforced": True,
+            "candidate_phase_failure": "phase_polarity_support_below_gate",
+            "candidate_phase_edge_points": 133,
+            "candidate_phase_raw_points": 139,
+            "candidate_phase_inlier_fraction": 133.0 / 139.0,
+            "candidate_phase_angle_coverage_fraction": 0.96,
+            "candidate_phase_fit_residual_target_px": 0.5,
+        }
+        with patch(
+            "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+            return_value=(None, phase_quality),
+        ):
+            values, quality = _detect_phi12_2(
+                reference_gray, reference,
+                SimilarityTransform(0.0, 0.0, 1.0, 0.0), config,
+            )
+        self.assertIsNotNone(values, quality)
+        self.assertIsNone(quality["candidate_failure"])
+        self.assertIsNone(quality["candidate_phase_fallback_rejection"])
+        self.assertEqual(
+            "legacy_magnitude_quality_fallback",
+            quality["candidate_phase_fallback"],
         )
 
     def test_phi_bounded_phase_failure_can_preserve_old_quality_candidate(self):
@@ -927,16 +1025,19 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
 
     def test_phi_center_boundary_uses_bounded_recenter_pass(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
+        yy, xx = np.indices((240, 240))
+        reference_gray = np.full((240, 240), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
         phi = ShapeModel(
             index=0, label="Φ12.2", sanitized="Phi12_2", kind="arc",
             points=[(100.0 + 40.0 * math.cos(a), 100.0 + 40.0 * math.sin(a)) for a in angles],
-            circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            circle=(100.0, 100.0, 40.0), angle_start=0.0, polarity=100.0,
             angle_end=2.0 * math.pi, template_angles=angles,
         )
-        reference = ReferenceModel({}, Path("synthetic.bmp"), np.zeros((240, 240)), [phi], [])
-        target = np.full((240, 240), 20.0)
-        yy, xx = np.indices(target.shape)
-        target[np.hypot(xx - 130.0, yy - 100.0) <= 42.0] = 220.0
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        target = np.full((240, 240), 220.0)
+        target[np.hypot(xx - 130.0, yy - 100.0) <= 42.0] = 20.0
         target = gaussian_blur(target, 1.0)
         config = _test_config()
         config["phi12_2"].update({
@@ -956,6 +1057,57 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertEqual("center_recenter", quality["candidate_recovery_pass"])
         self.assertAlmostEqual(130.0, values["Phi12_2_cx"], delta=1.0)
         self.assertFalse(quality["candidate_search_boundary_saturated"])
+        self.assertTrue(quality["candidate_global_center_boundary_saturated"])
+        self.assertTrue(quality["candidate_phase_evidence_gate_passed"])
+
+    def test_phi_recenter_beyond_primary_window_requires_successful_phase(self):
+        angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
+        yy, xx = np.indices((240, 240))
+        reference_gray = np.full((240, 240), 220.0)
+        reference_gray[np.hypot(xx - 100.0, yy - 100.0) <= 40.0] = 20.0
+        reference_gray = gaussian_blur(reference_gray, 1.0)
+        phi = ShapeModel(
+            index=0, label="Φ12.2", sanitized="Phi12_2", kind="arc",
+            points=[], circle=(100.0, 100.0, 40.0), angle_start=0.0,
+            angle_end=2.0 * math.pi, polarity=100.0, template_angles=angles,
+        )
+        reference = ReferenceModel({}, Path("synthetic.bmp"), reference_gray, [phi], [])
+        target = np.full((240, 240), 220.0)
+        target[np.hypot(xx - 130.0, yy - 100.0) <= 42.0] = 20.0
+        target = gaussian_blur(target, 1.0)
+        config = _test_config()
+        config["phi12_2"].update({
+            "search_radius_px": 20, "center_search_step_px": 2,
+            "radius_search_step_px": 1, "refine_step_px": 0.5,
+            "min_edge_peak_normalized": 0.15,
+            "min_edge_prominence_normalized": 0.05,
+            "boundary_saturation_fraction": 0.95,
+            "center_recovery_search_radius_px": 16.0,
+        })
+        phase_quality = {
+            "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
+            "candidate_reference_edge_phase_fraction": 0.6,
+            "candidate_polarity_enforced": True,
+            "candidate_phase_failure": "phase_center_boundary_saturated",
+            "candidate_phase_edge_points": 150,
+            "candidate_phase_raw_points": 160,
+            "candidate_phase_inlier_fraction": 0.9375,
+            "candidate_phase_angle_coverage_fraction": 0.98,
+            "candidate_phase_fit_residual_target_px": 0.5,
+        }
+        with patch(
+            "algorithms.hole_2.current_capture._refine_phi_reference_phase",
+            return_value=(None, phase_quality),
+        ):
+            values, quality = _detect_phi12_2(
+                target, reference, SimilarityTransform(0.0, 0.0, 1.0, 0.0), config
+            )
+        self.assertIsNone(values, quality)
+        self.assertTrue(quality["candidate_global_center_boundary_saturated"])
+        self.assertEqual(
+            "global_center_displacement_requires_phase_evidence",
+            quality["candidate_phase_fallback_rejection"],
+        )
 
     def test_phi_does_not_expand_for_non_lower_bound_failure(self):
         angles = np.linspace(0.0, 2.0 * math.pi, 77, endpoint=False)
