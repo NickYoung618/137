@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-pose-replay-audit.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "status", "manifestImageCount", "resultCount", "matchedCount", "finalOutcome", "intermediateOutcome", "evaluationPurposeCounts", "independentTruthByPurpose", "poseUsabilityMetric", "repeatability", "annotationQueue", "consistencyErrors", "thresholdChangesApplied", "imagesRead"],
+  "properties": {
+    "schemaVersion": {"const": "slot-pose-replay-audit/1"},
+    "status": {"enum": ["PASSED", "FAILED"]},
+    "manifestImageCount": {"type": "integer", "minimum": 0},
+    "resultCount": {"type": "integer", "minimum": 0},
+    "matchedCount": {"type": "integer", "minimum": 0},
+    "finalOutcome": {"type": "object"},
+    "intermediateOutcome": {"type": "object"},
+    "evaluationPurposeCounts": {"type": "object"},
+    "independentTruthByPurpose": {"type": "object"},
+    "poseUsabilityMetric": {"type": "object"},
+    "repeatability": {"type": "object"},
+    "annotationQueue": {"type": "array"},
+    "consistencyErrors": {"type": "array"},
+    "thresholdChangesApplied": {"const": false},
+    "imagesRead": {"const": false}
+  },
+  "additionalProperties": true
+}

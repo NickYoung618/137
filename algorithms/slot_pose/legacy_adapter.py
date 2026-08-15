@@ -18,6 +18,7 @@ from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 from algorithms.slot_pose.full_frame_circle_locator import locate_full_frame_circle
 from algorithms.slot_pose.groove_recognition import recognize_grooves
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
+from algorithms.slot_pose.groove_resolution import resolve_groove_candidates
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
 from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
@@ -520,17 +521,21 @@ class LegacyAEndFaceAdapter:
                 is_refined = pose_config["schema_version"] in {
                     "single-real-groove-pose-config/2", "single-real-groove-pose-config/3",
                 }
-                if is_refined and recognition["status"] == "accepted" and len(groove_candidates) == 1:
-                    refinement = refine_groove_opening(
+                pose_recognition_status = recognition["status"]
+                def refine_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+                    return refine_groove_opening(
                         target_gray,
                         groove_center,
                         groove_outer_radius,
-                        groove_candidates[0],
+                        candidate,
                         self.module.bilinear_sample,
                         self.module.parabolic_peak,
                         detector["groove_refinement"],
                         pixel_scale=scale,
                     )
+
+                if is_refined and len(groove_candidates) == 1:
+                    refinement = refine_candidate(groove_candidates[0])
                     diagnostics["grooveRefinement"] = refinement
                     groove_candidates = [{
                         **groove_candidates[0],
@@ -545,6 +550,24 @@ class LegacyAEndFaceAdapter:
                         "grooveRefinement": refinement,
                     }]
                     diagnostics["grooveCandidates"] = groove_candidates
+                elif is_refined and len(groove_candidates) > 1 and detector["ambiguity_resolution"]["enabled"]:
+                    resolution = resolve_groove_candidates(
+                        groove_candidates, refine_candidate, detector["ambiguity_resolution"],
+                    )
+                    diagnostics["grooveResolution"] = resolution
+                    if resolution["status"] == "resolved":
+                        selected = resolution["survivors"][0]
+                        refinement = selected["grooveRefinement"]
+                        diagnostics["grooveRefinement"] = refinement
+                        groove_candidates = [{
+                            **selected,
+                            "refinedStartDeg": refinement["openingEndpointProfileDeg"][0],
+                            "refinedEndDeg": refinement["openingEndpointProfileDeg"][1],
+                        }]
+                        diagnostics["grooveCandidates"] = groove_candidates
+                        pose_recognition_status = "accepted"
+                    else:
+                        diagnostics["grooveRefinement"] = None
                 elif is_refined:
                     diagnostics["grooveRefinement"] = None
                 single_pose = build_single_groove_pose(
@@ -552,14 +575,18 @@ class LegacyAEndFaceAdapter:
                     groove_center,
                     groove_outer_radius,
                     pose_config,
-                    recognition_status=recognition["status"],
+                    recognition_status=pose_recognition_status,
                     plc_mapping_confirmed=bool(
                         self.config["pose"].get("production_plc_mapping_confirmed", False)
                     ),
                 )
                 diagnostics["singleGroovePose"] = single_pose
                 if single_pose["status"] != "accepted":
-                    if is_refined and isinstance(diagnostics.get("grooveRefinement"), dict) and diagnostics["grooveRefinement"]["status"] == "failed":
+                    resolution_status = (diagnostics.get("grooveResolution") or {}).get("status")
+                    if resolution_status == "none_survived":
+                        code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
+                        message = "no ambiguous coarse groove candidate passed physical sidewall refinement"
+                    elif is_refined and isinstance(diagnostics.get("grooveRefinement"), dict) and diagnostics["grooveRefinement"]["status"] == "failed":
                         code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
                         failed_checks = diagnostics["grooveRefinement"].get("failedChecks") or ["unknown"]
                         message = (

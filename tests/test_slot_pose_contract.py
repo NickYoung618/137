@@ -7,7 +7,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from algorithms.slot_pose.contract import ERROR_CODES, build_result, load_config, signed_relative_angle, validate_result
+from algorithms.slot_pose.contract import (
+    ERROR_CODES, build_result, effective_config_identity, effective_config_sha256,
+    load_config, signed_relative_angle, validate_result,
+)
 from algorithms.slot_pose.single_groove_pose import (
     DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
     build_closed_loop_guidance,
@@ -34,6 +37,28 @@ def minimal_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_effective_config_hash_ignores_paths_and_explicit_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            omitted = minimal_config()
+            omitted["config_id"] = "omitted"
+            omitted["pose"].pop("target_semantics_confirmed")
+            explicit = minimal_config()
+            explicit["config_id"] = "explicit"
+            explicit["pose"]["target_semantics_confirmed"] = False
+            explicit["detector"]["diagnostic_mode"] = "legacy_single_notch"
+            explicit["legacy_asset"]["source_path"] = "/different/machine/main.py"
+            paths = []
+            for name, config in (("omitted.json", omitted), ("explicit.json", explicit)):
+                path = root / name
+                path.write_text(json.dumps(config, indent=2 if name.startswith("explicit") else None), encoding="utf-8")
+                paths.append(path)
+            loaded = [load_config(path) for path in paths]
+            self.assertNotEqual(paths[0].read_bytes(), paths[1].read_bytes())
+            self.assertEqual(effective_config_identity(loaded[0]), effective_config_identity(loaded[1]))
+            self.assertEqual(effective_config_sha256(loaded[0]), effective_config_sha256(loaded[1]))
+            self.assertNotIn("/different/machine", json.dumps(effective_config_identity(loaded[1])))
+
     def test_v3_validity_is_image_guidance_not_plc_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

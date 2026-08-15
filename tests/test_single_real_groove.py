@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from algorithms.slot_pose.contract import load_config
 from algorithms.slot_pose.main import run
@@ -414,6 +415,36 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
                 self.assertEqual("NOT_AVAILABLE", payload["result"]["guidanceStatus"])
                 self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
                 self.assertEqual(error_code, payload["error"]["code"])
+
+    def test_v3_optional_ambiguity_resolution_requires_unique_physical_refinement(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG, "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["ambiguity_resolution"] = {
+            "schema_version": "groove-ambiguity-resolution/1", "enabled": True, "max_candidates": 3,
+        }
+        path = self.root / "single-v3-resolver.json"
+        write_json(path, config)
+        calls = []
+
+        def fake_refinement(_gray, _center, _radius, candidate, *_args, **_kwargs):
+            calls.append(candidate["candidateId"])
+            accepted = len(calls) == 1
+            return {
+                "schemaVersion": "slot-groove-subpixel-opening/2", "status": "accepted" if accepted else "failed",
+                "openingEndpointProfileDeg": [candidate["startDeg"], candidate["endDeg"]] if accepted else None,
+                "openingMidpointProfileDeg": candidate["centerDeg"] if accepted else None,
+                "failedChecks": [] if accepted else ["sidewall_missing"],
+            }
+
+        with patch("algorithms.slot_pose.legacy_adapter.refine_groove_opening", side_effect=fake_refinement):
+            payload = run(self.images / "two-real-one-shadow.png", path, "single:v3:resolver")
+        self.assertTrue(payload["result"]["valid"], payload)
+        self.assertEqual("resolved", payload["diagnostics"]["grooveResolution"]["status"])
+        self.assertEqual(2, len(payload["diagnostics"]["grooveResolution"]["attempts"]))
+        self.assertEqual(1, len(payload["diagnostics"]["grooveCandidates"]))
 
     def test_v2_refinement_quality_failure_is_explicit_and_never_uses_coarse_angle(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

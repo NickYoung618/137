@@ -34,6 +34,9 @@
   检测可靠时无论当前象限均`valid=true`；图像`+Y`下半轴为0°、顺时针正，到85°取最短环形差，
   `[80,90]`闭区强制输出0°。`production_plc_mapping_confirmed=false`只阻塞机械量和PLC命令，
   不清空`imageFrameCorrectionDeg`。Git安全的显式版本片段为`closed-loop-guidance-v3.fragment.json`。
+- `detector.ambiguity_resolution`是默认关闭的有界恢复门。开启后，仅对最多3个已通过粗真槽门的候选逐个运行
+  同一套现有亚像素槽壁/外圆交点精修；恰好1个幸存才允许进入姿态，0个、多个或超限均fail-closed。
+  它禁止使用候选编号、85°目标、目录类别或验收集得分选槽；独立槽/阴影validation标签完成前不得在生产配置启用。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，
@@ -45,6 +48,9 @@
 - `mm_per_px`为统一保留字段；纯角度输出不使用。`ANGLE_PENDING.limit=null`表示只统计、不判定。
 - 静态重复性只按Manifest中显式的同一样品、工位和条件分组，以检测角减同图人工真值角的环形残差统计；
   `groupingExplicit=false`、标注不完整或有效重复不足时不得输出重复性PASS/FAIL。
+- Manifest的`split`是评估用途：development/validation/test/acceptance必须按物理样品和源图lineage隔离。
+  当前唯一人工标注只能属于development；700张已检查结果属于锁定acceptance回归，不能用来选择阈值；
+  独立validation/test在新增样品并完成复核前必须报告`NOT_AVAILABLE`。
 
 Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
 并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。

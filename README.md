@@ -195,3 +195,19 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
 
 剩余关闭顺序：B-002 → 冻结Mac原始BMP验证集/人工参考规程 → B-004验收 → B-005上线。关闭前可以
 输出版本化图像帧测量和最短引导量，但不能宣称生产精度、把图像方向等同于执行机方向或向PLC写入。
+
+## 008回放完整性与数据集隔离
+
+008修复的是验收可信度和有证据的歧义恢复，不使用700张回放反向调圆/槽阈值：
+
+- review、CSV、叠加图和统计以顶层v3最终结果为准；质量拒绝即使保留中间槽角，也只能计入
+  `DETECTION_FAILED/NOT_AVAILABLE`，中间几何另列为非权威诊断。
+- `datasetClass`、产品判定、图像质量和`poseUsable`分开；只有带authority/provenance的显式
+  `poseUsable=false`标签才能形成权威误引导率，“坏图目录”本身只有条件统计意义。
+- `configSha256`标识源文件字节，`effectiveConfigSha256`标识运行时展开默认后的路径无关行为；
+  `tools/materialize_slot_pose_config.py`可在不读图时展开并核对。
+- 多粗槽候选可选地逐一经过现有亚像素物理精修，仅唯一幸存者可恢复。该开关默认关闭，等待独立标注验证。
+- 当前数据分层：合成测试+唯一人工标注为development；700张为已检查、锁定的acceptance回归；
+  独立validation/test尚不存在，需新增物理样品和逐图复核标注。25张同源JPEG不能充当独立validation。
+
+命令和剩余BLOCKED见`specs/008-a2-replay-integrity-hardening/quickstart.md`。

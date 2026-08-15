@@ -1,0 +1,4 @@
+relative_path,sample_id,condition_id,repeat_index,capture_sequence,capture_timestamp,split,dataset_class,source_image_sha256
+development/new_part_dev/condition_a/frame_0001.bmp,new_part_dev,condition_a,1,1,,development,normal,
+validation/new_part_validation/condition_a/frame_0001.bmp,new_part_validation,condition_a,1,1,,validation,normal,
+test/new_part_test/condition_a/frame_0001.bmp,new_part_test,condition_a,1,1,,test,normal,

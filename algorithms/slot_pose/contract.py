@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,32 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 def config_sha256(config_path: Path) -> str:
     return sha256_file(config_path)
+
+
+def effective_config_identity(config: dict[str, Any]) -> dict[str, Any]:
+    """Return a canonical, path-independent identity for runtime behavior."""
+    assets = config["legacy_asset"]
+    identity = {
+        "schemaVersion": "slot-pose-effective-config/1",
+        "project": config["project"],
+        "pose": deepcopy(config["pose"]),
+        "detector": deepcopy(config["detector"]),
+        "assetHashes": {
+            "sourceSha256": assets["source_sha256"],
+            "annotationSha256": assets["annotation_sha256"],
+            "referenceSha256": assets["reference_sha256"],
+        },
+    }
+    json.dumps(identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return identity
+
+
+def effective_config_sha256(config: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        effective_config_identity(config), sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -134,10 +161,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError("multi-role mode requires detector.role_assignment")
         validate_role_config(detector["role_assignment"])
     if mode == "single_real_groove":
+        from algorithms.slot_pose.groove_resolution import merged_ambiguity_resolution_config
         from algorithms.slot_pose.single_groove_pose import merged_single_groove_pose_config
 
         detector["single_groove_pose"] = merged_single_groove_pose_config(
             detector.get("single_groove_pose")
+        )
+        detector["ambiguity_resolution"] = merged_ambiguity_resolution_config(
+            detector.get("ambiguity_resolution")
         )
         if detector["single_groove_pose"]["schema_version"] in {
             "single-real-groove-pose-config/2", "single-real-groove-pose-config/3",
@@ -236,6 +267,7 @@ def build_result(
             "name": ALGORITHM_NAME,
             "version": ALGORITHM_VERSION,
             "configSha256": config_sha256(config_path),
+            "effectiveConfigSha256": effective_config_sha256(config),
             "configId": config["config_id"],
             "assets": {
                 "sourceSha256": assets["source_sha256"],

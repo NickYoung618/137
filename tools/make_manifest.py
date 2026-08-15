@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from .dataset_common import IMAGE_SUFFIXES, MANIFEST_SCHEMA_VERSION, inspect_image, natural_key, write_json
+    from .dataset_common import IMAGE_SUFFIXES, MANIFEST_SCHEMA_VERSION, inspect_image, natural_key, safe_relative_path, write_json
 except ImportError:  # Direct script execution.
-    from dataset_common import IMAGE_SUFFIXES, MANIFEST_SCHEMA_VERSION, inspect_image, natural_key, write_json
+    from dataset_common import IMAGE_SUFFIXES, MANIFEST_SCHEMA_VERSION, inspect_image, natural_key, safe_relative_path, write_json
 
 
-DATASET_SPLITS = {"development", "tuning", "validation", "acceptance"}
+DATASET_SPLITS = {"development", "tuning", "validation", "test", "acceptance"}
 
 
 def infer_group(relative_path: Path, default_sample: str, default_position: str) -> tuple[str, str, str]:
@@ -39,6 +39,7 @@ def build_manifest(
     reference_image: Path | None = None,
     grouping_records: dict[str, dict] | None = None,
     dataset_class: str = "normal",
+    semantics_records: dict[str, dict] | None = None,
 ) -> dict:
     input_root = input_root.resolve()
     if not input_root.is_dir():
@@ -54,6 +55,11 @@ def build_manifest(
     )
     if not paths:
         raise ValueError(f"no supported images found under {input_root}")
+    relative_paths = {path.relative_to(input_root).as_posix() for path in paths}
+    if semantics_records is not None:
+        extras = sorted(set(semantics_records) - relative_paths)
+        if extras:
+            raise ValueError(f"semantics record references unknown image: {extras[0]}")
 
     groups: dict[tuple[str, str, str], list[tuple[Path, dict]]] = defaultdict(list)
     for path in paths:
@@ -62,11 +68,16 @@ def build_manifest(
         metadata = dict((grouping_records or {}).get(relative_value, {}))
         if grouping_records is not None and not metadata:
             raise ValueError(f"grouping record missing for image: {relative_value}")
+        semantics = dict((semantics_records or {}).get(relative_value, {}))
+        if semantics_records is not None and not semantics:
+            raise ValueError(f"semantics record missing for image: {relative_value}")
+        if metadata.get("dataset_class") and semantics.get("dataset_class") and metadata["dataset_class"] != semantics["dataset_class"]:
+            raise ValueError(f"dataset_class conflict for image: {relative_value}")
         inferred_sample, inferred_position, inferred_split = infer_group(relative, default_sample, default_position)
         sample = str(metadata.get("sample_id") or inferred_sample)
         position = str(metadata.get("condition_id") or metadata.get("position") or inferred_position)
         split = str(metadata.get("split") or inferred_split)
-        groups[(sample, position, split)].append((path, metadata))
+        groups[(sample, position, split)].append((path, {**metadata, "_semantics": semantics}))
 
     images: list[dict] = []
     fingerprint = hashlib.sha256()
@@ -75,13 +86,31 @@ def build_manifest(
             repeat_index = int(metadata.get("repeat_index") or generated_repeat)
             relative = path.relative_to(input_root).as_posix()
             info = inspect_image(path)
+            semantics = metadata.pop("_semantics", {})
+            class_value = str(semantics.get("dataset_class") or metadata.get("dataset_class") or dataset_class)
+            if class_value not in {"normal", "bad"}:
+                raise ValueError(f"invalid dataset_class for image: {relative}")
+            pose_text = str(semantics.get("pose_usable", "")).strip().lower()
+            if pose_text not in {"", "true", "false"}:
+                raise ValueError(f"pose_usable must be true, false, or empty for image: {relative}")
+            pose_usable = None if not pose_text else pose_text == "true"
+            authority = str(semantics.get("authority", "")).strip() or None
+            provenance = str(semantics.get("provenance", "")).strip() or None
+            if pose_usable is not None and (authority is None or provenance is None):
+                raise ValueError(f"pose_usable requires authority and provenance for image: {relative}")
             record = {
                 "imageId": f"{sample_id}:{position}:{repeat_index:04d}",
                 "relativePath": relative,
                 "sampleId": sample_id,
                 "position": position,
                 "conditionId": position,
-                "datasetClass": str(metadata.get("dataset_class") or dataset_class),
+                "datasetClass": class_value,
+                "badReason": str(semantics.get("bad_reason", "")).strip() or None,
+                "productDisposition": str(semantics.get("product_disposition", "UNKNOWN")).strip().upper() or "UNKNOWN",
+                "imageDisposition": str(semantics.get("image_disposition", "UNKNOWN")).strip().upper() or "UNKNOWN",
+                "poseUsable": pose_usable,
+                "semanticsAuthority": authority,
+                "semanticsProvenance": provenance,
                 "split": split,
                 "repeatIndex": repeat_index,
                 "captureTimestamp": metadata.get("capture_timestamp") or None,
@@ -123,6 +152,9 @@ def build_manifest(
             "allowedImageSuffixes": sorted(IMAGE_SUFFIXES),
             "rawImagesAreExternal": True,
             "groupingExplicit": grouping_records is not None,
+            "semanticsExplicit": semantics_records is not None,
+            "evaluationPurposes": sorted({item["split"] for item in images}),
+            "lockedAcceptance": any(item["split"] == "acceptance" for item in images),
         },
         "reference": reference,
         "images": images,
@@ -143,6 +175,21 @@ def load_grouping_csv(path: Path) -> dict[str, dict]:
     return records
 
 
+def load_semantics_csv(path: Path) -> dict[str, dict]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    records: dict[str, dict] = {}
+    for row in rows:
+        relative = str(row.get("relative_path", "")).strip()
+        safe_relative_path(relative)
+        if not relative or relative in records:
+            raise ValueError(f"semantics relative_path is missing or duplicated: {relative!r}")
+        records[relative] = row
+    if not records:
+        raise ValueError("semantics CSV is empty")
+    return records
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="External dataset root.")
@@ -155,6 +202,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-image", type=Path)
     parser.add_argument("--grouping", type=Path, help="Explicit capture grouping CSV keyed by relative_path.")
     parser.add_argument("--dataset-class", choices=("normal", "bad"), default="normal")
+    parser.add_argument("--semantics", type=Path, help="Explicit per-image dataset/business/pose semantics CSV.")
     return parser.parse_args()
 
 
@@ -162,6 +210,7 @@ def main() -> int:
     args = parse_args()
     try:
         grouping = load_grouping_csv(args.grouping) if args.grouping else None
+        semantics = load_semantics_csv(args.semantics) if args.semantics else None
         manifest = build_manifest(
             args.input,
             args.dataset_id,
@@ -172,6 +221,7 @@ def main() -> int:
             args.reference_image,
             grouping,
             args.dataset_class,
+            semantics,
         )
         write_json(args.output, manifest)
     except (OSError, ValueError) as exc:

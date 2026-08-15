@@ -77,6 +77,7 @@ def evaluate_results(results: list[dict[str, Any]], truth_rows: list[dict[str, s
     static_errors: dict[tuple[str, str], list[float]] = defaultdict(list)
     normal_matched = bad_matched = normal_valid = 0
     false_positive = false_negative = 0
+    pose_labeled = pose_unusable = pose_false_positive = pose_unknown = 0
     for payload in results:
         truth = by_hash.get(payload.get("image", {}).get("sha256"))
         if truth is None:
@@ -92,6 +93,15 @@ def evaluate_results(results: list[dict[str, Any]], truth_rows: list[dict[str, s
             normal_matched += 1
         if actual_valid and is_bad:
             false_positive += 1
+        pose_text = str(truth.get("pose_usable", "")).strip().lower()
+        if pose_text in {"true", "false"}:
+            pose_labeled += 1
+            if pose_text == "false":
+                pose_unusable += 1
+                if actual_valid:
+                    pose_false_positive += 1
+        else:
+            pose_unknown += 1
         if not is_bad and expected_valid and not actual_valid:
             false_negative += 1
         if not actual_valid:
@@ -164,6 +174,15 @@ def evaluate_results(results: list[dict[str, Any]], truth_rows: list[dict[str, s
         "errorCodeCounts": dict(sorted(bad_error_codes.items())),
         "elapsedMs": timing_summary(bad_timings),
         "thresholdEvaluation": "NOT_EVALUATED",
+        "poseFalsePositiveMetric": {
+            "status": "AUTHORITATIVE" if bad_matched and pose_labeled == bad_matched else ("PARTIAL" if pose_labeled else "CONDITIONAL"),
+            "labeledCount": pose_labeled,
+            "poseUnusableCount": pose_unusable,
+            "unknownCount": pose_unknown,
+            "falsePositiveCount": pose_false_positive,
+            "falsePositiveRate": pose_false_positive / pose_unusable if pose_unusable else None,
+            "blocker": None if bad_matched and pose_labeled == bad_matched else "POSE_USABILITY_LABELS_INCOMPLETE",
+        },
     }
     return {
         "schemaVersion": "slot-pose-evaluation/1",

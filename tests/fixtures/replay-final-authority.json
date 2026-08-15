@@ -1,0 +1,18 @@
+{
+  "description": "Path-free final/intermediate authority fixture; no manual truth.",
+  "final": {
+    "valid": false,
+    "detectionStatus": "DETECTION_FAILED",
+    "guidanceStatus": "NOT_AVAILABLE",
+    "rotationDirection": null,
+    "signedRelativeRotationDeg": null
+  },
+  "intermediate": {
+    "authoritative": false,
+    "detectionStatus": "DETECTED",
+    "guidanceStatus": "DETECTED_IN_POSITION",
+    "rotationDirection": "NONE",
+    "currentAngleDeg": 85.0
+  },
+  "error": {"code": "QUALITY_REJECTED", "stage": "quality_gate"}
+}

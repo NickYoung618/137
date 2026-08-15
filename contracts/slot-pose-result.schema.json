@@ -31,6 +31,7 @@
         "name": {"const": "legacy-a-end-face-slot-pose-adapter"},
         "version": {"type": "string", "minLength": 1},
         "configSha256": {"$ref": "#/$defs/sha256"},
+        "effectiveConfigSha256": {"$ref": "#/$defs/sha256"},
         "configId": {"type": "string", "minLength": 1},
         "assets": {
           "type": "object",

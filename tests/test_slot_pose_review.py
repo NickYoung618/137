@@ -8,10 +8,63 @@ from pathlib import Path
 from PIL import Image
 
 from tools.dataset_common import inspect_image
-from tools.render_slot_pose_review import render_review
+from tools.render_slot_pose_review import contact_sheet_layout, render_review
 
 
 class SlotPoseReviewTests(unittest.TestCase):
+    def test_final_result_overrides_pre_quality_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_path = root / "quality-rejected.jpg"
+            Image.new("RGB", (160, 120), 128).save(image_path, quality=95)
+            manifest = {
+                "datasetId": "authority",
+                "images": [{
+                    "imageId": "sample:0001", "relativePath": image_path.name,
+                    "datasetClass": "normal", **inspect_image(image_path),
+                }],
+            }
+            intermediate = {
+                "detectionStatus": "DETECTED", "guidanceStatus": "DETECTED_IN_POSITION",
+                "currentAngleDeg": 85.0, "targetAngleDeg": 85.0, "toleranceDeg": 5.0,
+                "correctionRawDeg": 0.0, "correctionDeg": 0.0,
+                "imageFrameCorrectionDeg": 0.0, "rotationDirection": "NONE",
+                "withinTolerance": True,
+                "plcExecution": {"status": "BLOCKED_MAPPING_UNCONFIRMED"},
+            }
+            final = {
+                "valid": False, "signedRelativeRotationDeg": None,
+                "detectionStatus": "DETECTION_FAILED", "guidanceStatus": "NOT_AVAILABLE",
+                "currentAngleDeg": None, "targetAngleDeg": 85.0, "toleranceDeg": 5.0,
+                "correctionRawDeg": None, "correctionDeg": None,
+                "imageFrameCorrectionDeg": None, "rotationDirection": None,
+                "withinTolerance": None, "mechanicalCorrectionDeg": None,
+                "plcCommand": None, "plcExecutionStatus": "BLOCKED_MAPPING_UNCONFIRMED",
+                "plcExecutionAuthoritative": False, "plcBlockers": ["PLC_MAPPING_UNCONFIRMED"],
+            }
+            result = {
+                "taskId": "authority:sample:0001", "result": final,
+                "error": {"code": "QUALITY_REJECTED", "stage": "quality_gate"},
+                "diagnostics": {
+                    "singleGroovePose": {"geometryValid": True, "guidance": intermediate},
+                },
+            }
+            summary = render_review(manifest, [result], root, root / "review")
+            self.assertEqual({"DETECTION_FAILED": 1}, summary["detectionStatusCounts"])
+            self.assertEqual({"NOT_AVAILABLE": 1}, summary["guidanceStatusCounts"])
+            self.assertEqual({"not_available": 1}, summary["rotationDirectionCounts"])
+            record = summary["records"][0]
+            self.assertTrue(record["failClosed"])
+            self.assertEqual("DETECTION_FAILED", record["guidance"]["detectionStatus"])
+            self.assertEqual("DETECTED", record["intermediateGuidance"]["detectionStatus"])
+
+    def test_contact_sheet_layout_stays_within_jpeg_limit(self) -> None:
+        columns, rows, width, height = contact_sheet_layout(700)
+        self.assertGreaterEqual(columns, 5)
+        self.assertEqual(700, columns * (rows - 1) + min(columns, 700 - columns * (rows - 1)))
+        self.assertLessEqual(width, 65_000)
+        self.assertLessEqual(height, 65_000)
+
     def test_v3_review_separates_adjustment_from_detection_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
