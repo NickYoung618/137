@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "slot-pose-006-baseline/1",
+  "recordedAt": "2026-08-15",
+  "evidenceBoundary": {
+    "humanAnnotatedImageCount": 1,
+    "unlabeledDiagnosticImageCount": 25,
+    "humanReferenceScope": "DEVELOPMENT_REFERENCE_ONLY",
+    "humanReferenceRuntimeInputAllowed": false,
+    "humanReferenceAppliesAsTruthToOtherImages": false,
+    "perImageAccuracyStatus": "NOT_EVALUATED",
+    "staticRepeatabilityStatus": "NOT_EVALUATED",
+    "staticRepeatabilityReason": "GROUPING_NOT_EXPLICIT"
+  },
+  "referenceHashes": {
+    "manualReviewSha256": "71f3f160c20aa00a3a1e7fb58ce585cd445bd76a0c0da402a3bfe021504541dc",
+    "sameImageComparisonSha256": "1aa6f47ddd3e99364f5f1b5501e4605529206c8f399bfd3207c13638679ce126"
+  },
+  "sameImageDevelopmentComparison": {
+    "circleCenterDistancePx": 2.4177839083133095,
+    "radiusAbsolutePx": 1.396724368526975,
+    "grooveOpeningCircularDeltaDeg": 0.00937308645069379,
+    "productionAccuracyClaimed": false
+  },
+  "blocked": [
+    "The 25 JPEG diagnostics do not have per-image same-hash human truth.",
+    "The manifest does not explicitly bind repeated frames to the same physical sample, position and condition.",
+    "PLC addressing, scaling, byte order and handshake remain unconfirmed."
+  ]
+}

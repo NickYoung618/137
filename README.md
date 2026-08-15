@@ -88,6 +88,25 @@ uv run python tools/run_slot_pose_batch.py \
 服务器现有25张5472×3648 A2 JPEG诊断副本和3张同源原始BMP；第4帧有一份同源BMP人工圆弧/开放槽开发参考，
 但25张JPEG尚无逐图同哈希人工truth。图片、LabelMe模板和审阅产物全部留在Git外；完整正常/坏图集仍在Mac外置存储。
 
+## 006单人工参考与逐图自动标注
+
+当前只有1张图有人工外圆和真槽标注。它被锁定为`DEVELOPMENT_REFERENCE_ONLY`：只能报告该图本身的
+人工/自动圆心、半径和环形槽角差，不能把它的角度当成另外25张图的真值。25张无真值图可以逐图导出
+LabelMe可视诊断，包含自动外圆、槽口、圆心到槽口中点的径向线、两侧槽壁内点与拒绝点。所有标签均以
+`AUTO_`开头，并写明`human_verified=false`、`formal_truth=false`和`runtime_input_allowed=false`。
+
+```bash
+uv run python tools/export_reference_anchored_diagnostics.py \
+  --manifest "$A2_MANIFEST" --results "$A2_RESULTS" --data-root "$A2_DATA_ROOT" \
+  --manual-review "$MANUAL_REVIEW_JSON" \
+  --reference-comparison "$REFERENCE_COMPARISON_JSON" \
+  --output-dir "$A2_REFERENCE_DIAGNOSTIC_DIR"
+```
+
+`observedCircularDeltaToReferenceDeg`仅是“当前检测值与开发参考角的环形观测差”，不是准确度误差。
+没有逐图独立人工真值时，准确度是`NOT_EVALUATED`；没有明确的同样品/同位置/同工况重复组时，
+静态重复性也是`NOT_EVALUATED`。详细契约和命令见`specs/006-single-reference-diagnostics/`。
+
 ## 004全画面找圆与逐图标注验收
 
 新增的全画面策略默认关闭，仅在`single_real_groove`显式启用：低分辨率连通域只提名候选，180条锁定gyj

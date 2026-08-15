@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reference-anchored-diagnostics.schema.json",
+  "title": "Single-reference offline slot-pose diagnostics",
+  "oneOf": [
+    {"$ref": "#/$defs/developmentReference"},
+    {"$ref": "#/$defs/diagnosticIndex"},
+    {"$ref": "#/$defs/autoLabelMe"}
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableNumber": {"type": ["number", "null"]},
+    "relativePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?![A-Za-z]:[\\\\/]).+"},
+    "point": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [{"type": "number"}, {"type": "number"}]
+    },
+    "developmentReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "scope", "source", "manualCircle", "manualMeasurements", "sameImageAutomaticDifference", "targetContract", "runtimeInputAllowed", "productionAccuracyClaimed", "appliesAsAccuracyTruthToOtherImages"],
+      "properties": {
+        "schemaVersion": {"const": "slot-pose-development-reference/1"},
+        "scope": {"const": "DEVELOPMENT_REFERENCE_ONLY"},
+        "source": {
+          "type": "object",
+          "required": ["imageSha256", "annotationSha256", "circleFitSourceSha256", "manualRecordSha256", "runtimeRecordSha256", "comparisonRecordSha256"],
+          "properties": {
+            "imageSha256": {"$ref": "#/$defs/sha256"}, "annotationSha256": {"$ref": "#/$defs/sha256"},
+            "circleFitSourceSha256": {"$ref": "#/$defs/sha256"}, "manualRecordSha256": {"$ref": "#/$defs/sha256"},
+            "runtimeRecordSha256": {"$ref": "#/$defs/sha256"},
+            "comparisonRecordSha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+          }
+        },
+        "manualCircle": {"type": "object"}, "manualMeasurements": {"type": "object"},
+        "sameImageAutomaticDifference": {"type": "object"}, "targetContract": {"type": "object"},
+        "runtimeInputAllowed": {"const": false}, "productionAccuracyClaimed": {"const": false},
+        "appliesAsAccuracyTruthToOtherImages": {"const": false}
+      }
+    },
+    "diagnosticIndex": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "datasetId", "datasetFingerprint", "imageCount", "reference", "evaluation", "records"],
+      "properties": {
+        "schemaVersion": {"const": "reference-anchored-slot-pose-diagnostics/1"},
+        "datasetId": {"type": "string", "minLength": 1},
+        "datasetFingerprint": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "imageCount": {"type": "integer", "minimum": 0},
+        "reference": {"type": "object"},
+        "evaluation": {
+          "type": "object", "required": ["accuracyStatus", "staticRepeatabilityStatus", "productionAccuracyClaimed"],
+          "properties": {
+            "accuracyStatus": {"const": "NOT_EVALUATED"},
+            "staticRepeatabilityStatus": {"const": "NOT_EVALUATED"},
+            "productionAccuracyClaimed": {"const": false}
+          }
+        },
+        "records": {
+          "type": "array", "items": {
+            "type": "object",
+            "required": ["imageId", "relativeImagePath", "imageSha256", "autoAnnotationRelativePath", "autoAnnotationSha256", "formalMechanicalAngleDeg", "measuredYDownDeg", "observedCircularDeltaToReferenceDeg", "comparisonMeaning", "accuracyStatus"],
+            "properties": {
+              "imageId": {"type": "string", "minLength": 1},
+              "relativeImagePath": {"$ref": "#/$defs/relativePath"},
+              "imageSha256": {"$ref": "#/$defs/sha256"},
+              "autoAnnotationRelativePath": {"$ref": "#/$defs/relativePath"},
+              "autoAnnotationSha256": {"$ref": "#/$defs/sha256"},
+              "formalMechanicalAngleDeg": {"$ref": "#/$defs/nullableNumber"},
+              "measuredYDownDeg": {"$ref": "#/$defs/nullableNumber"},
+              "observedCircularDeltaToReferenceDeg": {"$ref": "#/$defs/nullableNumber"},
+              "comparisonMeaning": {"const": "OBSERVATION_ONLY_NOT_ACCURACY_ERROR"},
+              "accuracyStatus": {"const": "NOT_EVALUATED"}
+            }
+          }
+        }
+      }
+    },
+    "autoLabelMe": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "flags", "shapes", "imagePath", "imageData", "imageHeight", "imageWidth"],
+      "properties": {
+        "version": {"type": "string"}, "imagePath": {"$ref": "#/$defs/relativePath"},
+        "imageData": {"type": "null"}, "imageHeight": {"type": "integer", "minimum": 1},
+        "imageWidth": {"type": "integer", "minimum": 1},
+        "flags": {
+          "type": "object",
+          "required": ["algorithm_generated", "diagnostic_only", "human_verified", "formal_truth", "runtime_input_allowed"],
+          "properties": {
+            "algorithm_generated": {"const": true}, "diagnostic_only": {"const": true},
+            "human_verified": {"const": false}, "formal_truth": {"const": false},
+            "runtime_input_allowed": {"const": false}
+          }
+        },
+        "shapes": {
+          "type": "array", "items": {
+            "type": "object", "required": ["label", "points", "shape_type", "flags"],
+            "properties": {
+              "label": {"type": "string", "pattern": "^AUTO_"},
+              "points": {"type": "array", "items": {"$ref": "#/$defs/point"}},
+              "shape_type": {"enum": ["circle", "line", "linestrip", "point"]},
+              "flags": {
+                "type": "object", "required": ["algorithm_generated", "formal_truth"],
+                "properties": {"algorithm_generated": {"const": true}, "formal_truth": {"const": false}}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

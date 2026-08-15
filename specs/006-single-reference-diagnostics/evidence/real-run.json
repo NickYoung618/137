@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "slot-pose-006-real-run/1",
+  "recordedAt": "2026-08-15",
+  "inputs": {
+    "datasetId": "a2-first-25-jpeg-diagnostic",
+    "imageCount": 25,
+    "manifestSha256": "e0362eb165f2ae74230672acbe46ccc015bfd4ac876a6be845060558d7f489b8",
+    "runtimeResultsSha256": "44e0abf244618fd513c4a48330eff14a8fd0077caff8530bd886936d5afe9693"
+  },
+  "automaticDiagnostics": {
+    "labelMeJsonCount": 25,
+    "overlayCount": 25,
+    "contactSheetCount": 1,
+    "imageDataEmbeddedCount": 0,
+    "absoluteImagePathCount": 0,
+    "nonAutoShapeLabelCount": 0,
+    "physicalCircleAcceptedCount": 25,
+    "rawDarkCandidateCountDistribution": {"3": 25},
+    "acceptedGrooveCountDistribution": {"1": 25},
+    "rejectedShadowCount": 50,
+    "shadowRejectionReasons": {"width_variation_too_high": 50},
+    "grooveRefinementAcceptedCount": 25,
+    "imageAngleAvailableCount": 25,
+    "formalMechanicalAngleNullCount": 25,
+    "formalErrorCounts": {"PLC_MAPPING_UNCONFIRMED": 25},
+    "targetToleranceStatusCounts": {"PASS": 2, "FAIL": 23},
+    "quadrantCounts": {"upper_right": 20, "lower_left": 5}
+  },
+  "observedAngleModes": [
+    {"count": 20, "medianDeg": -158.10958312828643, "rangeDeg": 0.009300507229625055},
+    {"count": 2, "medianDeg": 82.9781449081047, "rangeDeg": 0.00015388155020445993},
+    {"count": 3, "medianDeg": 22.823167288884775, "rangeDeg": 0.01306118700435377}
+  ],
+  "observedAngleModeCaveat": "The modes are descriptive output clusters, not confirmed capture groups and not static-repeatability results.",
+  "evaluation": {
+    "accuracyStatus": "NOT_EVALUATED",
+    "accuracyReason": "PER_IMAGE_HUMAN_TRUTH_UNAVAILABLE",
+    "staticRepeatabilityStatus": "NOT_EVALUATED",
+    "staticRepeatabilityReason": "GROUPING_NOT_EXPLICIT",
+    "productionAccuracyClaimed": false
+  },
+  "verification": {
+    "focusedTestsPassed": 5,
+    "fullTestsPassed": 124,
+    "fullTestsFailed": 0,
+    "fullTestElapsedSeconds": 42.075,
+    "repositorySchemaCountValidated": 10,
+    "generatedJsonCountValidatedAgainstSchema": 27,
+    "historicalPerformanceGate": "PASSED_ON_ISOLATED_RERUN_AND_FINAL_FULL_RUN",
+    "firstFullRunCaveat": "One historical 8-second performance assertion was disturbed by an unrelated CPU-heavy build; no numerical test failed."
+  },
+  "externalArtifacts": {
+    "fileCount": 59,
+    "aggregateSha256Method": "sha256(sorted(relativePath + NUL + binarySha256Digest))",
+    "aggregateSha256": "9b46a73d7da5365e245452a094fb74e718963db60992c94610c363238cc0def5",
+    "developmentReferenceSha256": "1f778b0edd7d763f6d6a85df04c3b35ccb27e5a5ad5ed0029d33f7891d294fd6",
+    "diagnosticIndexSha256": "1ccd9f4bf055e697ab61a98dfe02012536400fd87f5075e8c78d8f3db4db5a0a",
+    "diagnosticsCsvSha256": "cd6c2c2b90872495798b7340bf17e8eaa5e87a45f45549e1f092746c6218a9b4",
+    "contactSheetSha256": "97d82e198be95f2f90b93c4c0776a4f3eed239340e5c97fbae659cdf79cef7be"
+  },
+  "claims": {
+    "allImagesHaveReviewableAutomaticGeometry": true,
+    "automaticAnnotationsAreHumanTruth": false,
+    "referenceDeltaIsAccuracyError": false,
+    "staticRepeatabilityEvaluated": false,
+    "productionReady": false
+  }
+}
