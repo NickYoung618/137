@@ -6,3 +6,4 @@
 4. [完成] 更新run/batch CLI、single/full shell、provenance、Schema、验收和可视报告。
 5. [完成] 运行真实self-check、9帧诊断、全套门禁与SpecKit analyze。
 6. [完成] 更新结论，审计文件，commit并push `origin/main`。
+7. [完成] 按用户复核要求增加Phi完整拟合圆审核图层，全局清除退役角色残留并通过全部门禁。

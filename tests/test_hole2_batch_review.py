@@ -166,10 +166,15 @@ class Hole2BatchReviewTests(unittest.TestCase):
             self.assertIn("old:7:boundary:B", labels)
             self.assertIn("old:7:dimension", labels)
             self.assertIn("old:Phi12.2:arc:reference_left:0", labels)
+            self.assertIn("old:Phi12.2:fit-circle", labels)
             self.assertNotIn("new:Phi12.2:arc:reference_right:0", labels)
-            self.assertNotIn("circle", {
-                shape["shape_type"] for shape in labelme["shapes"]
-            })
+            fit_circle = next(
+                shape for shape in labelme["shapes"]
+                if shape["label"] == "old:Phi12.2:fit-circle"
+            )
+            self.assertEqual("circle", fit_circle["shape_type"])
+            self.assertTrue(fit_circle["flags"]["fittedModel"])
+            self.assertFalse(fit_circle["flags"]["isDetectedContour"])
             metadata = labelme["reviewMetadata"]
             self.assertEqual("old/1", metadata["old"]["algorithmVersion"])
             self.assertFalse(metadata["new"]["features"]["7"]["measurementValid"])
@@ -207,10 +212,11 @@ class Hole2BatchReviewTests(unittest.TestCase):
                 "unavailable",
                 labelme["reviewMetadata"]["new"]["features"]["Phi12.2"]["evidenceAuditStatus"],
             )
-            self.assertFalse(any(
-                shape["label"].startswith("new:Phi12.2")
-                for shape in labelme["shapes"]
-            ))
+            new_phi_labels = {
+                shape["label"] for shape in labelme["shapes"]
+                if shape["label"].startswith("new:Phi12.2")
+            }
+            self.assertEqual({"new:Phi12.2:fit-circle"}, new_phi_labels)
 
     def test_explicit_frame_can_render_unchanged_status(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -9,7 +9,7 @@
 
 孔2端面运行时只允许一套权威参考：人工标注JSON `018e3449...`与配对新BMP
 `faf357c2...`。这张新BMP同时是全局注册的图像参考；新JSON定义Phi12.2可见弧和尺寸7的
-物理边界语义。已退役资产`cc192...`/`da223...`不得作为图像、坐标系、特征库、测量先验或
+物理边界语义。已退役的早期资产不得作为图像、坐标系、特征库、测量先验或
 任何运行时输入。
 
 ## Authoritative reference
@@ -39,6 +39,8 @@
 - **FR-008**: 结果MUST输出`authoritativeReference`、参考到目标变换、`templateSelfCheck`和注册证据来源。
 - **FR-009**: 保持016的原始边缘证据/拟合几何/尺寸标注分层及独立证据审核状态。
 - **FR-010**: 不读holdout调参，不提交BMP、人工JSON、JSONL或运行输出。
+- **FR-011**: 审核预览与LabelMe MUST同时输出Phi实际局部弧证据和完整拟合圆；完整圆
+  MUST使用独立`fit-circle`标签、不同样式并声明`isDetectedContour=false`。
 
 ## Acceptance
 

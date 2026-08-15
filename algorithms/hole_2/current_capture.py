@@ -338,7 +338,7 @@ def _resize_gradient(gray: np.ndarray, downsample: int) -> np.ndarray:
     return gradient_magnitude(small)
 
 
-def _derive_image_registration_reference(
+def _derive_image_registration_model(
     reference: ReferenceModel,
     config: dict[str, Any],
 ) -> ReferenceModel:
@@ -3645,7 +3645,7 @@ def run_current_capture(
     measurement_reference = load_authoritative_reference(
         authoritative_reference_annotation_path, authoritative_reference_image_path
     )
-    registration_reference = _derive_image_registration_reference(
+    registration_model = _derive_image_registration_model(
         measurement_reference, config
     )
     target = load_gray(target_image_path)
@@ -3663,7 +3663,7 @@ def run_current_capture(
         # orthogonal false matches from visually repeated circular structures.
         direct_reference_config = {**config, "orientations_deg": [0]}
         registration = register_current_capture(
-            registration_reference, target, direct_reference_config
+            registration_model, target, direct_reference_config
         )
     registration_ms = (time.perf_counter() - registration_started) * 1000.0
     extraction_ms = 0.0

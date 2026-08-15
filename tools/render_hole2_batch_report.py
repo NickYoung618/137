@@ -336,6 +336,17 @@ def _draw_preview(
     line_width = max(2, int(round(5 * scale)))
     marker = max(3, int(round(7 * scale)))
 
+    def draw_dashed_circle(
+        center_x: float, center_y: float, radius: float,
+        color: tuple[int, int, int], width: int,
+    ) -> None:
+        box = (
+            (center_x - radius) * scale, (center_y - radius) * scale,
+            (center_x + radius) * scale, (center_y + radius) * scale,
+        )
+        for start in range(0, 360, 12):
+            draw.arc(box, start=start, end=start + 7, fill=color, width=width)
+
     d7 = _feature(record, "7")
     if _feature_valid(record, "7") and isinstance(d7.get("target"), dict):
         target = d7["target"]
@@ -361,7 +372,19 @@ def _draw_preview(
 
     phi = _feature(record, "Phi12.2")
     if _feature_valid(record, "Phi12.2") and isinstance(phi.get("target"), dict):
-        evidence = phi["target"].get("rawEdgeEvidence", {})
+        phi_target = phi["target"]
+        fitted = phi_target.get("fittedGeometry", {})
+        center = fitted.get("centerPx") if isinstance(fitted, dict) else None
+        radius = fitted.get("radiusPx") if isinstance(fitted, dict) else None
+        if (
+            isinstance(center, list) and len(center) == 2
+            and isinstance(radius, (int, float)) and float(radius) > 0.0
+        ):
+            draw_dashed_circle(
+                float(center[0]), float(center[1]), float(radius),
+                (70, 160, 255), max(1, line_width - 1),
+            )
+        evidence = phi_target.get("rawEdgeEvidence", {})
         segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
         for segment in segments:
             if not isinstance(segment, dict) or segment.get("side") != "reference_left":
@@ -432,7 +455,27 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
             })
     phi = _feature(record, "Phi12.2")
     if _feature_valid(record, "Phi12.2") and isinstance(phi.get("target"), dict):
-        evidence = phi["target"].get("rawEdgeEvidence", {})
+        phi_target = phi["target"]
+        fitted = phi_target.get("fittedGeometry", {})
+        center = fitted.get("centerPx") if isinstance(fitted, dict) else None
+        radius = fitted.get("radiusPx") if isinstance(fitted, dict) else None
+        if (
+            isinstance(center, list) and len(center) == 2
+            and isinstance(radius, (int, float)) and float(radius) > 0.0
+        ):
+            center_point = [float(center[0]), float(center[1])]
+            shapes.append({
+                "label": "prediction:Phi12.2:fit-circle",
+                "points": [center_point, [center_point[0] + float(radius), center_point[1]]],
+                "group_id": "prediction:Phi12.2",
+                "description": (
+                    "complete mathematical fitted circle for visual fit audit; "
+                    "not raw edge evidence and not a fully detected contour"
+                ),
+                "shape_type": "circle",
+                "flags": {"fittedModel": True, "isDetectedContour": False},
+            })
+        evidence = phi_target.get("rawEdgeEvidence", {})
         segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
         side_counts: dict[str, int] = {}
         for segment in segments:

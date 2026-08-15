@@ -30,6 +30,24 @@
 - `compileall`通过；12个JSON Schema通过Draft 2020-12结构检查，真实E2E结果通过result v2验证。
 - SpecKit prerequisites明确解析到017；spec/plan/tasks/research/contracts/quickstart与实现字段一致。
 
+## D7定向诊断
+
+- 9帧中D7有效`7/9`，相对历史直接路径的`4/9`是净改善；500/521/620控制帧无退化。
+- 501和520的Phi与注册均有效，但D7只有一侧边界具备稳定证据；失败侧同时触发轴对齐、残差或
+  跨扫描带一致性保护，并非单一评分口径导致的连带清空。
+- 在保持门限不变的前提下，没有足够证据把仅2条一致扫描带认定为真实边界。因此两帧继续明确
+  失败比输出不可审核的宽度更符合质量契约；本增量不声称D7达到`9/9`。
+
+## 拟合圆审核层
+
+- 预览中的绿色局部弧仍是实际边缘证据；新增蓝色虚线完整圆只表示拟合模型。
+- LabelMe同时包含局部弧`linestrip`和`prediction:Phi12.2:fit-circle`，后者明确标记
+  `fittedModel=true`、`isDetectedContour=false`。
+- 即使Phi数值有效但局部弧证据不可用，审核输出仍可显示拟合圆，同时保持
+  `evidenceAvailable=false`，不会伪造弧点。
+- 620外置小样经人工查看：虚线整圆贴合大圆外缘，局部弧、D7 A/B边界和垂距线分层清楚；
+  小样及其LabelMe/JSON输出均位于仓库外，未纳入Git。
+
 ## SpecKit analyze结论
 
 - FR-001/FR-007映射到run/batch/shell的单参考参数及四角色provenance测试。
@@ -37,4 +55,5 @@
 - FR-003/FR-004映射到新BMP像素支撑、ROI粗匹配、候选图像一致性诊断及原质量门。
 - FR-005/FR-006/FR-009映射到Phi/D7新参考检边、质量状态和016证据分层/可视化测试。
 - FR-008映射到self-check单位变换、`authoritativeReference`与result/provenance/acceptance Schema。
+- FR-011映射到batch report/change review的局部弧与完整拟合圆双层输出及其LabelMe负语义测试。
 - 未发现缺失需求、相互冲突门或目标真值运行时泄漏。

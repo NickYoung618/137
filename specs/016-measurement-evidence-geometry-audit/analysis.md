@@ -19,7 +19,8 @@
 - 数值测量几何与可视证据几何必须分离。
 - Phi只用权威人工参考中有LabelMe亚像素相位定义的单侧校准弧决定数值圆和交付证据；
   内部镜像侧不是第二个必须测量对象。
-- 默认交付不得出现完整Phi圆，也不画第二条镜像测量弧；只显示实际支持的单侧校准局部弧。
+- 交付同时显示实际支持的单侧校准局部弧与完整拟合圆；完整圆用不同颜色/虚线并标记为
+  `fit-circle`/`isDetectedContour=false`，只供直观审核是否贴合外缘，不是原始命中证据。
 - 尺寸7使用下方窄颈两条平行边的垂距；必须显示两条边界线，测量连接线是第三个辅助对象。
 - 尺寸7最终A/B边界取各自光学transition pair的中点轨迹；两次跃迁本身完整保留为raw evidence。
 - `measurementValid`不改写；新增独立`evidenceComplete/evidenceAuditStatus/evidenceAuditReason`。
@@ -33,7 +34,7 @@
 - Phi model/value：圆残差、直径误差，作为独立指标；
 - D7 evidence：两条预测边界分别到人工boundary A/B的距离、平行度和观测长度；
 - D7 value：两条边界沿确认尺寸方向的交点距离误差；
-- rendering：LabelMe不得包含`shape_type=circle`的Phi预测，必须包含局部`linestrip`；有效7必须
+- rendering：LabelMe必须同时包含原始局部`linestrip`和明确标识为数学模型的`fit-circle`；有效7必须
   含A、B两条边界及独立dimension辅助线。
 
 ## Root-cause separation after drawing confirmation

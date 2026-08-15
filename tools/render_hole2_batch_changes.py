@@ -253,6 +253,25 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
                     "shape_type": "line", "flags": {},
                 })
         else:
+            fitted = target.get("fittedGeometry", {})
+            center = fitted.get("centerPx") if isinstance(fitted, dict) else None
+            radius = fitted.get("radiusPx") if isinstance(fitted, dict) else None
+            if (
+                isinstance(center, list) and len(center) == 2
+                and isinstance(radius, (int, float)) and float(radius) > 0.0
+            ):
+                center_point = [float(center[0]), float(center[1])]
+                shapes.append({
+                    "label": f"{version}:Phi12.2:fit-circle",
+                    "points": [
+                        center_point,
+                        [center_point[0] + float(radius), center_point[1]],
+                    ],
+                    "group_id": f"{version}:Phi12.2",
+                    "description": description,
+                    "shape_type": "circle",
+                    "flags": {"fittedModel": True, "isDetectedContour": False},
+                })
             evidence = target.get("rawEdgeEvidence", {})
             segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
             side_counts: dict[str, int] = {}
@@ -352,6 +371,18 @@ def _draw_prediction(draw: ImageDraw.ImageDraw, record: dict[str, Any], version:
                 draw.ellipse(
                     (x - radius_marker, y - radius_marker, x + radius_marker, y + radius_marker),
                     fill=color,
+                )
+        elif shape["shape_type"] == "circle" and len(points) == 2:
+            center, edge = points
+            radius = math.dist(center, edge)
+            box = (
+                center[0] - radius, center[1] - radius,
+                center[0] + radius, center[1] + radius,
+            )
+            for start in range(0, 360, 12):
+                draw.arc(
+                    box, start=start, end=start + 7,
+                    fill=color, width=max(2, line_width - 1),
                 )
 
 

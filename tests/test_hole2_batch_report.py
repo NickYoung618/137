@@ -182,13 +182,16 @@ class Hole2BatchReportTests(unittest.TestCase):
                 "prediction:7:boundary:A", "prediction:7:boundary:B",
                 "prediction:7:dimension",
                 "prediction:Phi12.2:arc:reference_left:0",
+                "prediction:Phi12.2:fit-circle",
             }, set(shapes))
             self.assertEqual(
                 [[40.0, 50.0], [140.0, 50.0]],
                 shapes["prediction:7:dimension"]["points"],
             )
             self.assertEqual("linestrip", shapes["prediction:Phi12.2:arc:reference_left:0"]["shape_type"])
-            self.assertNotIn("circle", {shape["shape_type"] for shape in shapes.values()})
+            self.assertEqual("circle", shapes["prediction:Phi12.2:fit-circle"]["shape_type"])
+            self.assertTrue(shapes["prediction:Phi12.2:fit-circle"]["flags"]["fittedModel"])
+            self.assertFalse(shapes["prediction:Phi12.2:fit-circle"]["flags"]["isDetectedContour"])
             self.assertFalse(labelme["predictionMetadata"]["isGroundTruth"])
             self.assertFalse(labelme["predictionMetadata"]["isCompletePartContour"])
             self.assertEqual(
@@ -289,10 +292,11 @@ class Hole2BatchReportTests(unittest.TestCase):
             self.assertEqual("False", row["phiEvidenceComplete"])
             self.assertEqual("unavailable", row["phiEvidenceAuditStatus"])
             labelme = json.loads((output / row["predictionLabelmeJson"]).read_text())
-            self.assertFalse(any(
-                shape["label"].startswith("prediction:Phi12.2")
-                for shape in labelme["shapes"]
-            ))
+            phi_labels = {
+                shape["label"] for shape in labelme["shapes"]
+                if shape["label"].startswith("prediction:Phi12.2")
+            }
+            self.assertEqual({"prediction:Phi12.2:fit-circle"}, phi_labels)
             self.assertEqual(
                 "unavailable",
                 labelme["predictionMetadata"]["features"]["Phi12.2"]["evidenceAuditStatus"],

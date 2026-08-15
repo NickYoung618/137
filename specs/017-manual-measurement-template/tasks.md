@@ -17,3 +17,6 @@
 - [x] T015 服务器9帧外置诊断集运行与逐帧状态报告
 - [x] T016 全套unittest、compileall、Schema、SpecKit analyze、diff/大文件审计
 - [x] T017 更新analysis结论、commit并push `origin/main`
+- [x] T018 全局清除退役指纹、旧注册角色标识和双参考入口残留
+- [x] T019 新增Phi完整拟合圆审核图层，与局部弧原始证据明确分层
+- [x] T020 重跑self-check、9帧、147项测试和全部审计后提交推送

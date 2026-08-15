@@ -21,10 +21,12 @@ uv run python tools/render_hole2_batch_report.py \
   --max-preview-width 1536
 ```
 
-预览中绿色只代表本张图实际接受的Phi局部弧；不会出现完整圆。橙色两线是尺寸7的A/B物理
+预览中绿色代表本张图实际接受的Phi局部弧；蓝色虚线完整圆是数学拟合模型，用于直观核对
+拟合是否贴合外缘，不表示整圈均被检测。橙色两线是尺寸7的A/B物理
 轮廓估计，青色线是独立垂距标注。LabelMe预测只包含：
 
 - `prediction:Phi12.2:arc:reference_left:N` (`linestrip`；历史字段名，表示唯一校准弧)
+- `prediction:Phi12.2:fit-circle` (`circle`；数学拟合模型，不是原始边缘证据)
 - `prediction:7:boundary:A`、`:B`
 - `prediction:7:dimension`
 
