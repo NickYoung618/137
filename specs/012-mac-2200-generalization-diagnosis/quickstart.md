@@ -59,3 +59,18 @@ uv run python tools/render_hole2_batch_changes.py \
 ```
 
 若两个JSONL的group不同，工具会拒绝配对；不要通过改组名把normal和defective混在一起。
+
+## 5. 已完成的最终验收记录
+
+提交`2523ada6757e571987f4b40cc9b185acc387f71b`已在Mac完成T031：
+
+- normal 2000：registration `1985`、尺寸7 `1901`、Phi `1955`、technicalComplete `1901`、
+  execution errors `0`；三项门全部通过。
+- 相对`3ee4b4f`状态变化129张，全部`False→True`，无`True→False`。
+- normal同定义geometry离群36张，未增加；13张有独立风险证据并硬拒绝。
+- defective 200：registration `159`、尺寸7 `108`、Phi `109`，独立观察且状态变化0。
+- 最新唯一真值单图：尺寸7误差`0.717320388069254 px`，Phi直径误差
+  `0.10530510518583469 px`，PASS。
+- 审核工具匹配2200、变化129、渲染129、old/new unmatched均为0。
+
+Mac运行目录和审核生成物仅作外置事实证据，不应复制进仓库或提交Git。

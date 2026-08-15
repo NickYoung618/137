@@ -2,7 +2,7 @@
 
 **Input**: `spec.md`、`research.md`、`plan.md`、`analysis.md`
 
-**Current scope**: 定向实现与服务器验证已完成；Mac 2200严格分组验收待执行。
+**Current scope**: 定向实现、服务器验证与Mac 2200严格分组验收均已完成。
 
 ## Phase 1 - Evidence intake and cohort control
 
@@ -46,9 +46,9 @@
 - [x] T026 实现A1 score contract分离，保持legacy 0.35不变
 - [x] T027 实现B1 geometry多证据/诊断解耦，不直接放宽0.08
 - [x] T028 评估C1：A1/B1后无服务器证据要求拆分Phi几何hint，故不实现额外运行时路径
-- [x] T029 外置9帧shadow复跑并确认500/521/620控制帧状态和数值不变；105/36完整分层待Mac
+- [x] T029 外置9帧shadow复跑并确认500/521/620控制帧状态和数值不变；批量分层由T031完成
 - [x] T030 运行unittest、compileall、Schema、SpecKit analyze和Git大文件门
-- [ ] T031 Mac严格分组复跑normal 2000与defective 200，并核验最终接受门
+- [x] T031 Mac严格分组复跑normal 2000与defective 200，并核验最终接受门
 
 ## Phase 6 - External old/new visual review
 
@@ -62,5 +62,5 @@
 ## Dependencies and stop condition
 
 - T018依赖T001–T017；T019依赖T018；T020依赖T019。
-- T021–T030及T032–T037已在明确实施授权后完成；T031依赖Mac外置2200张资产。
-- 在T031完成前，只能称为服务器验证通过的候选，不得宣称normal 2000已达标。
+- T001–T037全部完成。T031使用Mac外置资产，生成物未进入Git。
+- 最终normal门全部通过，defective保持独立观察；012可关闭。

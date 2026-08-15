@@ -1,12 +1,12 @@
 # SpecKit Analyze: Mac 2200 泛化退化诊断
 
 **Analyzed**: 2026-08-15
-**Status**: Directed implementation analyzed; Mac 2200 acceptance pending
+**Status**: Complete; Mac 2200 acceptance passed
 
 ## 1. Cross-artifact consistency
 
-- `spec.md` 的21项FR映射到 `tasks.md` T001–T037；诊断、A1/B1实现和离线审核工具均已完成，
-  只有依赖Mac 2200外置资产的T031未完成。
+- `spec.md` 的21项FR映射到 `tasks.md` T001–T037；诊断、A1/B1实现、离线审核工具和Mac T031
+  均已完成。
 - `research.md` 分别回答A相位分数语义、B geometry硬拒绝、C尺寸7上游耦合、D 105张分布、
   E修复候选/测试/风险/Mac门。
 - `plan.md` 保留纯诊断Phase 0的历史边界，并记录明确授权后的测试先行实现结果和Mac停止门。
@@ -85,7 +85,7 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 - geometry离群但无独立错边证据；
 - geometry离群且存在独立错边证据；
 - D7上游连带与自身检测失败；
-- 最新唯一真值单图、9帧控制和审核工具；normal 2000、defective 200及比例离群仍待Mac T031。
+- 最新唯一真值单图、9帧控制、审核工具以及Mac normal 2000/defective 200严格分组结果。
 
 这些测试可以在不向运行时提供目标标注的前提下执行；只有离线单图验收读取最新真值。
 
@@ -109,15 +109,25 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 - C1未实施，避免把未验证的Phi几何hint引入D7；D7自身质量门和v6回退规则没有放宽。
 - 单元负例覆盖错误极性、高残差、少点和fallback不绕过legacy门；Schema要求geometry决策、
   离群与佐证字段一致。
-- 最新唯一真值单图和9帧控制通过，但105/36分层和normal 2000检测率只能由Mac外置资产确认。
+- 最新唯一真值单图和9帧控制通过；Mac外置资产已确认normal 2000检测率与36张同定义geometry
+  离群统计。
 - 离线审核工具不接受目标标注参数，按group+文件名配对old/new，防止跨组混合；默认只渲染
   状态变化帧，显式帧模式可审核控制帧。PNG与LabelMe JSON均强制输出到工作树外。
 - 外置9帧小样匹配9帧、识别4帧状态变化，并成功为指定控制帧620生成一张3072×2048叠加图
   和包含old/new尺寸7、Phi四个预测shape的LabelMe JSON。
 
-## 9. Analyze verdict
+## 9. Mac T031 reconciliation
 
-012的诊断、测试、实现和契约一致，没有发现通过降低全局门限、读取目标真值或修改输出值来
-追求检测率的行为。服务器门禁支持将本候选推送给Mac执行T031，但不支持提前声称normal 2000
-达标。最终接受仍要求registration `>=1962`、7 `>=1863`、Phi `>=1922`、比例离群不增加且
-defective 200单列报告。
+- normal `2000`与defective `200`总数严格分开；全量退出码0、execution errors 0。
+- normal最终registration/7/Phi为`1985/1901/1955`，分别超过`1962/1863/1922`门。
+- 相对`3ee4b4f`的129张状态变化全部为`False→True`，没有`True→False`；registration不变。
+- normal同定义geometry离群为36，与上一轮持平未增加；仅13张有独立风险证据而硬拒绝，符合B1。
+- defective为`159/108/109`且状态变化0，只作独立观察，未参与normal接受。
+- 审核工具匹配/变化/渲染为`2200/129/129`，unmatched old/new均为0；所有生成物保持Git外置。
+- 单图误差为尺寸7 `0.717320388069254 px`、Phi直径`0.10530510518583469 px`，精度门保持。
+
+## 10. Analyze verdict
+
+012的诊断、测试、实现、契约和Mac证据一致，没有发现通过降低全局门限、读取目标真值、修改
+输出值或混入defective来追求检测率的行为。normal三项门、无`True→False`回归、比例离群不增加、
+单图精度和全量可靠性均通过；defective已单列。T001–T037完成，012最终验收通过。

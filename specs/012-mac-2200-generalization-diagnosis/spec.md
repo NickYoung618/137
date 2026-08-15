@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-15
 
-**Status**: Directed implementation complete; pending Mac 2200 acceptance
+**Status**: Complete; Mac 2200 acceptance passed
 
 **Input**: Mac 对 `79aa6a4` 与 `3ee4b4f` 的外置 2200 张逐图差异和批量质量汇总。
 
@@ -28,6 +28,25 @@
 | `candidate-3ee4b4f-quality-summary.json` | `7cd07b436f45959650f294b9b3cea9d9bb84548a9c81a055c6e4c7444a62e4e5` |
 
 三份证据均记录运行时未读取目标真值，两个版本均无执行错误。
+
+## Final Mac acceptance evidence
+
+验收提交为`2523ada6757e571987f4b40cc9b185acc387f71b`。Mac外置全量输出目录为
+`/Users/daizekai/Desktop/hole2-full-regression-2523ada`，只作事实引用，不复制或提交其图片、
+JSONL和运行产物。
+
+- 最新唯一真值单图PASS：尺寸7误差`0.717320388069254 px`，Phi直径误差
+  `0.10530510518583469 px`。
+- normal严格2000张：execution errors `0`、registration `1985`、尺寸7 `1901`、Phi `1955`、
+  technicalComplete `1901`；三项分别通过`1962/1863/1922`门。
+- 相对`3ee4b4f`：registration不变，尺寸7`+129`、Phi`+129`；恰好129张状态变化且全部为
+  `False→True`，`True→False=0`。
+- 相对旧基线`79aa6a4`：registration`+23`、尺寸7`+38`、Phi`+33`。
+- normal同定义geometry离群诊断仍为36张，未增加；其中13张因存在独立风险证据而硬拒绝。
+- defective严格独立200张：registration `159`、尺寸7 `108`、Phi `109`；相对`3ee4b4f`
+  状态变化为0，不计入normal验收。
+- 全量退出码为0。审核工具匹配2200、状态变化129、渲染129，old/new unmatched均为0；审核
+  生成物仅位于Mac外置目录`/Users/daizekai/Desktop/hole2-review-2523ada-all-changed`。
 
 ## User Scenarios & Testing
 
@@ -151,7 +170,8 @@ normal geometry rejected 的分布和30张旧有效转失效。
   且按同一统计定义的比例离群不增加。
 - **FR-014**: MUST NOT 让运行时读取目标真值，或硬编码文件名/hash、310、541.13、12.2及固定补偿。
 - **FR-015**: MUST 保持legacy `0.35`、geometry `0.08`、注册主门、D7自身门和错误极性拒绝。
-- **FR-016**: MUST 在服务器单图、9帧、全套测试和审核工具小样通过后停止，等待Mac T031。
+- **FR-016**: MUST 在服务器单图、9帧、全套测试和审核工具小样通过后，由Mac完成T031严格
+  分组验收，且只有normal达到门、比例离群不增加时才完成本规格。
 - **FR-017**: MUST 提供不读取目标真值的通用old/new batch JSONL离线审核工具。
 - **FR-018**: MUST 默认只渲染状态变化帧，并支持显式`--frame`渲染指定帧；old/new必须按
   同一group与文件名配对，防止normal和defective/diagnostic混组。
@@ -179,6 +199,9 @@ normal geometry rejected 的分布和30张旧有效转失效。
 - **SC-006**: A1/B1实现通过单图、9帧、全套unittest、Schema和静态门禁，配置值不变。
 - **SC-007**: 离线审核工具契约测试覆盖状态变化、指定帧、外置输出，真实9帧小样成功输出
   PNG与LabelMe JSON，且Git不跟踪任何生成资产。
+- **SC-008**: Mac normal 2000达到registration `1985>=1962`、尺寸7 `1901>=1863`、Phi
+  `1955>=1922`，同定义geometry离群保持36，且相对上一候选没有`True→False`回归。
+- **SC-009**: defective 200保持独立报告；全量退出码0，审核工具2200帧无old/new漏配。
 
 ## Assumptions
 
