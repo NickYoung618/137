@@ -1,5 +1,6 @@
 import csv
 import json
+import runpy
 import subprocess
 import tempfile
 import unittest
@@ -100,6 +101,30 @@ def _record(image, group, *, registration=True, d7=True, phi=True):
 
 
 class Hole2BatchReportTests(unittest.TestCase):
+    def test_fit_circle_preview_helper_draws_one_continuous_ellipse(self):
+        namespace = runpy.run_path(str(TOOL))
+
+        class DrawSpy:
+            def __init__(self):
+                self.ellipses = []
+                self.arcs = []
+
+            def ellipse(self, box, **kwargs):
+                self.ellipses.append((box, kwargs))
+
+            def arc(self, box, **kwargs):
+                self.arcs.append((box, kwargs))
+
+        draw = DrawSpy()
+        namespace["_draw_solid_fit_circle"](
+            draw, (10.0, 20.0, 70.0, 80.0), (70, 160, 255), 4
+        )
+        self.assertEqual(1, len(draw.ellipses))
+        self.assertEqual([], draw.arcs)
+        self.assertEqual((10.0, 20.0, 70.0, 80.0), draw.ellipses[0][0])
+        self.assertEqual((70, 160, 255), draw.ellipses[0][1]["outline"])
+        self.assertEqual(4, draw.ellipses[0][1]["width"])
+
     def _fixture(self, root):
         image_root = root / "images"
         records = []
@@ -190,6 +215,10 @@ class Hole2BatchReportTests(unittest.TestCase):
             )
             self.assertEqual("linestrip", shapes["prediction:Phi12.2:arc:reference_left:0"]["shape_type"])
             self.assertEqual("circle", shapes["prediction:Phi12.2:fit-circle"]["shape_type"])
+            self.assertEqual(
+                [[220.0, 100.0], [255.0, 100.0]],
+                shapes["prediction:Phi12.2:fit-circle"]["points"],
+            )
             self.assertTrue(shapes["prediction:Phi12.2:fit-circle"]["flags"]["fittedModel"])
             self.assertFalse(shapes["prediction:Phi12.2:fit-circle"]["flags"]["isDetectedContour"])
             self.assertFalse(labelme["predictionMetadata"]["isGroundTruth"])
@@ -198,6 +227,15 @@ class Hole2BatchReportTests(unittest.TestCase):
                 "complete",
                 labelme["predictionMetadata"]["features"]["Phi12.2"]["evidenceAuditStatus"],
             )
+
+            d7_failed = next(row for row in rows if row["imageName"].endswith("_2.bmp"))
+            failed_labelme = json.loads(
+                (output / d7_failed["predictionLabelmeJson"]).read_text()
+            )
+            self.assertFalse(any(
+                shape["label"].startswith("prediction:7:")
+                for shape in failed_labelme["shapes"]
+            ))
 
             failed = next(row for row in rows if row["imageName"].endswith("_5.bmp"))
             with Image.open(output / failed["previewJpeg"]).convert("RGB") as preview:

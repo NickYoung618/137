@@ -1,4 +1,5 @@
 import json
+import runpy
 import subprocess
 import tempfile
 import unittest
@@ -98,6 +99,30 @@ def _record(image, *, version, d7=True, phi=True, d7_failure=None, phi_failure=N
 
 
 class Hole2BatchReviewTests(unittest.TestCase):
+    def test_fit_circle_review_helper_draws_one_continuous_ellipse(self):
+        namespace = runpy.run_path(str(TOOL))
+
+        class DrawSpy:
+            def __init__(self):
+                self.ellipses = []
+                self.arcs = []
+
+            def ellipse(self, box, **kwargs):
+                self.ellipses.append((box, kwargs))
+
+            def arc(self, box, **kwargs):
+                self.arcs.append((box, kwargs))
+
+        draw = DrawSpy()
+        namespace["_draw_solid_fit_circle"](
+            draw, (90.0, 50.0, 150.0, 110.0), (255, 0, 0), 3
+        )
+        self.assertEqual(1, len(draw.ellipses))
+        self.assertEqual([], draw.arcs)
+        self.assertEqual((90.0, 50.0, 150.0, 110.0), draw.ellipses[0][0])
+        self.assertEqual((255, 0, 0), draw.ellipses[0][1]["outline"])
+        self.assertEqual(3, draw.ellipses[0][1]["width"])
+
     def _fixture(self, root):
         image_root = root / "images"
         image_root.mkdir()
@@ -173,6 +198,7 @@ class Hole2BatchReviewTests(unittest.TestCase):
                 if shape["label"] == "old:Phi12.2:fit-circle"
             )
             self.assertEqual("circle", fit_circle["shape_type"])
+            self.assertEqual([[120.0, 80.0], [150.0, 80.0]], fit_circle["points"])
             self.assertTrue(fit_circle["flags"]["fittedModel"])
             self.assertFalse(fit_circle["flags"]["isDetectedContour"])
             metadata = labelme["reviewMetadata"]

@@ -358,6 +358,16 @@ def _compact_quality(metadata: dict[str, Any], name: str) -> str:
     return "; ".join(parts) if parts else "quality=n/a"
 
 
+def _draw_solid_fit_circle(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[float, float, float, float],
+    color: tuple[int, int, int],
+    width: int,
+) -> None:
+    """Draw the fitted circle continuously; it remains a model, not evidence."""
+    draw.ellipse(box, outline=color, width=width)
+
+
 def _draw_prediction(draw: ImageDraw.ImageDraw, record: dict[str, Any], version: str, width: int) -> None:
     color = COLORS[version]
     line_width = max(3, width // 900)
@@ -379,11 +389,9 @@ def _draw_prediction(draw: ImageDraw.ImageDraw, record: dict[str, Any], version:
                 center[0] - radius, center[1] - radius,
                 center[0] + radius, center[1] + radius,
             )
-            for start in range(0, 360, 12):
-                draw.arc(
-                    box, start=start, end=start + 7,
-                    fill=color, width=max(2, line_width - 1),
-                )
+            _draw_solid_fit_circle(
+                draw, box, color, max(2, line_width - 1)
+            )
 
 
 def _render_overlay(image_path: Path, old: dict[str, Any], new: dict[str, Any], output: Path) -> None:

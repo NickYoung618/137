@@ -40,12 +40,12 @@
 
 ## 拟合圆审核层
 
-- 预览中的绿色局部弧仍是实际边缘证据；新增蓝色虚线完整圆只表示拟合模型。
+- 预览中的绿色局部弧仍是实际边缘证据；完整圆只表示拟合模型，018起改为蓝色实线审核样式。
 - LabelMe同时包含局部弧`linestrip`和`prediction:Phi12.2:fit-circle`，后者明确标记
   `fittedModel=true`、`isDetectedContour=false`。
 - 即使Phi数值有效但局部弧证据不可用，审核输出仍可显示拟合圆，同时保持
   `evidenceAvailable=false`，不会伪造弧点。
-- 620外置小样经人工查看：虚线整圆贴合大圆外缘，局部弧、D7 A/B边界和垂距线分层清楚；
+- 620外置小样经人工查看：拟合整圆、局部弧、D7 A/B边界和垂距线分层清楚；
   小样及其LabelMe/JSON输出均位于仓库外，未纳入Git。
 
 ## SpecKit analyze结论

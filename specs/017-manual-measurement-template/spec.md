@@ -40,7 +40,7 @@
 - **FR-009**: 保持016的原始边缘证据/拟合几何/尺寸标注分层及独立证据审核状态。
 - **FR-010**: 不读holdout调参，不提交BMP、人工JSON、JSONL或运行输出。
 - **FR-011**: 审核预览与LabelMe MUST同时输出Phi实际局部弧证据和完整拟合圆；完整圆
-  MUST使用独立`fit-circle`标签、不同样式并声明`isDetectedContour=false`。
+  MUST使用独立`fit-circle`标签、不同样式并声明`isDetectedContour=false`；具体线型由018更新为实线。
 
 ## Acceptance
 

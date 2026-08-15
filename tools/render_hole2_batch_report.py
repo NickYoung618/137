@@ -318,6 +318,16 @@ def _status_lines(record: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _draw_solid_fit_circle(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[float, float, float, float],
+    color: tuple[int, int, int],
+    width: int,
+) -> None:
+    """Draw the complete fitted model as one continuous audit circle."""
+    draw.ellipse(box, outline=color, width=width)
+
+
 def _draw_preview(
     image_path: Path,
     record: dict[str, Any],
@@ -335,17 +345,6 @@ def _draw_preview(
     draw = ImageDraw.Draw(image)
     line_width = max(2, int(round(5 * scale)))
     marker = max(3, int(round(7 * scale)))
-
-    def draw_dashed_circle(
-        center_x: float, center_y: float, radius: float,
-        color: tuple[int, int, int], width: int,
-    ) -> None:
-        box = (
-            (center_x - radius) * scale, (center_y - radius) * scale,
-            (center_x + radius) * scale, (center_y + radius) * scale,
-        )
-        for start in range(0, 360, 12):
-            draw.arc(box, start=start, end=start + 7, fill=color, width=width)
 
     d7 = _feature(record, "7")
     if _feature_valid(record, "7") and isinstance(d7.get("target"), dict):
@@ -380,9 +379,16 @@ def _draw_preview(
             isinstance(center, list) and len(center) == 2
             and isinstance(radius, (int, float)) and float(radius) > 0.0
         ):
-            draw_dashed_circle(
-                float(center[0]), float(center[1]), float(radius),
-                (70, 160, 255), max(1, line_width - 1),
+            _draw_solid_fit_circle(
+                draw,
+                (
+                    (float(center[0]) - float(radius)) * scale,
+                    (float(center[1]) - float(radius)) * scale,
+                    (float(center[0]) + float(radius)) * scale,
+                    (float(center[1]) + float(radius)) * scale,
+                ),
+                (70, 160, 255),
+                max(1, line_width - 1),
             )
         evidence = phi_target.get("rawEdgeEvidence", {})
         segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
