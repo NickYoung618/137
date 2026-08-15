@@ -17,6 +17,7 @@ from algorithms.slot_pose.contract import (
     ALGORITHM_NAME,
     ALGORITHM_VERSION,
     SCHEMA_VERSION,
+    SCHEMA_VERSION_V3,
     build_result,
     config_sha256,
     load_config,
@@ -39,8 +40,10 @@ def parse_args() -> argparse.Namespace:
 def _manifest_input_failure(item: dict, image_path: Path, config_path: Path, config: dict, task_id: str, exc: Exception) -> dict:
     assets = config["legacy_asset"]
     pose = config["pose"]
+    pose_config = (config.get("detector") or {}).get("single_groove_pose") or {}
+    is_v3 = pose_config.get("schema_version") == "single-real-groove-pose-config/3"
     payload = {
-        "schemaVersion": SCHEMA_VERSION,
+        "schemaVersion": SCHEMA_VERSION_V3 if is_v3 else SCHEMA_VERSION,
         "taskId": task_id,
         "createdAtUtc": datetime.now(timezone.utc).isoformat(),
         "image": {
@@ -75,6 +78,30 @@ def _manifest_input_failure(item: dict, image_path: Path, config_path: Path, con
             "failClosed": True,
         },
     }
+    if is_v3:
+        from algorithms.slot_pose.single_groove_pose import build_closed_loop_guidance
+
+        guidance = build_closed_loop_guidance(
+            pose_config["target"], None, geometry_valid=False,
+            plc_mapping_confirmed=bool(pose.get("production_plc_mapping_confirmed", False)),
+        )
+        payload["result"].update({
+            "referenceFrame": "DETECTED_PHYSICAL_OUTER_CIRCLE_POSITIVE_Y_DOWN",
+            "targetFrame": "IMAGE_FRAME_TARGET_85_DEG", "positiveDirection": "cw",
+            "detectionStatus": guidance["detectionStatus"],
+            "guidanceStatus": guidance["guidanceStatus"],
+            "currentAngleDeg": None,
+            "targetAngleDeg": guidance["targetAngleDeg"],
+            "toleranceDeg": guidance["toleranceDeg"],
+            "correctionRawDeg": None, "correctionDeg": None,
+            "imageFrameCorrectionDeg": None, "rotationDirection": None,
+            "withinTolerance": None,
+            "mechanicalCorrectionDeg": guidance["plcExecution"]["mechanicalCorrectionDeg"],
+            "plcCommand": None,
+            "plcExecutionStatus": guidance["plcExecution"]["status"],
+            "plcExecutionAuthoritative": guidance["plcExecution"]["authoritative"],
+            "plcBlockers": guidance["plcExecution"]["blockers"],
+        })
     validate_result(payload)
     return payload
 

@@ -121,6 +121,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
     groove_refinement = diagnostics.get("grooveRefinement")
     datum_measurement = (single_groove_pose or {}).get("datumMeasurement") or {}
     target_assessment = (single_groove_pose or {}).get("targetAssessment") or {}
+    guidance = (single_groove_pose or {}).get("guidance") or {}
     position = datum_measurement.get("position") or {}
     y_down_target = {
         "measuredDeg": datum_measurement.get("measuredFromPositiveYClockwiseDeg"),
@@ -132,6 +133,21 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "imageFrameCorrectionDeg": target_assessment.get("imageFrameCorrectionDeg"),
         "mechanicalCorrectionDeg": target_assessment.get("mechanicalCorrectionDeg"),
         "plcBlocked": "PLC_MAPPING_UNCONFIRMED" in (target_assessment.get("blockers") or []),
+    }
+    guidance_record = {
+        "detectionStatus": guidance.get("detectionStatus"),
+        "guidanceStatus": guidance.get("guidanceStatus"),
+        "currentAngleDeg": guidance.get("currentAngleDeg"),
+        "targetAngleDeg": guidance.get("targetAngleDeg"),
+        "toleranceDeg": guidance.get("toleranceDeg"),
+        "correctionRawDeg": guidance.get("correctionRawDeg"),
+        "correctionDeg": guidance.get("correctionDeg"),
+        "imageFrameCorrectionDeg": guidance.get("imageFrameCorrectionDeg"),
+        "rotationDirection": guidance.get("rotationDirection"),
+        "withinTolerance": guidance.get("withinTolerance"),
+        "plcExecutionStatus": (guidance.get("plcExecution") or {}).get("status"),
+        "mechanicalCorrectionDeg": (guidance.get("plcExecution") or {}).get("mechanicalCorrectionDeg"),
+        "plcCommand": (guidance.get("plcExecution") or {}).get("plcCommand"),
     }
     return {
         "imageId": manifest_item["imageId"],
@@ -155,6 +171,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "grooveRefinement": groove_refinement,
         "singleGroovePose": single_groove_pose,
         "yDownTargetDiagnostic": y_down_target,
+        "guidance": guidance_record,
         "roleSuggestion": {
             "status": role_status,
             "selectedRoleCandidateIds": selected,
@@ -173,7 +190,11 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "angularProfile": diagnostics.get("angularProfile"),
         "polarRotationDeg": (diagnostics.get("slot") or {}).get("polarRotationDeg"),
         "elapsedMs": diagnostics.get("elapsedMs"),
-        "failClosed": not bool(result.get("result", {}).get("valid", False)),
+        "failClosed": (
+            guidance_record["detectionStatus"] == "DETECTION_FAILED"
+            if guidance_record["detectionStatus"] is not None
+            else not bool(result.get("result", {}).get("valid", False))
+        ),
     }
 
 
@@ -302,7 +323,8 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
                 point_radius = max(6, width * 2)
                 draw.ellipse((x - point_radius, y - point_radius, x + point_radius, y + point_radius), outline="#ffffff", width=width)
         target_diagnostic = record.get("yDownTargetDiagnostic") or {}
-        if target_diagnostic.get("measuredDeg") is not None:
+        guidance = record.get("guidance") or {}
+        if target_diagnostic.get("measuredDeg") is not None or guidance.get("currentAngleDeg") is not None:
             datum_endpoint = _point(center, radius, 90.0)
             target_endpoint = _point(center, radius, 175.0)
             draw.line((center, datum_endpoint), fill="#ffe14f", width=width)
@@ -316,10 +338,21 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
     image_azimuth = single_measurement.get("azimuthDeg")
     single_text = "" if image_azimuth is None else f" image-up-cw={float(image_azimuth):.2f}deg"
     target_diagnostic = record.get("yDownTargetDiagnostic") or {}
-    measured_y = target_diagnostic.get("measuredDeg")
-    target_text = "" if measured_y is None else (
-        f" y-down={float(measured_y):.2f}deg target={target_diagnostic.get('toleranceStatus')}"
-    )
+    guidance = record.get("guidance") or {}
+    measured_y = guidance.get("currentAngleDeg", target_diagnostic.get("measuredDeg"))
+    if guidance.get("detectionStatus") is not None:
+        correction = guidance.get("imageFrameCorrectionDeg")
+        correction_text = "N/A" if correction is None else f"{float(correction):+.3f}deg"
+        target_text = (
+            f" detection={guidance.get('detectionStatus')} guidance={guidance.get('guidanceStatus')}"
+            f" current={'N/A' if measured_y is None else f'{float(measured_y):.3f}deg'}"
+            f" target={guidance.get('targetAngleDeg')}+/-{guidance.get('toleranceDeg')}deg"
+            f" correction={correction_text} direction={guidance.get('rotationDirection')}"
+        )
+    else:
+        target_text = "" if measured_y is None else (
+            f" y-down={float(measured_y):.2f}deg target={target_diagnostic.get('toleranceStatus')}"
+        )
     draw.text(
         (18, 12),
         f"{record['imageId']}  raw={count} grooves={groove_count}{single_text}{target_text}  error={error}",
@@ -397,7 +430,22 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         for record in records
     )
     plc_blocked_count = sum(
-        (record.get("yDownTargetDiagnostic") or {}).get("plcBlocked") is True for record in records
+        (
+            (record.get("guidance") or {}).get("plcExecutionStatus") == "BLOCKED_MAPPING_UNCONFIRMED"
+            or (record.get("yDownTargetDiagnostic") or {}).get("plcBlocked") is True
+        ) for record in records
+    )
+    detection_statuses = Counter(
+        (record.get("guidance") or {}).get("detectionStatus") or "not_available"
+        for record in records
+    )
+    guidance_statuses = Counter(
+        (record.get("guidance") or {}).get("guidanceStatus") or "not_available"
+        for record in records
+    )
+    rotation_directions = Counter(
+        (record.get("guidance") or {}).get("rotationDirection") or "not_available"
+        for record in records
     )
     physical_circle_accepted_count = sum(
         (record.get("physicalOuterCircle") or {}).get("status") == "accepted" for record in records
@@ -406,7 +454,9 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         (record.get("circleLocalization") or {}).get("status") or "not_available" for record in records
     )
     summary = {
-        "schemaVersion": "slot-pose-review/1",
+        "schemaVersion": "slot-pose-review/2" if any(
+            key != "not_available" for key in detection_statuses
+        ) else "slot-pose-review/1",
         "datasetId": dataset_id,
         "imageCount": len(records),
         "candidateBearingConvention": "image +x is 0 deg; clockwise is positive because image y increases downward",
@@ -418,6 +468,9 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         "grooveRefinementStatusCounts": dict(sorted(refinement_statuses.items())),
         "targetToleranceStatusCounts": dict(sorted(target_statuses.items())),
         "plcGuidanceBlockedCount": plc_blocked_count,
+        "detectionStatusCounts": dict(sorted(detection_statuses.items())),
+        "guidanceStatusCounts": dict(sorted(guidance_statuses.items())),
+        "rotationDirectionCounts": dict(sorted(rotation_directions.items())),
         "physicalOuterCircleAcceptedCount": physical_circle_accepted_count,
         "circleLocalizationStatusCounts": dict(sorted(localization_statuses.items())),
         "records": records,
@@ -455,6 +508,32 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                     "threshold_version": assessment.get("thresholdVersion"),
                     "suggested_role": role_by_candidate.get(candidate["candidateId"]), "authoritative": False,
                 })
+    with (output_dir / "guidance.csv").open("w", newline="", encoding="utf-8") as handle:
+        fields = [
+            "image_id", "relative_path", "detection_status", "guidance_status",
+            "current_angle_deg", "target_angle_deg", "tolerance_deg", "correction_raw_deg",
+            "correction_deg", "image_frame_correction_deg", "rotation_direction",
+            "within_tolerance", "plc_execution_status", "mechanical_correction_deg",
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for record in records:
+            guidance = record.get("guidance") or {}
+            writer.writerow({
+                "image_id": record["imageId"], "relative_path": record["relativePath"],
+                "detection_status": guidance.get("detectionStatus"),
+                "guidance_status": guidance.get("guidanceStatus"),
+                "current_angle_deg": guidance.get("currentAngleDeg"),
+                "target_angle_deg": guidance.get("targetAngleDeg"),
+                "tolerance_deg": guidance.get("toleranceDeg"),
+                "correction_raw_deg": guidance.get("correctionRawDeg"),
+                "correction_deg": guidance.get("correctionDeg"),
+                "image_frame_correction_deg": guidance.get("imageFrameCorrectionDeg"),
+                "rotation_direction": guidance.get("rotationDirection"),
+                "within_tolerance": guidance.get("withinTolerance"),
+                "plc_execution_status": guidance.get("plcExecutionStatus"),
+                "mechanical_correction_deg": guidance.get("mechanicalCorrectionDeg"),
+            })
     with (output_dir / "circle-candidates.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
             "image_id", "relative_path", "proposal_id", "proposal_status", "bbox_normalized",
@@ -562,7 +641,13 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         ])
         writer.writeheader()
         for record in records:
-            if record["result"]["valid"]:
+            guidance = record.get("guidance") or {}
+            is_detection_failure = (
+                guidance.get("detectionStatus") == "DETECTION_FAILED"
+                if guidance.get("detectionStatus") is not None
+                else not record["result"]["valid"]
+            )
+            if not is_detection_failure:
                 continue
             writer.writerow({
                 "image_id": record["imageId"],

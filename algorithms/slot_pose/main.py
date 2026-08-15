@@ -52,7 +52,15 @@ def run_loaded(
     try:
         estimate = adapter.estimate(image_path.resolve())
         diagnostics = estimate["diagnostics"]
-        angle = adapter.mechanical_angle(estimate["candidate_image_deg"])
+        pose_config = config.get("detector", {}).get("single_groove_pose", {})
+        is_closed_loop_v3 = (
+            config.get("detector", {}).get("diagnostic_mode") == "single_real_groove"
+            and pose_config.get("schema_version") == "single-real-groove-pose-config/3"
+        )
+        if is_closed_loop_v3:
+            angle = diagnostics["singleGroovePose"]["guidance"]["imageFrameCorrectionDeg"]
+        else:
+            angle = adapter.mechanical_angle(estimate["candidate_image_deg"])
         return build_result(
             image_path, config_path, config, task_id, diagnostics,
             angle_deg=angle, confidence=float(estimate["confidence"]),

@@ -12,6 +12,78 @@ from tools.render_slot_pose_review import render_review
 
 
 class SlotPoseReviewTests(unittest.TestCase):
+    def test_v3_review_separates_adjustment_from_detection_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            images = []
+            results = []
+            cases = (
+                ("in-position", True, "DETECTED", "DETECTED_IN_POSITION", 82.978, 0.0, "NONE", None),
+                ("adjust", True, "DETECTED", "DETECTED_NEEDS_ADJUSTMENT", 22.834, 62.166, "CLOCKWISE", None),
+                ("failed", False, "DETECTION_FAILED", "NOT_AVAILABLE", None, None, None, "GROOVE_RECOGNITION_FAILED"),
+            )
+            for index, (name, valid, detection, guidance_status, current, correction, direction, error_code) in enumerate(cases, start=1):
+                relative = f"frames/{name}.jpg"
+                image_path = root / relative
+                image_path.parent.mkdir(exist_ok=True)
+                Image.new("RGB", (160, 120), 128).save(image_path, quality=95)
+                info = inspect_image(image_path)
+                image_id = f"sample:{index:04d}"
+                images.append({"imageId": image_id, "relativePath": relative, "datasetClass": "normal", **info})
+                guidance = {
+                    "detectionStatus": detection,
+                    "guidanceStatus": guidance_status,
+                    "currentAngleDeg": current,
+                    "targetAngleDeg": 85.0,
+                    "toleranceDeg": 5.0,
+                    "correctionRawDeg": None if current is None else (85.0 - current + 180.0) % 360.0 - 180.0,
+                    "correctionDeg": correction,
+                    "imageFrameCorrectionDeg": correction,
+                    "rotationDirection": direction,
+                    "withinTolerance": None if current is None else guidance_status == "DETECTED_IN_POSITION",
+                    "plcExecution": {
+                        "status": "BLOCKED_MAPPING_UNCONFIRMED",
+                        "mechanicalCorrectionDeg": None,
+                        "plcCommand": None,
+                    },
+                }
+                results.append({
+                    "taskId": f"closed-loop-review:{image_id}",
+                    "result": {"valid": valid, "signedRelativeRotationDeg": correction},
+                    "error": None if error_code is None else {"code": error_code, "stage": "groove_recognition"},
+                    "diagnostics": {
+                        "singleGroovePose": {
+                            "schemaVersion": "slot-single-real-groove-pose/3",
+                            "status": "accepted" if valid else "failed",
+                            "geometryValid": valid,
+                            "imageMeasurement": None,
+                            "datumMeasurement": None,
+                            "guidance": guidance,
+                        },
+                        "elapsedMs": 10.0,
+                    },
+                })
+            manifest = {"datasetId": "closed-loop-review", "images": images}
+            output = root / "review-v3"
+            summary = render_review(manifest, results, root, output)
+            self.assertEqual("slot-pose-review/2", summary["schemaVersion"])
+            self.assertEqual({"DETECTED": 2, "DETECTION_FAILED": 1}, summary["detectionStatusCounts"])
+            self.assertEqual({
+                "DETECTED_IN_POSITION": 1,
+                "DETECTED_NEEDS_ADJUSTMENT": 1,
+                "NOT_AVAILABLE": 1,
+            }, summary["guidanceStatusCounts"])
+            self.assertEqual({"CLOCKWISE": 1, "NONE": 1, "not_available": 1}, summary["rotationDirectionCounts"])
+            self.assertFalse(summary["records"][0]["failClosed"])
+            self.assertFalse(summary["records"][1]["failClosed"])
+            self.assertTrue(summary["records"][2]["failClosed"])
+            guidance_csv = (output / "guidance.csv").read_text(encoding="utf-8")
+            self.assertIn("DETECTED_NEEDS_ADJUSTMENT", guidance_csv)
+            self.assertIn("CLOCKWISE", guidance_csv)
+            failures_csv = (output / "failures.csv").read_text(encoding="utf-8")
+            self.assertIn("frames/failed.jpg", failures_csv)
+            self.assertNotIn("frames/adjust.jpg", failures_csv)
+
     def test_review_is_path_safe_and_marks_role_as_non_authoritative(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

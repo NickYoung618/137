@@ -4,7 +4,8 @@
   内容哈希必须继续一致。适配器在调用历史函数前校验三项资产。
 - 历史图像坐标原点在左上，方位角随图像y轴向下而顺时针增加。`mechanical_zero_image_deg`与
   `positive_direction=cw|ccw`必须由机械/机器人负责人确认。
-- `conventions_confirmed=false`时只允许诊断候选，正式角度为空。
+- legacy、paired、multi-role和single v1/v2在`conventions_confirmed=false`时只允许诊断候选，正式机械角为空。
+  single v3已由负责人确认图像坐标和85°目标，因此可靠检测可输出有效图像帧修正；该值仍不是PLC执行命令。
 - `production_plc_mapping_confirmed=false`时不产生PLC地址、缩放整数或写入动作。
 - `detector`继续复用历史圆心、尺度和polar链；`groove_recognition`只在同一polar坐标内增加单帧几何硬门，不新建圆/配准系统。
 - `detector.diagnostic_mode`只能显式选择`legacy_single_notch`、`paired_notches_centerline`、`multi_notch_roles`或`single_real_groove`，
@@ -29,6 +30,10 @@
   `single_groove_pose.expected_accepted_groove_count=1`；v1只输出旧图像方位，v2在唯一槽通过后使用
   `groove_refinement`密集双线性采样、亚像素边缘、稳健侧壁线和外圆交点，输出Y下半轴有符号角、
   左下位置门和`85°±5°`判定。0个/多个槽或任一侧精修失败均不回退到粗角度栅格。
+- `single-real-groove-pose-config/3`继续复用v2亚像素几何，但将状态分为检测、图像引导和PLC权限。
+  检测可靠时无论当前象限均`valid=true`；图像`+Y`下半轴为0°、顺时针正，到85°取最短环形差，
+  `[80,90]`闭区强制输出0°。`production_plc_mapping_confirmed=false`只阻塞机械量和PLC命令，
+  不清空`imageFrameCorrectionDeg`。Git安全的显式版本片段为`closed-loop-guidance-v3.fragment.json`。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，

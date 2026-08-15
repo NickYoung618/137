@@ -133,16 +133,38 @@ class ReferenceAnchoredDiagnosticsTests(unittest.TestCase):
                 result("set-1", "i1", sha256_file(paths[0]), geometry=True),
                 result("set-1", "i2", sha256_file(paths[1]), geometry=False),
             ]
+            results[0]["diagnostics"]["singleGroovePose"]["guidance"] = {
+                "detectionStatus": "DETECTED",
+                "guidanceStatus": "DETECTED_NEEDS_ADJUSTMENT",
+                "currentAngleDeg": -179.0,
+                "targetAngleDeg": 85.0,
+                "toleranceDeg": 5.0,
+                "correctionRawDeg": -96.0,
+                "correctionDeg": -96.0,
+                "imageFrameCorrectionDeg": -96.0,
+                "rotationDirection": "COUNTERCLOCKWISE",
+                "withinTolerance": False,
+                "plcExecution": {
+                    "status": "BLOCKED_MAPPING_UNCONFIRMED",
+                    "mechanicalCorrectionDeg": None,
+                    "plcCommand": None,
+                },
+            }
             reference = build_development_reference(
                 manual_review("a" * 64, "b" * 64, "c" * 64),
                 comparison("a" * 64, "b" * 64, "c" * 64),
             )
             output = root / "export"
             index = export_diagnostics(manifest, results, data, reference, output)
+            self.assertEqual("reference-anchored-slot-pose-diagnostics/2", index["schemaVersion"])
             self.assertEqual(2, index["imageCount"])
             self.assertEqual("NOT_EVALUATED", index["evaluation"]["accuracyStatus"])
             self.assertEqual("NOT_EVALUATED", index["evaluation"]["staticRepeatabilityStatus"])
             self.assertAlmostEqual(2.0, index["records"][0]["observedCircularDeltaToReferenceDeg"])
+            self.assertEqual("DETECTED_NEEDS_ADJUSTMENT", index["records"][0]["guidanceStatus"])
+            self.assertEqual(-96.0, index["records"][0]["imageFrameCorrectionDeg"])
+            self.assertEqual("COUNTERCLOCKWISE", index["records"][0]["rotationDirection"])
+            self.assertIsNone(index["records"][0]["formalMechanicalAngleDeg"])
             self.assertIsNone(index["records"][1]["measuredYDownDeg"])
             self.assertIsNone(index["records"][1]["observedCircularDeltaToReferenceDeg"])
             diagnostics = sorted((output / "labelme-auto").glob("*.json"))

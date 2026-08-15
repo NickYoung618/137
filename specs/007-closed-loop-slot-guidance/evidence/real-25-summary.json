@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "slot-pose-closed-loop-real-replay-evidence/1",
+  "date": "2026-08-15",
+  "dataset": {
+    "imageCount": 25,
+    "imageFormat": "JPEG diagnostic copy",
+    "imageSize": [5472, 3648],
+    "directoryContentSha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "manifestFingerprint": "fe7864df6557c9348e39bcc518c818f370e664faff8d7ec1d7f127e6998711fc",
+    "perImageHumanTruthAvailable": false,
+    "groupingExplicit": false
+  },
+  "configuration": {
+    "mode": "single_real_groove",
+    "poseConfigVersion": "single-real-groove-pose-config/3",
+    "circleLocalization": "full_frame_otsu_components_sparse_gyj_then_720_ray_gyj_refinement",
+    "grooveRefinement": "groove-sidewall-subpixel-v2",
+    "plcMappingConfirmed": false
+  },
+  "detection": {
+    "physicalOuterCircleAccepted": 25,
+    "rawDarkCandidateCountDistribution": {"3": 25},
+    "acceptedRealGrooveCountDistribution": {"1": 25},
+    "rejectedShadowCount": 50,
+    "rejectionReasonCounts": {"width_variation_too_high": 50},
+    "subpixelGrooveRefinementAccepted": 25,
+    "detectionStatusCounts": {"DETECTED": 25},
+    "detectionFailureCount": 0
+  },
+  "guidance": {
+    "guidanceStatusCounts": {
+      "DETECTED_IN_POSITION": 2,
+      "DETECTED_NEEDS_ADJUSTMENT": 23
+    },
+    "rotationDirectionCounts": {
+      "CLOCKWISE": 3,
+      "COUNTERCLOCKWISE": 20,
+      "NONE": 2
+    },
+    "imageFrameCorrectionAvailableCount": 25,
+    "plcExecutionBlockedCount": 25,
+    "mechanicalCorrectionAvailableCount": 0,
+    "plcCommandAvailableCount": 0
+  },
+  "performance": {
+    "machine": {
+      "logicalCpuCount": 2,
+      "cpuModel": "AMD EPYC 7K62",
+      "memoryGiB": 7.5,
+      "os": "Linux x86_64"
+    },
+    "method": "one cold serial batch; adapter/reference reused; per-image elapsed from adapter; batch wall and peak RSS from /usr/bin/time -v",
+    "perImageElapsedMs": {
+      "count": 25,
+      "p50": 1219.263669801876,
+      "p95": 1275.7441465277225,
+      "max": 1358.7403211276978
+    },
+    "batchWallSeconds": 35.77,
+    "serialThroughputImagesPerSecond": 0.6989,
+    "peakRssKiB": 1189164,
+    "peakRssGiB": 1.1341
+  },
+  "artifacts": {
+    "resultsSha256": "c96fc79781bf430c928ad0b652c3500df6046a768ba467159484ba6b10d909a5",
+    "reviewIndexSha256": "cf3c5de9c0003ebc3fd1e93917ad82ba783b4bffe754afdef2e1d6499fa91255",
+    "diagnosticSummarySha256": "0de6e3f3de9c7cd896594ab76d86022ee9b7355c9b302c9f7d08aa32cdc68a58",
+    "autoLabelMeIndexSha256": "6ca6e24a967ed1dd62d4d6e60df1130e1e64f7fdc47c26bba27f33b2298701e2",
+    "overlayCount": 25,
+    "autoLabelMeCount": 25,
+    "contactSheetCount": 1,
+    "guidanceCsvRowCount": 25,
+    "failureCsvRowCount": 0,
+    "mediaStoredInGit": false
+  },
+  "evaluation": {
+    "accuracyStatus": "NOT_EVALUATED",
+    "accuracyReason": "PER_IMAGE_HUMAN_TRUTH_UNAVAILABLE",
+    "staticRepeatabilityStatus": "NOT_EVALUATED",
+    "staticRepeatabilityReason": "CONFIRMED_SAME_SAMPLE_POSE_CONDITION_GROUPS_UNAVAILABLE",
+    "singleManualReferenceAppliesToOtherImages": false,
+    "productionAccuracyClaimed": false
+  }
+}

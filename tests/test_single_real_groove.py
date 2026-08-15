@@ -11,6 +11,7 @@ from algorithms.slot_pose.groove_refinement import DEFAULT_GROOVE_REFINEMENT_CON
 from algorithms.slot_pose.single_groove_pose import (
     DEFAULT_SINGLE_GROOVE_POSE_CONFIG,
     DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2,
+    DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
     build_single_groove_pose,
 )
 from tools.dataset_common import sha256_file, write_json
@@ -350,6 +351,69 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual("PASS", pose["targetAssessment"]["toleranceStatus"])
         self.assertIsNotNone(pose["datumMeasurement"]["measuredFromPositiveYClockwiseDeg"])
         self.assertIsNone(pose["targetAssessment"]["mechanicalCorrectionDeg"])
+
+    def test_v3_runtime_keeps_reliable_adjustment_valid_while_plc_is_blocked(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["config_id"] = "synthetic-single-real-groove-closed-loop-v3"
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["pose"].update({
+            "target_semantics_confirmed": True,
+            "conventions_confirmed": False,
+            "mechanical_zero_image_deg": None,
+            "positive_direction": None,
+            "production_plc_mapping_confirmed": False,
+        })
+        path = self.root / "single-v3.json"
+        write_json(path, config)
+        payload = run(self.images / "one-real-two-shadows.png", path, "single:v3")
+        self.assertEqual("slot-pose-result/3", payload["schemaVersion"])
+        self.assertTrue(payload["result"]["valid"], payload)
+        self.assertEqual("DETECTED", payload["result"]["detectionStatus"])
+        self.assertIn(payload["result"]["guidanceStatus"], {
+            "DETECTED_NEEDS_ADJUSTMENT", "DETECTED_IN_POSITION",
+        })
+        self.assertIsNotNone(payload["result"]["imageFrameCorrectionDeg"])
+        self.assertEqual(
+            payload["result"]["imageFrameCorrectionDeg"],
+            payload["result"]["signedRelativeRotationDeg"],
+        )
+        self.assertEqual("BLOCKED_MAPPING_UNCONFIRMED", payload["result"]["plcExecutionStatus"])
+        self.assertIsNone(payload["result"]["mechanicalCorrectionDeg"])
+        self.assertIsNone(payload["result"]["plcCommand"])
+        self.assertIsNone(payload["error"])
+        diagnostics = payload["diagnostics"]
+        self.assertEqual(1, diagnostics["grooveRecognition"]["acceptedCount"])
+        self.assertEqual(2, sum(
+            not item["accepted"] for item in diagnostics["grooveRecognition"]["assessments"]
+        ))
+        self.assertEqual("accepted", diagnostics["grooveRefinement"]["status"])
+        self.assertEqual("slot-single-real-groove-pose/3", diagnostics["singleGroovePose"]["schemaVersion"])
+
+    def test_v3_zero_or_multiple_grooves_are_detection_failures(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        path = self.root / "single-v3-failure.json"
+        write_json(path, config)
+        for name, error_code in (
+            ("zero-real-two-shadows.png", "GROOVE_RECOGNITION_FAILED"),
+            ("two-real-one-shadow.png", "GROOVE_RECOGNITION_AMBIGUOUS"),
+        ):
+            with self.subTest(name=name):
+                payload = run(self.images / name, path, f"single:v3:{name}")
+                self.assertEqual("slot-pose-result/3", payload["schemaVersion"])
+                self.assertFalse(payload["result"]["valid"])
+                self.assertEqual("DETECTION_FAILED", payload["result"]["detectionStatus"])
+                self.assertEqual("NOT_AVAILABLE", payload["result"]["guidanceStatus"])
+                self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
+                self.assertEqual(error_code, payload["error"]["code"])
 
     def test_v2_refinement_quality_failure_is_explicit_and_never_uses_coarse_angle(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

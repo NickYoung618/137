@@ -245,6 +245,22 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
     plc_blocked_count = sum(
         "PLC_MAPPING_UNCONFIRMED" in (item.get("blockers") or []) for item in assessments
     )
+    guidances = [record.get("guidance") or {} for record in records]
+    detection_status_counts = Counter(
+        item.get("detectionStatus") or "not_available" for item in guidances
+    )
+    guidance_status_counts = Counter(
+        item.get("guidanceStatus") or "not_available" for item in guidances
+    )
+    rotation_direction_counts = Counter(
+        item.get("rotationDirection") or "not_available" for item in guidances
+    )
+    guidance_correction_count = sum(
+        isinstance(item.get("imageFrameCorrectionDeg"), (int, float)) for item in guidances
+    )
+    guidance_plc_blocked_count = sum(
+        item.get("plcExecutionStatus") == "BLOCKED_MAPPING_UNCONFIRMED" for item in guidances
+    )
     role_status_counts = Counter(record.get("roleSuggestion", {}).get("status") or "not_available" for record in records)
     role_signatures = Counter(
         json.dumps(record.get("roleSuggestion", {}).get("selectedRoleCandidateIds"), sort_keys=True)
@@ -352,7 +368,23 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
             "count": correction_count, "rate": correction_count / total if total else 0.0,
         },
         "plcGuidanceBlocked": {
-            "count": plc_blocked_count, "rate": plc_blocked_count / total if total else 0.0,
+            "count": max(plc_blocked_count, guidance_plc_blocked_count),
+            "rate": max(plc_blocked_count, guidance_plc_blocked_count) / total if total else 0.0,
+        },
+        "detectionStatusCounts": dict(sorted(detection_status_counts.items())),
+        "guidanceStatusCounts": dict(sorted(guidance_status_counts.items())),
+        "rotationDirectionCounts": dict(sorted(rotation_direction_counts.items())),
+        "closedLoopImageFrameCorrectionAvailable": {
+            "count": guidance_correction_count,
+            "rate": guidance_correction_count / total if total else 0.0,
+        },
+        "accuracyEvaluation": {
+            "status": "NOT_EVALUATED",
+            "reason": "PER_IMAGE_HUMAN_TRUTH_UNAVAILABLE",
+        },
+        "staticRepeatabilityEvaluation": {
+            "status": "NOT_EVALUATED",
+            "reason": "CONFIRMED_SAME_SAMPLE_POSE_CONDITION_GROUPS_UNAVAILABLE",
         },
         "mechanicalGuidanceBlockedByDatum": {
             "count": datum_blocked_count,
@@ -461,7 +493,7 @@ def build_summary(runs: list[tuple[str, dict[str, Any]]], threshold_deg: float) 
         "interpretationLimits": [
             "Cross-frame stability can identify repeatable image features but cannot prove a drawing datum/target role.",
             "A stable image-frame cluster can still be a fixture, occlusion or lighting boundary.",
-            "A valid single-groove image bearing is not a datum-relative target deviation or mechanical correction.",
+            "A valid v3 image-frame correction is not an executable PLC/mechanical command until mapping is confirmed.",
             "JPEG diagnostics cannot replace original-BMP angle accuracy truth.",
         ],
     }

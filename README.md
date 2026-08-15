@@ -83,6 +83,24 @@ uv run python tools/run_slot_pose_batch.py \
 因此单槽v2可输出测量、PASS/FAIL和图像纠偏诊断，但顶层正式机械角仍为空。完整规格和Mac命令见
 `specs/003-a2-paired-notch-stability/`。
 
+## 007单真槽闭环图像引导
+
+`single-real-groove-pose-config/3`修正了旧v2把“当前不在85°附近”和“PLC映射未确认”混入失败状态的问题。
+它不改外圆、暗区、真槽过滤或槽壁精修算法，只在可靠槽口径向之后增加版本化闭环状态：
+
+- `detectionStatus`只回答外圆、唯一真槽和亚像素槽口几何是否可靠；当前槽在任何象限都可以是`DETECTED`。
+- `currentAngleDeg`以检测圆心向下的图像`+Y`射线为0°，图像顺时针为正，范围为`[-180,180)`。
+- 目标固定为左下85°±5°；`correctionRawDeg=wrapTo180(85-current)`。
+- 当前方向在左下闭区`[80,90]`时进入死区，`correctionDeg=0`且方向`NONE`；否则输出最短
+  `imageFrameCorrectionDeg`，正值`CLOCKWISE`、负值`COUNTERCLOCKWISE`。
+- 可靠检测即使需要调整也保持`valid=true`。PLC映射未确认时，图像引导量仍有值，但
+  `mechanicalCorrectionDeg`和`plcCommand`为空，`plcExecutionStatus=BLOCKED_MAPPING_UNCONFIRMED`。
+- 每次重拍独立计算：需要调整后由调用方旋转并重拍；进入死区停止；新帧检测失败必须清空修正量，不能复用旧值。
+
+Git安全配置片段见`config/closed-loop-guidance-v3.fragment.json`，完整契约、命令和实跑证据见
+`specs/007-closed-loop-slot-guidance/`。25张JPEG全画面回放得到25/25检测成功，其中2张已到位、
+23张需调整（顺时针3、逆时针20）；这只是检测/引导回放，不是生产精度结论。
+
 ## Mac A2后续验证
 
 服务器现有25张5472×3648 A2 JPEG诊断副本和3张同源原始BMP；第4帧有一份同源BMP人工圆弧/开放槽开发参考，
@@ -176,4 +194,4 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
 - B-008 已关闭：唯一通过几何门的真实槽就是目标槽，另外两个暗区不得补角色。
 
 剩余关闭顺序：B-002 → 冻结Mac原始BMP验证集/人工参考规程 → B-004验收 → B-005上线。关闭前可以
-离线输出图像测量与公差诊断，但不能宣称生产精度或向PLC写入。
+输出版本化图像帧测量和最短引导量，但不能宣称生产精度、把图像方向等同于执行机方向或向PLC写入。

@@ -8,6 +8,10 @@ from pathlib import Path
 from PIL import Image
 
 from algorithms.slot_pose.contract import ERROR_CODES, build_result, load_config, signed_relative_angle, validate_result
+from algorithms.slot_pose.single_groove_pose import (
+    DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
+    build_closed_loop_guidance,
+)
 
 
 def minimal_config() -> dict:
@@ -30,6 +34,72 @@ def minimal_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_v3_validity_is_image_guidance_not_plc_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = root / "a.png"
+            Image.new("L", (8, 8), 1).save(image)
+            config = minimal_config()
+            config["pose"].update({
+                "conventions_confirmed": False,
+                "target_semantics_confirmed": True,
+                "production_plc_mapping_confirmed": False,
+            })
+            config["detector"] = {
+                "diagnostic_mode": "single_real_groove",
+                "single_groove_pose": DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
+            }
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            guidance = build_closed_loop_guidance(
+                DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3["target"],
+                {
+                    "measuredFromPositiveYClockwiseDeg": 22.834,
+                    "position": {"requiredRegionPassed": False},
+                },
+                geometry_valid=True,
+                plc_mapping_confirmed=False,
+            )
+            diagnostics = {"singleGroovePose": {"guidance": guidance}}
+            payload = build_result(
+                image, config_path, config, "v3:adjust", diagnostics,
+                angle_deg=62.166, confidence=0.9,
+            )
+            validate_result(payload)
+            self.assertEqual("slot-pose-result/3", payload["schemaVersion"])
+            self.assertTrue(payload["result"]["valid"])
+            self.assertEqual("DETECTED_NEEDS_ADJUSTMENT", payload["result"]["guidanceStatus"])
+            self.assertAlmostEqual(62.166, payload["result"]["imageFrameCorrectionDeg"])
+            self.assertEqual("CLOCKWISE", payload["result"]["rotationDirection"])
+            self.assertEqual("BLOCKED_MAPPING_UNCONFIRMED", payload["result"]["plcExecutionStatus"])
+            self.assertIsNone(payload["result"]["mechanicalCorrectionDeg"])
+            self.assertIsNone(payload["result"]["plcCommand"])
+            self.assertIsNone(payload["error"])
+
+    def test_v3_detection_failure_clears_all_guidance_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = root / "a.png"
+            Image.new("L", (8, 8), 1).save(image)
+            config = minimal_config()
+            config["detector"] = {
+                "diagnostic_mode": "single_real_groove",
+                "single_groove_pose": DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
+            }
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            payload = build_result(
+                image, config_path, config, "v3:failed", {},
+                error_code="GROOVE_RECOGNITION_FAILED",
+                error_stage="groove_recognition",
+            )
+            validate_result(payload)
+            self.assertFalse(payload["result"]["valid"])
+            self.assertEqual("DETECTION_FAILED", payload["result"]["detectionStatus"])
+            self.assertEqual("NOT_AVAILABLE", payload["result"]["guidanceStatus"])
+            self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
+            self.assertIsNone(payload["result"]["rotationDirection"])
+
     def test_failure_is_fail_closed_and_traceable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

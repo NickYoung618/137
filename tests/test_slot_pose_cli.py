@@ -8,6 +8,11 @@ import unittest
 from pathlib import Path
 
 from algorithms.slot_pose.main import run
+from algorithms.slot_pose.groove_refinement import DEFAULT_GROOVE_REFINEMENT_CONFIG
+from algorithms.slot_pose.single_groove_pose import DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+from tools.dataset_common import sha256_file
+from tools.generate_synthetic_multi_notches import build_dataset as build_multi_dataset
+from tools.generate_synthetic_paired_notches import make_paired_face
 from tools.generate_synthetic_slot_pose import DEFAULT_SOURCE, build_dataset
 
 
@@ -15,6 +20,46 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SlotPoseCliTests(unittest.TestCase):
+    def test_v3_strict_cli_succeeds_when_image_guidance_is_valid_but_plc_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            try:
+                built = build_multi_dataset(root, 137)
+            except FileNotFoundError as exc:
+                self.skipTest(f"historical source unavailable: {exc}")
+            config_path = Path(built["config"])
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            reference = root / "reference.png"
+            image = root / "closed-loop.png"
+            make_paired_face(0.0, 901, notch_centers=[300.0], shadow_centers=[80.0, 170.0], noise=0.0).save(reference)
+            make_paired_face(0.0, 902, notch_centers=[300.0], shadow_centers=[80.0, 170.0], noise=0.8).save(image)
+            config["legacy_asset"]["reference_sha256"] = sha256_file(reference)
+            config["detector"]["diagnostic_mode"] = "single_real_groove"
+            config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+            config["detector"]["groove_refinement"] = {
+                **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+                "threshold_version": "groove-sidewall-subpixel-v2",
+            }
+            config["pose"].update({
+                "target_semantics_confirmed": True,
+                "conventions_confirmed": False,
+                "mechanical_zero_image_deg": None,
+                "positive_direction": None,
+                "production_plc_mapping_confirmed": False,
+            })
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            completed = subprocess.run([
+                sys.executable, str(ROOT / "algorithms/slot_pose/main.py"),
+                "--image", str(image), "--config", str(config_path), "--strict",
+            ], check=False, capture_output=True, text=True)
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            payload = json.loads(completed.stdout)
+            self.assertTrue(payload["result"]["valid"])
+            self.assertEqual("DETECTED", payload["result"]["detectionStatus"])
+            self.assertIsNotNone(payload["result"]["imageFrameCorrectionDeg"])
+            self.assertEqual("BLOCKED_MAPPING_UNCONFIRMED", payload["result"]["plcExecutionStatus"])
+            self.assertIsNone(payload["result"]["plcCommand"])
+
     def test_default_reference_is_diagnostic_only(self) -> None:
         config = ROOT / "config/inspection.example.json"
         image = Path(json.loads(config.read_text(encoding="utf-8"))["legacy_asset"]["reference_path"])

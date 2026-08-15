@@ -141,6 +141,36 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual(12.0, run["grooveRefinementElapsedMs"]["p95"])
         self.assertEqual(0.8, run["grooveSidewallEvidence"]["lineInlierRatio"]["min"])
 
+    def test_v3_summary_counts_guidance_without_calling_adjustment_a_failure(self) -> None:
+        in_position = record("a", [175.0], error="NONE")
+        adjustment = record("b", [67.834], error="NONE")
+        failed = record("c", [], error="GROOVE_RECOGNITION_FAILED")
+        for item, status, current, correction, direction in (
+            (in_position, "DETECTED_IN_POSITION", 82.978, 0.0, "NONE"),
+            (adjustment, "DETECTED_NEEDS_ADJUSTMENT", 22.834, 62.166, "CLOCKWISE"),
+            (failed, "NOT_AVAILABLE", None, None, None),
+        ):
+            detected = current is not None
+            item["result"]["valid"] = detected
+            item["guidance"] = {
+                "detectionStatus": "DETECTED" if detected else "DETECTION_FAILED",
+                "guidanceStatus": status,
+                "currentAngleDeg": current,
+                "imageFrameCorrectionDeg": correction,
+                "rotationDirection": direction,
+                "plcExecutionStatus": "BLOCKED_MAPPING_UNCONFIRMED",
+            }
+        run = build_summary([("v3", {"records": [in_position, adjustment, failed]})], 5.0)["runs"][0]
+        self.assertEqual({"DETECTED": 2, "DETECTION_FAILED": 1}, run["detectionStatusCounts"])
+        self.assertEqual({
+            "DETECTED_IN_POSITION": 1,
+            "DETECTED_NEEDS_ADJUSTMENT": 1,
+            "NOT_AVAILABLE": 1,
+        }, run["guidanceStatusCounts"])
+        self.assertEqual({"CLOCKWISE": 1, "NONE": 1, "not_available": 1}, run["rotationDirectionCounts"])
+        self.assertEqual(2, run["closedLoopImageFrameCorrectionAvailable"]["count"])
+        self.assertEqual("NOT_EVALUATED", run["staticRepeatabilityEvaluation"]["status"])
+
     def test_locator_candidates_and_paired_circle_deltas_are_summarized(self) -> None:
         first = record("a", [10.0])
         second = record("a", [10.0])

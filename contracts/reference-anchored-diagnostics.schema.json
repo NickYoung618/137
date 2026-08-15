@@ -41,7 +41,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["schemaVersion", "datasetId", "datasetFingerprint", "imageCount", "reference", "evaluation", "records"],
       "properties": {
-        "schemaVersion": {"const": "reference-anchored-slot-pose-diagnostics/1"},
+        "schemaVersion": {"enum": ["reference-anchored-slot-pose-diagnostics/1", "reference-anchored-slot-pose-diagnostics/2"]},
         "datasetId": {"type": "string", "minLength": 1},
         "datasetFingerprint": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
         "imageCount": {"type": "integer", "minimum": 0},
@@ -69,10 +69,33 @@
               "observedCircularDeltaToReferenceDeg": {"$ref": "#/$defs/nullableNumber"},
               "comparisonMeaning": {"const": "OBSERVATION_ONLY_NOT_ACCURACY_ERROR"},
               "accuracyStatus": {"const": "NOT_EVALUATED"}
+              ,"detectionStatus": {"enum": ["DETECTED", "DETECTION_FAILED", null]}
+              ,"guidanceStatus": {"enum": ["DETECTED_NEEDS_ADJUSTMENT", "DETECTED_IN_POSITION", "NOT_AVAILABLE", null]}
+              ,"targetAngleDeg": {"$ref": "#/$defs/nullableNumber"}
+              ,"toleranceDeg": {"$ref": "#/$defs/nullableNumber"}
+              ,"correctionRawDeg": {"$ref": "#/$defs/nullableNumber"}
+              ,"imageFrameCorrectionDeg": {"$ref": "#/$defs/nullableNumber"}
+              ,"rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE", "NONE", null]}
+              ,"withinTolerance": {"type": ["boolean", "null"]}
+              ,"plcExecutionStatus": {"enum": ["BLOCKED_MAPPING_UNCONFIRMED", "READY", null]}
             }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"schemaVersion": {"const": "reference-anchored-slot-pose-diagnostics/2"}}},
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "required": ["detectionStatus", "guidanceStatus", "targetAngleDeg", "toleranceDeg", "correctionRawDeg", "imageFrameCorrectionDeg", "rotationDirection", "withinTolerance", "plcExecutionStatus"]
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "autoLabelMe": {
       "type": "object", "additionalProperties": false,

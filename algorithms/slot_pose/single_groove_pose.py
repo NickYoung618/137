@@ -11,13 +11,16 @@ from algorithms.slot_pose.angular_profile import wrap_360_deg
 
 SINGLE_GROOVE_POSE_SCHEMA_VERSION = "slot-single-real-groove-pose/1"
 SINGLE_GROOVE_POSE_SCHEMA_VERSION_V2 = "slot-single-real-groove-pose/2"
+SINGLE_GROOVE_POSE_SCHEMA_VERSION_V3 = "slot-single-real-groove-pose/3"
 IMAGE_ANGLE_SCHEMA_VERSION = "slot-groove-image-angle/1"
 IMAGE_ANGLE_SCHEMA_VERSION_V2 = "slot-groove-image-angle/2"
 Y_DOWN_ANGLE_SCHEMA_VERSION = "slot-groove-y-down-angle/1"
 TARGET_SCHEMA_VERSION = "slot-groove-target/1"
 TARGET_SCHEMA_VERSION_V2 = "slot-groove-target/2"
+TARGET_SCHEMA_VERSION_V3 = "slot-groove-target/3"
 TARGET_ASSESSMENT_SCHEMA_VERSION = "slot-groove-target-assessment/1"
 TARGET_ASSESSMENT_SCHEMA_VERSION_V2 = "slot-groove-target-assessment/2"
+IMAGE_FRAME_GUIDANCE_SCHEMA_VERSION = "slot-image-frame-guidance/1"
 
 DEFAULT_SINGLE_GROOVE_POSE_CONFIG: dict[str, Any] = {
     "schema_version": "single-real-groove-pose-config/1",
@@ -41,6 +44,25 @@ DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2: dict[str, Any] = {
     "expected_accepted_groove_count": 1,
     "target": {
         "schema_version": TARGET_SCHEMA_VERSION_V2,
+        "nominal_deg": 85.0,
+        "tolerance_deg": 5.0,
+        "accepted_min_deg": 80.0,
+        "accepted_max_deg": 90.0,
+        "required_horizontal_position": "left",
+        "required_vertical_position": "lower_or_axis",
+        "physical_datum_definition_id": "detected-physical-circle-positive-y-down-ray/1",
+        "angle_convention_id": "image-y-down-clockwise-signed/1",
+    },
+}
+
+DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3: dict[str, Any] = {
+    "schema_version": "single-real-groove-pose-config/3",
+    "output_schema_version": SINGLE_GROOVE_POSE_SCHEMA_VERSION_V3,
+    "image_angle_schema_version": IMAGE_ANGLE_SCHEMA_VERSION_V2,
+    "datum_angle_schema_version": Y_DOWN_ANGLE_SCHEMA_VERSION,
+    "expected_accepted_groove_count": 1,
+    "target": {
+        "schema_version": TARGET_SCHEMA_VERSION_V3,
         "nominal_deg": 85.0,
         "tolerance_deg": 5.0,
         "accepted_min_deg": 80.0,
@@ -101,10 +123,18 @@ def _validate_v1(config: dict[str, Any]) -> None:
     _optional_id(target.get("angle_convention_id"), "angle_convention_id")
 
 
-def _validate_v2(config: dict[str, Any]) -> None:
-    required = set(DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2)
+def _validate_refined_guidance_config(config: dict[str, Any], *, version: int) -> None:
+    default = (
+        DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2
+        if version == 2 else DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+    )
+    required = set(default)
     _validate_exact_fields(config, required, "single_groove_pose")
-    if config.get("output_schema_version") != SINGLE_GROOVE_POSE_SCHEMA_VERSION_V2:
+    expected_output = (
+        SINGLE_GROOVE_POSE_SCHEMA_VERSION_V2
+        if version == 2 else SINGLE_GROOVE_POSE_SCHEMA_VERSION_V3
+    )
+    if config.get("output_schema_version") != expected_output:
         raise ValueError("single_groove_pose.output_schema_version is unsupported")
     if config.get("image_angle_schema_version") != IMAGE_ANGLE_SCHEMA_VERSION_V2:
         raise ValueError("single_groove_pose.image_angle_schema_version is unsupported")
@@ -113,24 +143,39 @@ def _validate_v2(config: dict[str, Any]) -> None:
     target = config.get("target")
     if not isinstance(target, dict):
         raise ValueError("single_groove_pose.target must be an object")
-    fields = set(DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2["target"])
+    fields = set(default["target"])
     _validate_exact_fields(target, fields, "single_groove_pose.target")
-    if target.get("schema_version") != TARGET_SCHEMA_VERSION_V2:
+    expected_target_schema = TARGET_SCHEMA_VERSION_V2 if version == 2 else TARGET_SCHEMA_VERSION_V3
+    if target.get("schema_version") != expected_target_schema:
         raise ValueError("single_groove_pose.target.schema_version is unsupported")
     numeric = {
         key: _finite_number(target.get(key), key)
         for key in ("nominal_deg", "tolerance_deg", "accepted_min_deg", "accepted_max_deg")
     }
     if numeric != {"nominal_deg": 85.0, "tolerance_deg": 5.0, "accepted_min_deg": 80.0, "accepted_max_deg": 90.0}:
-        raise ValueError("single_groove_pose v2 target must be the confirmed +85deg +/-5deg contract")
+        raise ValueError(
+            f"single_groove_pose v{version} target must be the confirmed +85deg +/-5deg contract"
+        )
     if target.get("required_horizontal_position") != "left":
-        raise ValueError("single_groove_pose v2 target requires left horizontal position")
+        raise ValueError(f"single_groove_pose v{version} target requires left horizontal position")
     if target.get("required_vertical_position") != "lower_or_axis":
-        raise ValueError("single_groove_pose v2 target requires lower_or_axis vertical position")
+        raise ValueError(f"single_groove_pose v{version} target requires lower_or_axis vertical position")
     for key in ("physical_datum_definition_id", "angle_convention_id"):
         value = target.get(key)
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"single_groove_pose.target.{key} must be a non-empty string")
+
+
+def _validate_v2(config: dict[str, Any]) -> None:
+    _validate_refined_guidance_config(config, version=2)
+
+
+def _validate_v3(config: dict[str, Any]) -> None:
+    _validate_refined_guidance_config(config, version=3)
+    target = config["target"]
+    for key in ("physical_datum_definition_id", "angle_convention_id"):
+        if target[key] != DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3["target"][key]:
+            raise ValueError(f"single_groove_pose v3 target {key} is immutable")
 
 
 def validate_single_groove_pose_config(config: dict[str, Any]) -> None:
@@ -141,6 +186,8 @@ def validate_single_groove_pose_config(config: dict[str, Any]) -> None:
         _validate_v1(config)
     elif version == "single-real-groove-pose-config/2":
         _validate_v2(config)
+    elif version == "single-real-groove-pose-config/3":
+        _validate_v3(config)
     else:
         raise ValueError("single_groove_pose.schema_version is unsupported")
     if config.get("expected_accepted_groove_count") != 1:
@@ -157,6 +204,8 @@ def merged_single_groove_pose_config(config: dict[str, Any] | None) -> dict[str,
         default = DEFAULT_SINGLE_GROOVE_POSE_CONFIG
     elif version == "single-real-groove-pose-config/2":
         default = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2
+    elif version == "single-real-groove-pose-config/3":
+        default = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
     else:
         raise ValueError("single_groove_pose.schema_version is unsupported")
     target_override = config.get("target") if isinstance(config.get("target"), dict) else {}
@@ -376,6 +425,87 @@ def assess_y_down_target(
     }
 
 
+def build_closed_loop_guidance(
+    target: dict[str, Any],
+    datum: dict[str, Any] | None,
+    *,
+    geometry_valid: bool,
+    plc_mapping_confirmed: bool,
+) -> dict[str, Any]:
+    """Convert one trusted image-frame measurement into stateless closed-loop guidance."""
+    coordinate_convention = {
+        "origin": "detected_physical_outer_circle_center",
+        "xAxis": "right",
+        "yAxis": "down",
+        "datumRay": "positive_y_down",
+        "physicalDatumAlias": "workpiece_negative_y_lower_half_axis",
+        "positiveDirection": "clockwise",
+        "rangeDeg": "[-180,180)",
+    }
+    plc_execution = {
+        "status": "READY" if plc_mapping_confirmed else "BLOCKED_MAPPING_UNCONFIRMED",
+        "mechanicalCorrectionDeg": None,
+        "plcCommand": None,
+        "authoritative": bool(plc_mapping_confirmed),
+        "blockers": [] if plc_mapping_confirmed else ["PLC_MAPPING_UNCONFIRMED"],
+    }
+    base = {
+        "schemaVersion": IMAGE_FRAME_GUIDANCE_SCHEMA_VERSION,
+        "targetAngleDeg": float(target["nominal_deg"]),
+        "toleranceDeg": float(target["tolerance_deg"]),
+        "acceptedRangeDeg": [
+            float(target["accepted_min_deg"]), float(target["accepted_max_deg"]),
+        ],
+        "coordinateConvention": coordinate_convention,
+        "plcExecution": plc_execution,
+    }
+    if not geometry_valid or datum is None:
+        return {
+            **base,
+            "detectionStatus": "DETECTION_FAILED",
+            "guidanceStatus": "NOT_AVAILABLE",
+            "currentAngleDeg": None,
+            "correctionRawDeg": None,
+            "correctionDeg": None,
+            "imageFrameCorrectionDeg": None,
+            "rotationDirection": None,
+            "withinTolerance": None,
+        }
+    measured = _wrap_signed(float(datum["measuredFromPositiveYClockwiseDeg"]))
+    correction_raw = _wrap_signed(float(target["nominal_deg"]) - measured)
+    epsilon = 1e-9
+    in_angle_deadband = (
+        float(target["accepted_min_deg"]) - epsilon
+        <= measured
+        <= float(target["accepted_max_deg"]) + epsilon
+    )
+    in_target_region = bool(datum["position"]["requiredRegionPassed"])
+    within_tolerance = in_angle_deadband and in_target_region
+    correction = 0.0 if within_tolerance else correction_raw
+    if within_tolerance or correction == 0.0:
+        direction = "NONE"
+    elif correction > 0.0:
+        direction = "CLOCKWISE"
+    else:
+        direction = "COUNTERCLOCKWISE"
+    if plc_mapping_confirmed:
+        plc_execution["mechanicalCorrectionDeg"] = correction
+    return {
+        **base,
+        "detectionStatus": "DETECTED",
+        "guidanceStatus": (
+            "DETECTED_IN_POSITION" if within_tolerance
+            else "DETECTED_NEEDS_ADJUSTMENT"
+        ),
+        "currentAngleDeg": measured,
+        "correctionRawDeg": correction_raw,
+        "correctionDeg": correction,
+        "imageFrameCorrectionDeg": correction,
+        "rotationDirection": direction,
+        "withinTolerance": within_tolerance,
+    }
+
+
 def _accepted_status(candidates: list[dict[str, Any]], recognition_status: str) -> str:
     if len(candidates) > 1 or recognition_status == "ambiguous":
         return "ambiguous"
@@ -409,7 +539,9 @@ def build_single_groove_pose(
     geometry_valid = status == "accepted"
     candidate = candidates[0] if geometry_valid else None
     is_v2 = merged["schema_version"] == "single-real-groove-pose-config/2"
-    if is_v2 and candidate is not None:
+    is_v3 = merged["schema_version"] == "single-real-groove-pose-config/3"
+    is_refined = is_v2 or is_v3
+    if is_refined and candidate is not None:
         refinement = candidate.get("grooveRefinement")
         if not isinstance(refinement, dict) or refinement.get("status") != "accepted":
             status = "failed"
@@ -418,15 +550,15 @@ def build_single_groove_pose(
     measurement = None
     datum = None
     if candidate is not None:
-        if is_v2:
+        if is_refined:
             try:
                 start = float(candidate["refinedStartDeg"]) % 360.0
                 end = float(candidate["refinedEndDeg"]) % 360.0
             except (KeyError, TypeError, ValueError) as exc:
-                raise ValueError("single groove v2 refined boundaries are invalid") from exc
+                raise ValueError("single groove refined boundaries are invalid") from exc
             span = (end - start) % 360.0
             if not 0.0 < span < 180.0:
-                raise ValueError("single groove v2 refined boundary order is invalid")
+                raise ValueError("single groove refined boundary order is invalid")
             profile_azimuth = wrap_360_deg(start + span / 2.0)
             midpoint_source = "subpixel_sidewall_outer_circle_intersections"
         else:
@@ -458,7 +590,7 @@ def build_single_groove_pose(
                 "to": circle_point,
             },
         }
-        if is_v2:
+        if is_refined:
             measurement, datum = measure_y_down_opening(
                 center,
                 float(outer_radius),
@@ -467,10 +599,13 @@ def build_single_groove_pose(
                 midpoint_source=midpoint_source,
             )
 
-    target_assessment = (
-        assess_y_down_target(merged["target"], datum, plc_mapping_confirmed=plc_mapping_confirmed)
-        if is_v2 else _v1_target_assessment(merged["target"], geometry_valid)
-    )
+    target_assessment = None
+    if is_v2:
+        target_assessment = assess_y_down_target(
+            merged["target"], datum, plc_mapping_confirmed=plc_mapping_confirmed,
+        )
+    elif not is_v3:
+        target_assessment = _v1_target_assessment(merged["target"], geometry_valid)
     result = {
         "schemaVersion": merged["output_schema_version"],
         "status": status,
@@ -483,12 +618,21 @@ def build_single_groove_pose(
             "status": "unique_detected" if geometry_valid else status,
             "candidateId": None if candidate is None else str(candidate["candidateId"]),
             "mechanicalGuidanceAuthoritative": bool(
-                is_v2 and geometry_valid and plc_mapping_confirmed
+                is_refined and geometry_valid and plc_mapping_confirmed
             ),
         },
         "imageMeasurement": measurement,
-        "targetAssessment": target_assessment,
     }
     if is_v2:
+        result["targetAssessment"] = target_assessment
+    elif not is_v3:
+        result["targetAssessment"] = target_assessment
+    if is_refined:
         result["datumMeasurement"] = datum
+    if is_v3:
+        result["guidance"] = build_closed_loop_guidance(
+            merged["target"], datum,
+            geometry_valid=geometry_valid,
+            plc_mapping_confirmed=plc_mapping_confirmed,
+        )
     return result

@@ -1,0 +1,24 @@
+{
+  "diagnostic_mode": "single_real_groove",
+  "single_groove_pose": {
+    "schema_version": "single-real-groove-pose-config/3",
+    "output_schema_version": "slot-single-real-groove-pose/3",
+    "image_angle_schema_version": "slot-groove-image-angle/2",
+    "datum_angle_schema_version": "slot-groove-y-down-angle/1",
+    "expected_accepted_groove_count": 1,
+    "target": {
+      "schema_version": "slot-groove-target/3",
+      "nominal_deg": 85.0,
+      "tolerance_deg": 5.0,
+      "accepted_min_deg": 80.0,
+      "accepted_max_deg": 90.0,
+      "required_horizontal_position": "left",
+      "required_vertical_position": "lower_or_axis",
+      "physical_datum_definition_id": "detected-physical-circle-positive-y-down-ray/1",
+      "angle_convention_id": "image-y-down-clockwise-signed/1"
+    }
+  },
+  "groove_refinement": {
+    "threshold_version": "groove-sidewall-subpixel-v2"
+  }
+}

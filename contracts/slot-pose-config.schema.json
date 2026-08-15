@@ -152,6 +152,34 @@
                   }
                 }
               }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "output_schema_version", "image_angle_schema_version", "datum_angle_schema_version", "expected_accepted_groove_count", "target"],
+              "properties": {
+                "schema_version": {"const": "single-real-groove-pose-config/3"},
+                "output_schema_version": {"const": "slot-single-real-groove-pose/3"},
+                "image_angle_schema_version": {"const": "slot-groove-image-angle/2"},
+                "datum_angle_schema_version": {"const": "slot-groove-y-down-angle/1"},
+                "expected_accepted_groove_count": {"const": 1},
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["schema_version", "nominal_deg", "tolerance_deg", "accepted_min_deg", "accepted_max_deg", "required_horizontal_position", "required_vertical_position", "physical_datum_definition_id", "angle_convention_id"],
+                  "properties": {
+                    "schema_version": {"const": "slot-groove-target/3"},
+                    "nominal_deg": {"const": 85.0},
+                    "tolerance_deg": {"const": 5.0},
+                    "accepted_min_deg": {"const": 80.0},
+                    "accepted_max_deg": {"const": 90.0},
+                    "required_horizontal_position": {"const": "left"},
+                    "required_vertical_position": {"const": "lower_or_axis"},
+                    "physical_datum_definition_id": {"const": "detected-physical-circle-positive-y-down-ray/1"},
+                    "angle_convention_id": {"const": "image-y-down-clockwise-signed/1"}
+                  }
+                }
+              }
             }
           ]
         },

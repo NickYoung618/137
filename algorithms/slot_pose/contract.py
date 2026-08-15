@@ -13,8 +13,9 @@ from tools.dataset_common import inspect_image
 
 
 SCHEMA_VERSION = "slot-pose-result/2"
+SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.10.0"
+ALGORITHM_VERSION = "0.11.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -138,7 +139,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["single_groove_pose"] = merged_single_groove_pose_config(
             detector.get("single_groove_pose")
         )
-        if detector["single_groove_pose"]["schema_version"] == "single-real-groove-pose-config/2":
+        if detector["single_groove_pose"]["schema_version"] in {
+            "single-real-groove-pose-config/2", "single-real-groove-pose-config/3",
+        }:
             from algorithms.slot_pose.groove_refinement import merged_groove_refinement_config
 
             detector["groove_refinement"] = merged_groove_refinement_config(
@@ -162,6 +165,29 @@ def signed_relative_angle(candidate_image_deg: float, zero_image_deg: float, pos
     raise ValueError("positive_direction must be 'cw' or 'ccw'")
 
 
+def _is_closed_loop_v3(config: dict[str, Any]) -> bool:
+    detector = config.get("detector")
+    if not isinstance(detector, dict) or detector.get("diagnostic_mode") != "single_real_groove":
+        return False
+    pose_config = detector.get("single_groove_pose")
+    return (
+        isinstance(pose_config, dict)
+        and pose_config.get("schema_version") == "single-real-groove-pose-config/3"
+    )
+
+
+def _failed_v3_guidance(config: dict[str, Any]) -> dict[str, Any]:
+    from algorithms.slot_pose.single_groove_pose import build_closed_loop_guidance
+
+    target = config["detector"]["single_groove_pose"]["target"]
+    return build_closed_loop_guidance(
+        target,
+        None,
+        geometry_valid=False,
+        plc_mapping_confirmed=bool(config["pose"].get("production_plc_mapping_confirmed", False)),
+    )
+
+
 def build_result(
     image_path: Path,
     config_path: Path,
@@ -178,18 +204,31 @@ def build_result(
     image_path = image_path.resolve()
     image = inspect_image(image_path)
     task_id = task_id or f"offline:{image['sha256'][:16]}"
-    valid = error_code is None
+    is_v3 = _is_closed_loop_v3(config)
+    guidance = None
+    if is_v3:
+        pose_diagnostic = diagnostics.get("singleGroovePose")
+        if isinstance(pose_diagnostic, dict):
+            candidate_guidance = pose_diagnostic.get("guidance")
+            if isinstance(candidate_guidance, dict):
+                guidance = candidate_guidance
+        if guidance is None or error_code is not None:
+            guidance = _failed_v3_guidance(config)
+    valid = (
+        error_code is None
+        and (not is_v3 or guidance.get("detectionStatus") == "DETECTED")
+    )
     pose = config["pose"]
-    if valid and not bool(pose.get("conventions_confirmed", False)):
+    if valid and not is_v3 and not bool(pose.get("conventions_confirmed", False)):
         raise ValueError("valid pose requires confirmed mechanical conventions")
-    if valid and not bool(pose.get("target_semantics_confirmed", False)):
+    if valid and not is_v3 and not bool(pose.get("target_semantics_confirmed", False)):
         raise ValueError("valid pose requires confirmed target semantics")
     if not valid:
         angle_deg = None
         confidence = None
     assets = config["legacy_asset"]
     payload = {
-        "schemaVersion": SCHEMA_VERSION,
+        "schemaVersion": SCHEMA_VERSION_V3 if is_v3 else SCHEMA_VERSION,
         "taskId": task_id,
         "createdAtUtc": datetime.now(timezone.utc).isoformat(),
         "image": {"path": str(image_path), **image},
@@ -230,12 +269,37 @@ def build_result(
             "failClosed": True,
         },
     }
+    if is_v3:
+        assert guidance is not None
+        result = payload["result"]
+        result.update({
+            "signedRelativeRotationDeg": guidance["imageFrameCorrectionDeg"] if valid else None,
+            "referenceFrame": "DETECTED_PHYSICAL_OUTER_CIRCLE_POSITIVE_Y_DOWN",
+            "targetFrame": "IMAGE_FRAME_TARGET_85_DEG",
+            "positiveDirection": "cw",
+            "detectionStatus": guidance["detectionStatus"],
+            "guidanceStatus": guidance["guidanceStatus"],
+            "currentAngleDeg": guidance["currentAngleDeg"],
+            "targetAngleDeg": guidance["targetAngleDeg"],
+            "toleranceDeg": guidance["toleranceDeg"],
+            "correctionRawDeg": guidance["correctionRawDeg"],
+            "correctionDeg": guidance["correctionDeg"],
+            "imageFrameCorrectionDeg": guidance["imageFrameCorrectionDeg"],
+            "rotationDirection": guidance["rotationDirection"],
+            "withinTolerance": guidance["withinTolerance"],
+            "mechanicalCorrectionDeg": guidance["plcExecution"]["mechanicalCorrectionDeg"],
+            "plcCommand": guidance["plcExecution"]["plcCommand"],
+            "plcExecutionStatus": guidance["plcExecution"]["status"],
+            "plcExecutionAuthoritative": guidance["plcExecution"]["authoritative"],
+            "plcBlockers": guidance["plcExecution"]["blockers"],
+        })
     validate_result(payload)
     return payload
 
 
 def validate_result(payload: dict[str, Any]) -> None:
-    if payload.get("schemaVersion") != SCHEMA_VERSION:
+    schema_version = payload.get("schemaVersion")
+    if schema_version not in {SCHEMA_VERSION, SCHEMA_VERSION_V3}:
         raise ValueError("invalid slot pose schemaVersion")
     if not payload.get("taskId") or not payload.get("createdAtUtc"):
         raise ValueError("taskId and createdAtUtc are required")
@@ -262,3 +326,48 @@ def validate_result(payload: dict[str, Any]) -> None:
             raise ValueError("invalid pose requires stable error code and stage")
     else:
         raise ValueError("result.valid must be boolean")
+    if schema_version == SCHEMA_VERSION_V3:
+        _validate_v3_result_semantics(result, valid)
+
+
+def _validate_v3_result_semantics(result: dict[str, Any], valid: bool) -> None:
+    required = {
+        "detectionStatus", "guidanceStatus", "currentAngleDeg", "targetAngleDeg",
+        "toleranceDeg", "correctionRawDeg", "correctionDeg", "imageFrameCorrectionDeg",
+        "rotationDirection", "withinTolerance", "mechanicalCorrectionDeg", "plcCommand",
+        "plcExecutionStatus", "plcExecutionAuthoritative", "plcBlockers",
+    }
+    missing = sorted(required - set(result))
+    if missing:
+        raise ValueError(f"v3 result missing guidance fields: {missing}")
+    if result["targetAngleDeg"] != 85.0 or result["toleranceDeg"] != 5.0:
+        raise ValueError("v3 result target contract is invalid")
+    if valid:
+        if result["detectionStatus"] != "DETECTED":
+            raise ValueError("valid v3 result requires DETECTED")
+        if result["guidanceStatus"] not in {
+            "DETECTED_NEEDS_ADJUSTMENT", "DETECTED_IN_POSITION",
+        }:
+            raise ValueError("valid v3 result requires available guidance")
+        for key in ("currentAngleDeg", "correctionRawDeg", "correctionDeg", "imageFrameCorrectionDeg"):
+            value = result[key]
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not -180.0 <= float(value) < 180.0:
+                raise ValueError(f"valid v3 result requires {key} in [-180,180)")
+        if result["signedRelativeRotationDeg"] != result["imageFrameCorrectionDeg"]:
+            raise ValueError("v3 compatibility angle must equal image-frame correction")
+        if result["withinTolerance"]:
+            if result["guidanceStatus"] != "DETECTED_IN_POSITION" or result["correctionDeg"] != 0.0 or result["rotationDirection"] != "NONE":
+                raise ValueError("v3 in-position state is inconsistent")
+        elif result["guidanceStatus"] != "DETECTED_NEEDS_ADJUSTMENT":
+            raise ValueError("v3 adjustment state is inconsistent")
+    else:
+        if result["detectionStatus"] != "DETECTION_FAILED" or result["guidanceStatus"] != "NOT_AVAILABLE":
+            raise ValueError("invalid v3 result requires unavailable detection guidance")
+        for key in (
+            "currentAngleDeg", "correctionRawDeg", "correctionDeg",
+            "imageFrameCorrectionDeg", "rotationDirection", "withinTolerance",
+        ):
+            if result[key] is not None:
+                raise ValueError(f"invalid v3 result must clear {key}")
+    if result["plcCommand"] is not None:
+        raise ValueError("v3 does not emit PLC commands")

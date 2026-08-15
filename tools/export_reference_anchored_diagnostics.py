@@ -23,6 +23,7 @@ from tools.render_slot_pose_review import load_results
 
 REFERENCE_SCHEMA_VERSION = "slot-pose-development-reference/1"
 INDEX_SCHEMA_VERSION = "reference-anchored-slot-pose-diagnostics/1"
+INDEX_SCHEMA_VERSION_V2 = "reference-anchored-slot-pose-diagnostics/2"
 COMPARISON_MEANING = "OBSERVATION_ONLY_NOT_ACCURACY_ERROR"
 HUMAN_TRUTH_LABELS = {
     "physical_outer_circle_truth",
@@ -276,6 +277,10 @@ def export_diagnostics(
     labelme_dir.mkdir(parents=True, exist_ok=True)
     write_json(output_dir / "development-reference.json", reference)
     records: list[dict[str, Any]] = []
+    uses_closed_loop_guidance = any(
+        isinstance((((result.get("diagnostics") or {}).get("singleGroovePose") or {}).get("guidance")), dict)
+        for *_, result in validated
+    )
     reference_angle = _number(reference["manualMeasurements"]["yDownSignedDeg"], "reference Y-down angle")
     for _, item, relative, annotation_relative, result in validated:
         annotation_path = output_dir / annotation_relative
@@ -284,6 +289,7 @@ def export_diagnostics(
         pose = diagnostics.get("singleGroovePose") or {}
         datum = pose.get("datumMeasurement") or {}
         assessment = pose.get("targetAssessment") or {}
+        guidance = pose.get("guidance") or {}
         measured = _nullable_number(datum.get("measuredFromPositiveYClockwiseDeg"))
         position = datum.get("position") or {}
         quadrant = None
@@ -296,7 +302,9 @@ def export_diagnostics(
                 "algorithm_generated": True, "diagnostic_only": True,
                 "human_verified": False, "independent_from_algorithm": False,
                 "formal_truth": False, "runtime_input_allowed": False,
-                "annotation_version": "slot-pose-auto-diagnostic-v1",
+                "annotation_version": (
+                    "slot-pose-auto-diagnostic-v2" if guidance else "slot-pose-auto-diagnostic-v1"
+                ),
             },
             "shapes": _auto_shapes(result),
             "imagePath": os.path.relpath(image_path, annotation_path.parent),
@@ -312,7 +320,10 @@ def export_diagnostics(
             "autoAnnotationRelativePath": annotation_relative.as_posix(),
             "autoAnnotationSha256": sha256_file(annotation_path),
             "detectionErrorCode": error.get("code"), "detectionErrorStage": error.get("stage"),
-            "formalMechanicalAngleDeg": (result.get("result") or {}).get("signedRelativeRotationDeg"),
+            "formalMechanicalAngleDeg": (
+                (guidance.get("plcExecution") or {}).get("mechanicalCorrectionDeg")
+                if guidance else (result.get("result") or {}).get("signedRelativeRotationDeg")
+            ),
             "measuredYDownDeg": measured, "quadrant": quadrant,
             "targetToleranceStatus": assessment.get("toleranceStatus"),
             "targetPositionGatePassed": assessment.get("positionGatePassed"),
@@ -321,10 +332,19 @@ def export_diagnostics(
             "observedCircularDeltaToReferenceDeg": None if measured is None else _circular_delta(measured, reference_angle),
             "comparisonMeaning": COMPARISON_MEANING,
             "accuracyStatus": "NOT_EVALUATED",
+            "detectionStatus": guidance.get("detectionStatus"),
+            "guidanceStatus": guidance.get("guidanceStatus"),
+            "targetAngleDeg": guidance.get("targetAngleDeg"),
+            "toleranceDeg": guidance.get("toleranceDeg"),
+            "correctionRawDeg": guidance.get("correctionRawDeg"),
+            "imageFrameCorrectionDeg": guidance.get("imageFrameCorrectionDeg"),
+            "rotationDirection": guidance.get("rotationDirection"),
+            "withinTolerance": guidance.get("withinTolerance"),
+            "plcExecutionStatus": (guidance.get("plcExecution") or {}).get("status"),
         })
     policy = manifest.get("policy") if isinstance(manifest.get("policy"), dict) else {}
     index_payload = {
-        "schemaVersion": INDEX_SCHEMA_VERSION,
+        "schemaVersion": INDEX_SCHEMA_VERSION_V2 if uses_closed_loop_guidance else INDEX_SCHEMA_VERSION,
         "datasetId": dataset_id, "datasetFingerprint": manifest.get("datasetFingerprint"),
         "imageCount": len(records),
         "reference": {
@@ -351,6 +371,9 @@ def export_diagnostics(
             "detection_error_stage", "formal_mechanical_angle_deg", "measured_y_down_deg", "quadrant",
             "target_tolerance_status", "development_reference_y_down_deg",
             "observed_circular_delta_to_reference_deg", "comparison_meaning", "accuracy_status",
+            "detection_status", "guidance_status", "target_angle_deg", "tolerance_deg",
+            "correction_raw_deg", "image_frame_correction_deg", "rotation_direction",
+            "within_tolerance", "plc_execution_status",
         ]
         writer = csv.DictWriter(handle, fieldnames=fields); writer.writeheader()
         for record in records:
@@ -365,6 +388,15 @@ def export_diagnostics(
                 "development_reference_y_down_deg": record["developmentReferenceYDownDeg"],
                 "observed_circular_delta_to_reference_deg": record["observedCircularDeltaToReferenceDeg"],
                 "comparison_meaning": record["comparisonMeaning"], "accuracy_status": record["accuracyStatus"],
+                "detection_status": record["detectionStatus"],
+                "guidance_status": record["guidanceStatus"],
+                "target_angle_deg": record["targetAngleDeg"],
+                "tolerance_deg": record["toleranceDeg"],
+                "correction_raw_deg": record["correctionRawDeg"],
+                "image_frame_correction_deg": record["imageFrameCorrectionDeg"],
+                "rotation_direction": record["rotationDirection"],
+                "within_tolerance": record["withinTolerance"],
+                "plc_execution_status": record["plcExecutionStatus"],
             })
     return index_payload
 

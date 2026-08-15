@@ -9,13 +9,34 @@ from pathlib import Path
 from PIL import Image
 
 from tests.test_slot_pose_contract import minimal_config
+from algorithms.slot_pose.single_groove_pose import DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
 from tools.dataset_common import sha256_file
 from tools.generate_synthetic_paired_notches import build_dataset
 from tools.run_a2_acceptance import run_acceptance
-from tools.run_slot_pose_batch import run_batch
+from tools.run_slot_pose_batch import _manifest_input_failure, run_batch
 
 
 class SlotPoseBatchTests(unittest.TestCase):
+    def test_v3_missing_input_is_detection_failure_and_never_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = minimal_config()
+            config["detector"] = {
+                "diagnostic_mode": "single_real_groove",
+                "single_groove_pose": DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
+            }
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            payload = _manifest_input_failure(
+                {"sha256": "0" * 64, "bytes": 1, "format": "JPEG", "width": 10, "height": 10, "mode": "RGB"},
+                root / "missing.jpg", config_path, config, "v3:missing", ValueError("missing"),
+            )
+            self.assertEqual("slot-pose-result/3", payload["schemaVersion"])
+            self.assertFalse(payload["result"]["valid"])
+            self.assertEqual("DETECTION_FAILED", payload["result"]["detectionStatus"])
+            self.assertEqual("NOT_AVAILABLE", payload["result"]["guidanceStatus"])
+            self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
+
     def test_missing_image_does_not_interrupt_following_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
