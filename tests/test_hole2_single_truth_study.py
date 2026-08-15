@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.analyze_hole2_single_truth_study import analyze_study, map_manifest
+from tools.analyze_hole2_single_truth_study import (
+    analyze_study,
+    map_manifest,
+    map_ordered_groups,
+)
 
 
 def _record(name, group="batch", *, d7=True, phi=True, length=100.0, diameter=170.0):
@@ -46,6 +50,29 @@ def _truth(status="PASS"):
 
 
 class Hole2SingleTruthStudyTests(unittest.TestCase):
+    def test_explicit_ordered_group_size_needs_population_role_map(self):
+        records = [
+            _record("a.bmp", group="normal"),
+            _record("b.bmp", group="normal"),
+            _record("c.bmp", group="normal"),
+            _record("bad.bmp", group="defective"),
+        ]
+        mapped = map_ordered_groups(
+            records,
+            group_size=2,
+            group_roles={
+                "normal": ("normal", "evaluation"),
+                "defective": ("defective", "observation"),
+            },
+        )
+        self.assertEqual(
+            ["normal-explicit-0000", "normal-explicit-0000", "normal-explicit-0001"],
+            [item["captureGroupId"] for item in mapped[:3]],
+        )
+        self.assertEqual(("defective", "observation"), (mapped[3]["population"], mapped[3]["role"]))
+        with self.assertRaisesRegex(ValueError, "group-role"):
+            map_ordered_groups(records, group_size=2, group_roles={"normal": ("normal", "evaluation")})
+
     def test_manifest_is_strict_and_unique(self):
         records = [_record("a.bmp"), _record("b.bmp")]
         manifest = {"frames": [

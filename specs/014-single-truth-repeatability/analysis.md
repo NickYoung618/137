@@ -6,6 +6,7 @@
 
 - spec的证据边界是否由输出字段和测试共同保证。
 - manifest是否是唯一采集组来源，缺失和重复是否失败。
+- 显式有序group-size模式是否要求完整population/role映射且不读取文件尾号。
 - normal/defective以及development/fixed/holdout是否没有混组统计。
 - 真值FAIL是否保持FAIL，无标注统计是否只标记diagnostic。
 - 运行时算法、配置、Schema和质量门是否零修改。
@@ -15,6 +16,8 @@
 
 - FR-001–008、FR-010由`analyze_hole2_single_truth_study.py`及四项新测试覆盖。工具只读取已有
   JSONL、显式manifest和单图验收报告，不读取图片或LabelMe。
+- FR-003a允许Mac完整有序JSONL用显式20帧分组，并强制每个原始group声明population/role；
+  无映射即失败，文件名不参与分组。
 - FR-009以先红后绿测试证明：相邻失败帧位于不同显式组时生成两个失败段。
 - cohort键固定为`population/role`；capture group键包含population，因此normal和defective即使
   captureGroupId同名也不会混合。
@@ -40,7 +43,7 @@
 
 - 定向测试：8项通过。
 - 默认依赖全套：135项通过，9项既有显式Schema用例按设计skip。
-- 显式`jsonschema`全套：135项全部通过，0 skip。
+- 显式`jsonschema`全套：最终136项全部通过，0 skip。
 - `compileall -q algorithms tools tests`：通过。
 - `git diff --check`：通过。
 - 大文件审计：新增/修改的Git候选均为小型源码、测试和Markdown；外置manifest、JSONL、图片、

@@ -29,3 +29,4 @@
 - [x] T016 保持holdout封存并记录重复性证据限制
 - [x] T017 全套unittest、compileall、SpecKit analyze、diff与大文件审计
 - [x] T018 更新analysis并完成提交前审计（仅在全部门禁通过后）
+- [x] T019 增加显式有序group-size与population/role映射，避免手写2200条manifest

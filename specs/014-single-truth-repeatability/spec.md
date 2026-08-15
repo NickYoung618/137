@@ -17,7 +17,8 @@
 
 - 人工真值只有一张，不再要求追加标注。
 - 无标注帧不得自动变成伪真值，也不得支持逐图像素精度结论。
-- 每个样品的采集帧关系必须由外置manifest明确给出；工具不得仅凭文件名猜测物理样品。
+- 每个样品的采集帧关系必须由外置manifest或显式有序`group-size`参数给出；工具不得仅凭文件名
+  猜测物理样品。
 - defective始终独立观察，不能进入normal接受指标。
 
 ## User stories
@@ -49,8 +50,10 @@
 - **FR-001**: MUST 新增通用离线CLI，接受可重复`--jsonl`、外置`--manifest`、已有
   `--truth-report`及外置`--output`。
 - **FR-002**: MUST NOT读取目标LabelMe或原图，不得运行或修改检测算法。
-- **FR-003**: manifest MUST为每条记录提供唯一fileName、population、role、captureGroupId；缺失、
-  重复或未映射必须失败。
+- **FR-003**: manifest模式MUST为每条记录提供唯一fileName、population、role、captureGroupId；
+  缺失、重复或未映射必须失败。
+- **FR-003a**: 有序分组模式MUST要求显式`--group-size`和每个原始batch group的
+  `GROUP=POPULATION/ROLE`映射；不得从文件名推断，缺少映射必须失败。
 - **FR-004**: MUST按`population + role`分开统计，不输出混合normal/defective验收总数。
 - **FR-005**: MUST按`population + captureGroupId`统计两项量测的count、median、range、MAD和逐帧
   median deviation。

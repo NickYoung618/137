@@ -44,3 +44,9 @@
 - defective-0010两帧探索分布稳定，但严格属于defective观察，不能帮助normal验收。
 
 holdout 10帧未输入工具、未运行检测，继续保持封存。
+
+## 完整Mac数据的可执行分组
+
+为避免手工编写2200条manifest，工具提供显式有序分组：调用者给出`--group-size 20`，并对
+JSONL中的每个原始group提供`GROUP=POPULATION/ROLE`。它按各原始group的JSONL顺序分块，不读取
+文件尾号；缺少任何group映射会失败。若批次有漏帧或乱序，必须退回逐帧manifest。

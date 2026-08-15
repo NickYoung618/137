@@ -92,6 +92,53 @@ def map_manifest(
     return mapped
 
 
+def map_ordered_groups(
+    records: list[dict[str, Any]],
+    *,
+    group_size: int,
+    group_roles: dict[str, tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """Build explicit capture groups from JSONL order and a user-supplied size."""
+    if group_size < 2:
+        raise ValueError("group_size must be at least 2")
+    counters: dict[str, int] = defaultdict(int)
+    mapped: list[dict[str, Any]] = []
+    for record in records:
+        raw_group = str(record.get("group", "")).strip()
+        if raw_group not in group_roles:
+            raise ValueError(f"missing --group-role mapping for JSONL group: {raw_group or '<empty>'}")
+        population, role = group_roles[raw_group]
+        capture_index = counters[raw_group] // group_size
+        counters[raw_group] += 1
+        mapped.append(
+            {
+                "record": record,
+                "fileName": Path(str(record["imagePath"])).name,
+                "population": population,
+                "role": role,
+                "captureGroupId": f"{raw_group}-explicit-{capture_index:04d}",
+            }
+        )
+    return mapped
+
+
+def _parse_group_roles(values: list[str]) -> dict[str, tuple[str, str]]:
+    mappings: dict[str, tuple[str, str]] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError("--group-role must use GROUP=POPULATION/ROLE")
+        raw_group, assignment = (part.strip() for part in value.split("=", 1))
+        pieces = [part.strip() for part in assignment.split("/")]
+        if not raw_group or len(pieces) != 2 or not all(pieces):
+            raise ValueError("--group-role must use GROUP=POPULATION/ROLE")
+        if raw_group in mappings:
+            raise ValueError(f"duplicate --group-role mapping: {raw_group}")
+        mappings[raw_group] = (pieces[0], pieces[1])
+    if not mappings:
+        raise ValueError("ordered grouping requires at least one --group-role")
+    return mappings
+
+
 def _feature(record: dict[str, Any], name: str) -> dict[str, Any]:
     return (((record.get("result") or {}).get("features") or {}).get(name) or {})
 
@@ -318,7 +365,16 @@ def analyze_study(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jsonl", action="append", required=True, type=Path)
-    parser.add_argument("--manifest", required=True, type=Path)
+    grouping = parser.add_mutually_exclusive_group(required=True)
+    grouping.add_argument("--manifest", type=Path)
+    grouping.add_argument("--group-size", type=int)
+    parser.add_argument(
+        "--group-role",
+        action="append",
+        default=[],
+        metavar="GROUP=POPULATION/ROLE",
+        help="Required with --group-size; repeat once for every JSONL group.",
+    )
     parser.add_argument("--truth-report", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--minimum-group-frames", type=int, default=20)
@@ -326,16 +382,28 @@ def main() -> int:
     try:
         output = _external_path(args.output, "study output")
         records = _load_jsonl(args.jsonl)
-        manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         truth = json.loads(args.truth_report.read_text(encoding="utf-8"))
+        if args.manifest is not None:
+            if args.group_role:
+                raise ValueError("--group-role is only valid with --group-size")
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            mapped = map_manifest(records, manifest)
+        else:
+            mapped = map_ordered_groups(
+                records,
+                group_size=args.group_size,
+                group_roles=_parse_group_roles(args.group_role),
+            )
         report = analyze_study(
-            map_manifest(records, manifest),
+            mapped,
             truth,
             minimum_group_frames=args.minimum_group_frames,
         )
         report["runtimeInputs"] = {
             "jsonl": [str(path.expanduser().resolve()) for path in args.jsonl],
-            "manifest": str(args.manifest.expanduser().resolve()),
+            "manifest": None if args.manifest is None else str(args.manifest.expanduser().resolve()),
+            "orderedGroupSize": args.group_size,
+            "groupRoles": args.group_role,
             "truthReport": str(args.truth_report.expanduser().resolve()),
         }
         output.parent.mkdir(parents=True, exist_ok=True)
