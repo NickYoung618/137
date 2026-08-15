@@ -163,10 +163,10 @@
 - [x] T040 [US1] Replace paired-first assumptions with generic datum/target roles and blockers in `specs/003-a2-paired-notch-stability/spec.md`
 - [x] T041 [US1] Redesign primary entities around role assignment and drawing observations in `specs/003-a2-paired-notch-stability/data-model.md`
 - [x] T042 [US1] Define separate drawing-angle truth and v2 diagnostic contracts in `specs/003-a2-paired-notch-stability/contracts/`
-- [x] T043 [US1] Add exhaustive unique role assignment and circular geometry in `algorithms/slot_pose/role_assignment.py`
+- [x] T043 [US1] Add exhaustive unique role assignment and circular geometry in `algorithms/slot_pose/role_assignment.py` (FR-026/FR-028/FR-029/SC-011)
 - [x] T044 [US1] Integrate `multi_notch_roles` and semantic gates in `algorithms/slot_pose/legacy_adapter.py`
 - [x] T045 [US2] Add role/mapping/datum/output-purpose failure codes and validation in `algorithms/slot_pose/contract.py`
-- [x] T046 [US1] Add wrap, extra-candidate, ambiguity, missing-role and datum-axis tests in `tests/test_role_assignment.py`
+- [x] T046 [US1] Add wrap, extra-candidate, ambiguity, missing-role and datum-axis tests in `tests/test_role_assignment.py` (FR-026/SC-011)
 - [x] T047 [US1] Add integrated multi-notch fixtures and tests in `tools/generate_synthetic_multi_notches.py` and `tests/test_multi_notch_roles.py`
 - [x] T048 [US2] Prove drawing inspection cannot become mechanical correction in `tests/test_multi_notch_roles.py`
 - [x] T049 Update example configuration and workflow in `config/inspection.example.json` and `specs/003-a2-paired-notch-stability/quickstart.md`
@@ -243,3 +243,37 @@
 - [x] T085 [US3] Extend review/summary tools to report single-groove geometry validity, image-azimuth availability, shadow rejection and datum-blocked mechanical guidance separately (FR-050)
 - [x] T086 Run the external 25-JPEG set in `single_real_groove`, generate Git-external overlays/review/summary, and record only de-identified counts/hashes/limits (FR-050/SC-018)
 - [x] T087 Run focused/full, Schema, legacy72, paired, CLI/batch/diff/pollution gates and commit locally without push/merge/PLC changes (FR-051/SC-001..SC-006)
+
+---
+
+## Phase 16: Y-Down Datum, Left-Lower Gate and 85°±5° Assessment
+
+**Goal**: Turn the confirmed single-groove coordinate/target convention into a versioned diagnostic while keeping PLC authority fail-closed.
+
+**Independent Test**: Controlled single grooves at +80°, +85° and +90° pass; +79.9°, +90.1°, right-lower -85° and upper-left cases fail. Measurement, deviation and correction have the specified signs, v1 remains unevaluated, and B-005 keeps the top-level angle null.
+
+- [x] T088 [US1] Add failing pure geometry tests for boundary-derived groove midpoint, Y-down datum angle, axes, ±180° wrap, left-lower position gate, right-lower mirror rejection and 80°/85°/90° closed tolerance in tests/test_single_real_groove.py (FR-052..FR-057/FR-059/SC-019..SC-020)
+- [x] T089 [US2] Add failing contract/integration tests for explicit v1/v2 config separation, PASS/FAIL diagnostic fields, clockwise/counter-clockwise correction sign, PLC mapping blocker and result-v2 compatibility in tests/test_single_real_groove.py and tests/test_slot_pose_contract.py (FR-048/FR-058/SC-012/SC-021)
+- [x] T090 [US1] Implement `slot-single-real-groove-pose/2`, boundary-midpoint Y-down measurement, left/lower position evidence, circular deviation and image-frame correction in algorithms/slot_pose/single_groove_pose.py (FR-052..FR-057)
+- [x] T091 [US2] Integrate v2 target assessment and `PLC_MAPPING_UNCONFIRMED` fail-closed orchestration without changing legacy/paired/multi behavior in algorithms/slot_pose/legacy_adapter.py and algorithms/slot_pose/contract.py (FR-048/FR-051/FR-057..FR-058)
+- [x] T092 [US4] Add v2 config/result diagnostic Schema and compatibility documentation in contracts/single-real-groove-pose-v2.schema.json, contracts/slot-pose-config.schema.json, contracts/slot-pose-result.schema.json and contracts/slot-pose-output.md (FR-013/FR-058/SC-005/SC-021)
+- [x] T093 [US3] Extend external review overlays/CSV/summary with Y-down measured angle, explicit left/lower gates, target PASS/FAIL and image-frame correction statistics in tools/render_slot_pose_review.py, tools/summarize_slot_pose_diagnostics.py and their tests (FR-050/FR-055..FR-057/SC-022)
+- [x] T094 [US3] Reuse the same Y-down angle semantics in the offline manual groove review without importing manual truth into runtime in tools/review_labelme_groove_pose.py, contracts/manual-groove-pose-review.schema.json and tests/test_manual_groove_pose_review.py (FR-039..FR-043/FR-052..FR-057)
+- [x] T095 [US3] Re-run all 25 external JPEG diagnostics with explicit v2 config and record geometry/position/angle/tolerance/correction/PLC-blocked distributions only in specs/003-a2-paired-notch-stability/evidence/ (FR-044/FR-050/FR-059/SC-018/SC-022)
+- [x] T096 [US4] Synchronize README, config documentation, quickstart and de-identified evidence with the closed B-003/B-006/B-007/B-008 decisions and remaining B-002/B-004/B-005 gates (FR-023..FR-025/FR-057..FR-059)
+- [x] T097 Run focused/full tests, both single-groove Schemas, legacy72, paired regression, external-25 result validation, diff/pollution gates and commit locally without push/merge/PLC changes (SC-001..SC-006/SC-009/SC-017..SC-022)
+
+---
+
+## Phase 17: Human-Fitted Reference and Subpixel Groove Opening
+
+**Goal**: Use the detailed manual arc as an offline fitted reference and replace the coarse v2 groove boundaries with subpixel sidewall/circle intersections.
+
+**Independent Test**: Controlled subpixel grooves recover both circle intersections and midpoint within 0.10°; same-image manual/runtime comparison decomposes center, radius and groove-angle errors, while all mismatch and weak-edge paths fail closed.
+
+- [x] T098 [US1] Add failing controlled tests for subpixel sidewall points, robust line fits, unique line-circle intersections, endpoint reversal, wrap, weak/missing side, outliers and 0.10° midpoint error in tests/test_groove_refinement.py (FR-064..FR-067/SC-024)
+- [x] T099 [US1] Implement local dense bilinear sampling, subpixel side-edge interpolation, robust line fitting and circle-intersection selection in algorithms/slot_pose/groove_refinement.py without duplicating circle fitting (FR-064..FR-066)
+- [x] T100 [US2] Integrate refinement after exact-one groove recognition so v2 consumes only refined endpoints, add `GROOVE_REFINEMENT_FAILED`, config/diagnostic Schema and v1 compatibility tests (FR-053/FR-058/FR-065..FR-066)
+- [x] T101 [US3] Add failing tests and implement tools/compare_pose_reference.py for same-image manual/runtime circle and groove-midpoint error decomposition; runtime modules MUST NOT import it (FR-060..FR-063/SC-023)
+- [x] T102 [US3] Run the external original-BMP manual sample through v2 refinement/reference comparison and record only path-free development metrics/hashes; do not claim production accuracy (FR-063/FR-067/SC-023)
+- [x] T103 [US4] Document the annotation→locked fit→automatic subpixel fit→same-image comparison→held-out validation workflow, rerun the external25 no-truth regression and include Schema/diff/pollution gates (FR-060..FR-067/SC-005/SC-009/SC-022..SC-024)

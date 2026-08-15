@@ -43,8 +43,8 @@
       "properties": {
         "diagnostic_mode": {"enum": ["legacy_single_notch", "paired_notches_centerline", "multi_notch_roles", "single_real_groove"], "default": "legacy_single_notch"},
         "face_search_roi_normalized": {
-          "type": "array",
-          "description": "Optional alignment-only [x_min,y_min,x_max,y_max] ROI; absent by default.",
+          "type": ["array", "null"],
+          "description": "Optional alignment-only [x_min,y_min,x_max,y_max] ROI; absent or null means full frame.",
           "prefixItems": [
             {"type": "number", "minimum": 0, "maximum": 1},
             {"type": "number", "minimum": 0, "maximum": 1},
@@ -101,26 +101,79 @@
           }
         },
         "single_groove_pose": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["schema_version", "output_schema_version", "image_angle_schema_version", "expected_accepted_groove_count", "target"],
-          "properties": {
-            "schema_version": {"const": "single-real-groove-pose-config/1"},
-            "output_schema_version": {"const": "slot-single-real-groove-pose/1"},
-            "image_angle_schema_version": {"const": "slot-groove-image-angle/1"},
-            "expected_accepted_groove_count": {"const": 1},
-            "target": {
+          "oneOf": [
+            {
               "type": "object",
               "additionalProperties": false,
-              "required": ["schema_version", "nominal_deg", "expected_quadrant", "physical_datum_definition_id", "angle_convention_id"],
+              "required": ["schema_version", "output_schema_version", "image_angle_schema_version", "expected_accepted_groove_count", "target"],
               "properties": {
-                "schema_version": {"const": "slot-groove-target/1"},
-                "nominal_deg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
-                "expected_quadrant": {"enum": ["upper_left", "upper_right", "lower_left", "lower_right"]},
-                "physical_datum_definition_id": {"type": ["string", "null"], "minLength": 1},
-                "angle_convention_id": {"type": ["string", "null"], "minLength": 1}
+                "schema_version": {"const": "single-real-groove-pose-config/1"},
+                "output_schema_version": {"const": "slot-single-real-groove-pose/1"},
+                "image_angle_schema_version": {"const": "slot-groove-image-angle/1"},
+                "expected_accepted_groove_count": {"const": 1},
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["schema_version", "nominal_deg", "expected_quadrant", "physical_datum_definition_id", "angle_convention_id"],
+                  "properties": {
+                    "schema_version": {"const": "slot-groove-target/1"},
+                    "nominal_deg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+                    "expected_quadrant": {"enum": ["upper_left", "upper_right", "lower_left", "lower_right"]},
+                    "physical_datum_definition_id": {"type": ["string", "null"], "minLength": 1},
+                    "angle_convention_id": {"type": ["string", "null"], "minLength": 1}
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "output_schema_version", "image_angle_schema_version", "datum_angle_schema_version", "expected_accepted_groove_count", "target"],
+              "properties": {
+                "schema_version": {"const": "single-real-groove-pose-config/2"},
+                "output_schema_version": {"const": "slot-single-real-groove-pose/2"},
+                "image_angle_schema_version": {"const": "slot-groove-image-angle/2"},
+                "datum_angle_schema_version": {"const": "slot-groove-y-down-angle/1"},
+                "expected_accepted_groove_count": {"const": 1},
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["schema_version", "nominal_deg", "tolerance_deg", "accepted_min_deg", "accepted_max_deg", "required_horizontal_position", "required_vertical_position", "physical_datum_definition_id", "angle_convention_id"],
+                  "properties": {
+                    "schema_version": {"const": "slot-groove-target/2"},
+                    "nominal_deg": {"const": 85.0},
+                    "tolerance_deg": {"const": 5.0},
+                    "accepted_min_deg": {"const": 80.0},
+                    "accepted_max_deg": {"const": 90.0},
+                    "required_horizontal_position": {"const": "left"},
+                    "required_vertical_position": {"const": "lower_or_axis"},
+                    "physical_datum_definition_id": {"type": "string", "minLength": 1},
+                    "angle_convention_id": {"type": "string", "minLength": 1}
+                  }
+                }
               }
             }
+          ]
+        },
+        "groove_refinement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["threshold_version", "radial_inset_min_px", "radial_inset_max_px", "radial_sample_count", "tangential_search_margin_deg", "tangential_sample_step_px", "contrast_inner_offset_px", "contrast_outer_offset_px", "min_side_points", "min_edge_contrast", "min_edge_gradient_per_px", "max_line_residual_p95_px", "max_intersection_coarse_delta_deg", "allow_endpoint_reversal"],
+          "properties": {
+            "threshold_version": {"type": "string", "minLength": 1},
+            "radial_inset_min_px": {"type": "number", "exclusiveMinimum": 0},
+            "radial_inset_max_px": {"type": "number", "exclusiveMinimum": 0},
+            "radial_sample_count": {"type": "integer", "minimum": 3},
+            "tangential_search_margin_deg": {"type": "number", "exclusiveMinimum": 0},
+            "tangential_sample_step_px": {"type": "number", "exclusiveMinimum": 0},
+            "contrast_inner_offset_px": {"type": "number", "exclusiveMinimum": 0},
+            "contrast_outer_offset_px": {"type": "number", "exclusiveMinimum": 0},
+            "min_side_points": {"type": "integer", "minimum": 3},
+            "min_edge_contrast": {"type": "number", "exclusiveMinimum": 0},
+            "min_edge_gradient_per_px": {"type": "number", "exclusiveMinimum": 0},
+            "max_line_residual_p95_px": {"type": "number", "exclusiveMinimum": 0},
+            "max_intersection_coarse_delta_deg": {"type": "number", "exclusiveMinimum": 0},
+            "allow_endpoint_reversal": {"type": "boolean"}
           }
         },
         "physical_outer_circle": {

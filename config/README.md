@@ -23,8 +23,11 @@
   局部金属对比、左右边缘、轮廓连续性、宽度变化和中心漂移生成`grooveCandidates`；
   角色分配只消费后者。门槛缺省时使用版本化安全默认，但正式验收前仍须冻结配置和原图标签。
 - `single_real_groove`复用同一物理外圆和`groove_recognition`，但固定
-  `single_groove_pose.expected_accepted_groove_count=1`；恰好一个槽输出版本化图像方位，0个失败、
-  多个歧义，不运行datum/target双角色分配，也不自动成为机械纠偏。
+  `single_groove_pose.expected_accepted_groove_count=1`；v1只输出旧图像方位，v2在唯一槽通过后使用
+  `groove_refinement`密集双线性采样、亚像素边缘、稳健侧壁线和外圆交点，输出Y下半轴有符号角、
+  左下位置门和`85°±5°`判定。0个/多个槽或任一侧精修失败均不回退到粗角度栅格。
+- 半径约1646 px时，理想圆周`1 px`弧长约为`0.0348°`；这是分辨率预算，不是生产准确率。
+  生产精度必须用原始BMP人工拟合参考、独立复核及冻结validation/acceptance split实测。
 - `mm_per_px`为统一保留字段；纯角度输出不使用。`ANGLE_PENDING.limit=null`表示只统计、不判定。
 
 Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，

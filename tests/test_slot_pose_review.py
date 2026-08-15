@@ -68,9 +68,24 @@ class SlotPoseReviewTests(unittest.TestCase):
                          "endDeg": 94.0, "wrapsBoundary": False},
                     ],
                     "singleGroovePose": {
-                        "schemaVersion": "slot-single-real-groove-pose/1",
+                        "schemaVersion": "slot-single-real-groove-pose/2",
                         "status": "accepted", "geometryValid": True,
-                        "imageMeasurement": {"azimuthDeg": 5.0, "quadrant": "upper_right"},
+                        "imageMeasurement": {"azimuthDeg": 5.0, "quadrant": "lower_left"},
+                        "datumMeasurement": {
+                            "measuredFromPositiveYClockwiseDeg": 85.0,
+                            "position": {"horizontal": "left", "vertical": "lower", "requiredRegionPassed": True},
+                        },
+                        "targetAssessment": {
+                            "status": "EVALUATED", "toleranceStatus": "PASS",
+                            "positionGatePassed": True, "angleTolerancePassed": True,
+                            "imageFrameCorrectionDeg": 0.0, "mechanicalCorrectionDeg": None,
+                            "blockers": ["PLC_MAPPING_UNCONFIRMED"],
+                        },
+                    },
+                    "grooveRefinement": {
+                        "status": "accepted", "openingEndpointProfileDeg": [170.0, 180.0],
+                        "openingMidpointProfileDeg": 175.0,
+                        "outerCircleIntersections": [{"x": 30.0, "y": 55.0}, {"x": 25.0, "y": 50.0}],
                     },
                     "roleAssignment": {
                         "unique": True,
@@ -105,6 +120,9 @@ class SlotPoseReviewTests(unittest.TestCase):
             self.assertEqual(1, len(record["grooveCandidates"]))
             self.assertTrue(record["singleGroovePose"]["geometryValid"])
             self.assertEqual(5.0, record["singleGroovePose"]["imageMeasurement"]["azimuthDeg"])
+            self.assertEqual(85.0, record["yDownTargetDiagnostic"]["measuredDeg"])
+            self.assertEqual("PASS", record["yDownTargetDiagnostic"]["toleranceStatus"])
+            self.assertEqual("accepted", record["grooveRefinement"]["status"])
             self.assertNotIn(str(root), json.dumps(summary))
             self.assertTrue((output / "overlays/0001.jpg").is_file())
             self.assertTrue((output / "contact-sheet.jpg").is_file())
@@ -114,6 +132,7 @@ class SlotPoseReviewTests(unittest.TestCase):
             failures = (output / "failures.csv").read_text(encoding="utf-8")
             self.assertIn("nested/frame.jpg", failures)
             self.assertIn("DATUM_DEFINITION_UNCONFIRMED", failures)
+            self.assertIn("measured_y_down_deg", failures)
 
 
 if __name__ == "__main__":

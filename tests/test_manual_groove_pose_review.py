@@ -14,6 +14,7 @@ from PIL import Image
 from tools.review_labelme_groove_pose import (
     DEFAULT_REVIEW_CONFIG,
     analyze_manual_groove_geometry,
+    assess_confirmed_y_down_target,
     assess_target,
     review_labelme_groove_pose,
 )
@@ -141,6 +142,57 @@ class ManualGrooveGeometryTests(unittest.TestCase):
         self.assertAlmostEqual(-3.0, comparable["signedMeasurementMinusTargetDeg"])
         self.assertAlmostEqual(3.0, comparable["absoluteDeviationDeg"])
         self.assertIsNone(comparable["mechanicalCorrectionDeg"])
+
+    def test_confirmed_y_down_target_reuses_runtime_v2_semantics(self):
+        result = self._analyze(groove=_boundary(start=255.0, end=275.0))
+        diagnostic = result["yDownTargetDiagnostic"]
+        self.assertEqual("manual-groove-y-down-target-diagnostic/1", diagnostic["schemaVersion"])
+        self.assertFalse(diagnostic["runtimeInputAllowed"])
+        self.assertEqual(
+            "manual_boundary_endpoints_offline_only",
+            diagnostic["datumMeasurement"]["grooveOpening"]["midpointSource"],
+        )
+        self.assertEqual("manual-groove-image-angle/1", diagnostic["imageMeasurement"]["schemaVersion"])
+        self.assertEqual("manual-groove-y-down-angle/1", diagnostic["datumMeasurement"]["schemaVersion"])
+        self.assertEqual(
+            "manual_fitted_outer_circle_center_offline_only",
+            diagnostic["datumMeasurement"]["coordinateConvention"]["origin"],
+        )
+        self.assertAlmostEqual(
+            85.0,
+            diagnostic["datumMeasurement"]["measuredFromPositiveYClockwiseDeg"],
+            places=9,
+        )
+        assessment = diagnostic["targetAssessment"]
+        self.assertEqual("PASS", assessment["toleranceStatus"])
+        self.assertTrue(assessment["positionGatePassed"])
+        self.assertTrue(assessment["angleTolerancePassed"])
+        self.assertIsNone(assessment["mechanicalCorrectionDeg"])
+        self.assertEqual(["PLC_MAPPING_UNCONFIRMED"], assessment["blockers"])
+
+        direct = assess_confirmed_y_down_target(
+            [255.0, 275.0], (250.0, 250.0), 180.0, geometry_accepted=True,
+        )
+        self.assertAlmostEqual(
+            diagnostic["datumMeasurement"]["measuredFromPositiveYClockwiseDeg"],
+            direct["datumMeasurement"]["measuredFromPositiveYClockwiseDeg"],
+            places=9,
+        )
+        self.assertEqual(
+            diagnostic["targetAssessment"]["toleranceStatus"],
+            direct["targetAssessment"]["toleranceStatus"],
+        )
+
+    def test_confirmed_y_down_target_rejects_wrong_region_and_rejected_geometry(self):
+        right_lower = self._analyze(groove=_boundary(start=85.0, end=105.0))
+        self.assertEqual("FAIL", right_lower["yDownTargetDiagnostic"]["targetAssessment"]["toleranceStatus"])
+        self.assertFalse(right_lower["yDownTargetDiagnostic"]["targetAssessment"]["positionGatePassed"])
+
+        shadow = self._analyze(groove=_boundary(depth=2.0))
+        diagnostic = shadow["yDownTargetDiagnostic"]
+        self.assertEqual("failed", diagnostic["status"])
+        self.assertIsNone(diagnostic["datumMeasurement"])
+        self.assertEqual("NOT_EVALUATED", diagnostic["targetAssessment"]["status"])
 
     def test_manual_truth_module_is_not_imported_by_runtime(self):
         for relative in ("algorithms/slot_pose/main.py", "algorithms/slot_pose/legacy_adapter.py"):

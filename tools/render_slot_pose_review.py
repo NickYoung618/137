@@ -118,6 +118,21 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
     raw_candidates = diagnostics.get("rawCandidates") or diagnostics.get("candidates") or []
     groove_recognition = diagnostics.get("grooveRecognition") or {}
     single_groove_pose = diagnostics.get("singleGroovePose")
+    groove_refinement = diagnostics.get("grooveRefinement")
+    datum_measurement = (single_groove_pose or {}).get("datumMeasurement") or {}
+    target_assessment = (single_groove_pose or {}).get("targetAssessment") or {}
+    position = datum_measurement.get("position") or {}
+    y_down_target = {
+        "measuredDeg": datum_measurement.get("measuredFromPositiveYClockwiseDeg"),
+        "horizontalPosition": position.get("horizontal"),
+        "verticalPosition": position.get("vertical"),
+        "positionGatePassed": target_assessment.get("positionGatePassed"),
+        "angleTolerancePassed": target_assessment.get("angleTolerancePassed"),
+        "toleranceStatus": target_assessment.get("toleranceStatus"),
+        "imageFrameCorrectionDeg": target_assessment.get("imageFrameCorrectionDeg"),
+        "mechanicalCorrectionDeg": target_assessment.get("mechanicalCorrectionDeg"),
+        "plcBlocked": "PLC_MAPPING_UNCONFIRMED" in (target_assessment.get("blockers") or []),
+    }
     return {
         "imageId": manifest_item["imageId"],
         "relativePath": manifest_item["relativePath"],
@@ -136,7 +151,9 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "rawCandidates": raw_candidates,
         "grooveRecognition": groove_recognition,
         "grooveCandidates": diagnostics.get("grooveCandidates") or [],
+        "grooveRefinement": groove_refinement,
         "singleGroovePose": single_groove_pose,
+        "yDownTargetDiagnostic": y_down_target,
         "roleSuggestion": {
             "status": role_status,
             "selectedRoleCandidateIds": selected,
@@ -212,6 +229,23 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
                 (axis_from["x"], axis_from["y"], axis_to["x"], axis_to["y"]),
                 fill="#ff5dce", width=width * 2,
             )
+        refinement = record.get("grooveRefinement") or {}
+        if refinement.get("status") == "accepted":
+            for side_name, color in (("startSide", "#38d66b"), ("endSide", "#ffe14f")):
+                for point in (refinement.get(side_name) or {}).get("points") or []:
+                    x, y = map(float, point)
+                    point_radius = max(2, width)
+                    draw.ellipse((x - point_radius, y - point_radius, x + point_radius, y + point_radius), fill=color)
+            for point in refinement.get("outerCircleIntersections") or []:
+                x, y = float(point["x"]), float(point["y"])
+                point_radius = max(6, width * 2)
+                draw.ellipse((x - point_radius, y - point_radius, x + point_radius, y + point_radius), outline="#ffffff", width=width)
+        target_diagnostic = record.get("yDownTargetDiagnostic") or {}
+        if target_diagnostic.get("measuredDeg") is not None:
+            datum_endpoint = _point(center, radius, 90.0)
+            target_endpoint = _point(center, radius, 175.0)
+            draw.line((center, datum_endpoint), fill="#ffe14f", width=width)
+            draw.line((center, target_endpoint), fill="#9b7bff", width=width)
     error = record["result"].get("errorCode") or "NONE"
     count = len(record.get("candidates") or [])
     groove_count = len(record.get("grooveCandidates") or [])
@@ -220,13 +254,18 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
     single_measurement = single_pose.get("imageMeasurement") or {}
     image_azimuth = single_measurement.get("azimuthDeg")
     single_text = "" if image_azimuth is None else f" image-up-cw={float(image_azimuth):.2f}deg"
+    target_diagnostic = record.get("yDownTargetDiagnostic") or {}
+    measured_y = target_diagnostic.get("measuredDeg")
+    target_text = "" if measured_y is None else (
+        f" y-down={float(measured_y):.2f}deg target={target_diagnostic.get('toleranceStatus')}"
+    )
     draw.text(
         (18, 12),
-        f"{record['imageId']}  raw={count} grooves={groove_count}{single_text}  error={error}",
+        f"{record['imageId']}  raw={count} grooves={groove_count}{single_text}{target_text}  error={error}",
         fill="white", font=font,
     )
     draw.text(
-        (18, 56), "orange dashed=alignment prior; cyan solid=gyj physical-circle result",
+        (18, 56), "orange dashed=alignment; cyan=gyj circle; green/yellow=subpixel sides; purple=+85 target",
         fill="white", font=font,
     )
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
@@ -289,6 +328,19 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
     datum_blocked_count = sum(
         1 for record in records if record["result"]["errorCode"] == "DATUM_DEFINITION_UNCONFIRMED"
     )
+    refinement_statuses = Counter(
+        ((record.get("grooveRefinement") or {}).get("status") or "not_available") for record in records
+    )
+    target_statuses = Counter(
+        ((record.get("yDownTargetDiagnostic") or {}).get("toleranceStatus") or "not_available")
+        for record in records
+    )
+    plc_blocked_count = sum(
+        (record.get("yDownTargetDiagnostic") or {}).get("plcBlocked") is True for record in records
+    )
+    physical_circle_accepted_count = sum(
+        (record.get("physicalOuterCircle") or {}).get("status") == "accepted" for record in records
+    )
     summary = {
         "schemaVersion": "slot-pose-review/1",
         "datasetId": dataset_id,
@@ -299,6 +351,10 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         "singleGrooveGeometryValidCount": single_valid_count,
         "imageGrooveAzimuthAvailableCount": image_azimuth_count,
         "mechanicalGuidanceBlockedByDatumCount": datum_blocked_count,
+        "grooveRefinementStatusCounts": dict(sorted(refinement_statuses.items())),
+        "targetToleranceStatusCounts": dict(sorted(target_statuses.items())),
+        "plcGuidanceBlockedCount": plc_blocked_count,
+        "physicalOuterCircleAcceptedCount": physical_circle_accepted_count,
         "records": records,
     }
     write_json(output_dir / "review.json", summary)
@@ -337,7 +393,10 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
     with (output_dir / "failures.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
             "image_id", "relative_path", "error_code", "error_stage", "candidate_count", "groove_count",
-            "single_groove_status", "image_azimuth_deg", "role_status",
+            "single_groove_status", "image_azimuth_deg", "measured_y_down_deg",
+            "position_gate_passed", "angle_tolerance_passed", "tolerance_status",
+            "image_frame_correction_deg", "groove_refinement_status", "groove_refinement_failures",
+            "plc_blocked", "role_status",
         ])
         writer.writeheader()
         for record in records:
@@ -354,6 +413,16 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                 "image_azimuth_deg": (
                     ((record.get("singleGroovePose") or {}).get("imageMeasurement") or {}).get("azimuthDeg")
                 ),
+                "measured_y_down_deg": record["yDownTargetDiagnostic"].get("measuredDeg"),
+                "position_gate_passed": record["yDownTargetDiagnostic"].get("positionGatePassed"),
+                "angle_tolerance_passed": record["yDownTargetDiagnostic"].get("angleTolerancePassed"),
+                "tolerance_status": record["yDownTargetDiagnostic"].get("toleranceStatus"),
+                "image_frame_correction_deg": record["yDownTargetDiagnostic"].get("imageFrameCorrectionDeg"),
+                "groove_refinement_status": (record.get("grooveRefinement") or {}).get("status"),
+                "groove_refinement_failures": "|".join(
+                    (record.get("grooveRefinement") or {}).get("failedChecks") or []
+                ),
+                "plc_blocked": record["yDownTargetDiagnostic"].get("plcBlocked"),
                 "role_status": record["roleSuggestion"]["status"],
             })
     render_contact_sheet(overlays, output_dir / "contact-sheet.jpg")

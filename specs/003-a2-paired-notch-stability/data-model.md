@@ -74,12 +74,44 @@
 
 ## SingleRealGroovePose
 
-`SingleRealGroovePose`使用`slot-single-real-groove-pose/1`，只在显式`single_real_groove`模式下生成。
+`SingleRealGroovePose`使用显式v1或v2版本，只在显式`single_real_groove`模式下生成。
 它要求`AcceptedGrooveCandidate`恰好1个；0个为`failed`，多于1个为`ambiguous`。成功时记录
 `real_groove`唯一候选、物理外圆上的槽中心点、圆心到该点的径向轴、图像向上0°/顺时针正的绝对方位和象限。
 
-`geometryValid`只表示单槽图像几何有效，不表示机械引导有效。`targetAssessment`独立保存85°/左下目标，
-物理datum及角度用途未确认时固定`NOT_EVALUATED`，偏差和机械纠偏为空；顶层result v2继续fail-closed。
+v1保留原`NOT_EVALUATED`语义。v2将粗候选`startDeg/endDeg`仅作局部搜索初值，槽口测量点必须来自
+两条亚像素侧壁拟合线与物理外圆交点的最短顺时针区间中点；新增`YDownDatumMeasurement`和
+`TargetAssessmentV2`。`geometryValid`只表示单槽图像几何有效；是否合格由v2位置门和角度门另行决定。
+
+## YDownDatumMeasurement
+
+| Field | Type | Rule |
+|---|---|---|
+| schemaVersion | const | `slot-groove-y-down-angle/1` |
+| center, grooveOpeningPoint | point | 物理外圆圆心与槽口环形中点在圆周上的点 |
+| grooveOpening.startProfileDeg/endProfileDeg/midpointProfileDeg | number | `[0,360)`，追溯两侧边界与环形中点 |
+| grooveOpening.midpointSource | string | 运行时v2固定`subpixel_sidewall_outer_circle_intersections` |
+| offset.dx, offset.dy | number | `grooveOpeningPoint-center`，图像向右/向下分别为正 |
+| position.horizontal | enum | `left` / `right` / `axis` |
+| position.vertical | enum | `upper` / `lower` / `axis` |
+| position.requiredRegionPassed | boolean | `left && (lower || axis)` |
+| measuredFromPositiveYClockwiseDeg | number | `[-180,180)`，等价于`atan2(-dx,dy)`，从Y下半轴顺时针为正 |
+
+## TargetAssessmentV2
+
+`targetContract.schemaVersion=slot-groove-target/2`，固定datum定义ID、角约定ID、目标`85°`、公差`5°`、左侧和下方/水平轴位置门。
+
+| Field | Type | Rule |
+|---|---|---|
+| status | enum | 几何有效时`EVALUATED`，否则`NOT_EVALUATED` |
+| positionGatePassed | boolean/null | `dx<0 && dy>=0`；几何无效时为空 |
+| angleTolerancePassed | boolean/null | `80<=measured<=90`；几何无效时为空 |
+| toleranceStatus | enum | `PASS` / `FAIL` / `NOT_EVALUATED`；PASS需两个门同时通过 |
+| signedMeasurementMinusTargetDeg | number/null | `wrap(measured-85)` |
+| absoluteDeviationDeg | number/null | 有向偏差绝对值 |
+| imageFrameCorrectionDeg | number/null | `wrap(85-measured)`；正顺时针、负逆时针 |
+| mechanicalCorrectionDeg | number/null | B-005映射确认前为空 |
+| plcCommandAuthoritative | boolean | B-005未确认时false |
+| blockers | string list | 只列出未关闭的下游权限/数据门，不将FAIL伪装成检测失败 |
 
 ## RoleRule
 
@@ -127,7 +159,50 @@
 | maxPolarPairDisagreementDeg | positive number | paired rotation与polar rotation的最大环形差 |
 | grooveRecognition | object | 单帧径向/边缘/轮廓门槛、歧义带及阈值版本 |
 | roleAssignment | object | 角色窗口、datum定义、分配差距、对置误差及图纸标注 |
-| singleGroovePose | object | 固定恰好1个接受槽、图像角/目标契约版本和独立目标信息 |
+| singleGroovePose | object | 固定恰好1个接受槽；v1为原未评定契约，v2增加Y下半轴实测、左下位置门、85±5公差和图像纠偏 |
+| grooveRefinement | object | v2唯一真槽的左右亚像素侧壁、稳健直线、外圆交点、残差和精修状态 |
+
+## ManualCircleReference
+
+| Field | Type | Rule |
+|---|---|---|
+| status | enum | 单人样本为`DEVELOPMENT_REFERENCE`；独立复核和规程冻结前不得升级为验收truth |
+| source.imageSha256 | SHA-256 | 精确原始图指纹；任何同图比较都必须匹配 |
+| source.annotationSha256 | SHA-256 | 不可变LabelMe输入指纹 |
+| fit.sourceSha256 | SHA-256 | 锁定gyj拟圆源指纹 |
+| fit.pointCount | integer | 实际有限点数，不固定77/134 |
+| fit.angularCoverageDeg | number | 可见弧支持角 |
+| fit.circle | point + radius | robust/geometric拟合圆 |
+| fit.residualPx | summary | 中位/P95/max径向残差 |
+| runtimeInputAllowed | boolean | 恒为`false` |
+
+## SubpixelGrooveOpening
+
+| Field | Type | Rule |
+|---|---|---|
+| schemaVersion | string | `slot-groove-subpixel-opening/1` |
+| status | enum | `accepted` / `failed`；failed时不得产生v2测量 |
+| coarseCandidateId | string | 只追溯搜索初值，不作为几何真值 |
+| startSide/endSide | object | 支持点数、对比、梯度、稳健线、median/P95/max线残差 |
+| outerCircleIntersections | two points/null | 每侧选择邻近粗边界的唯一圆交点 |
+| intersectionCircleResidualPx | two numbers/null | 数值自检；应接近浮点误差 |
+| openingEndpointProfileDeg | two numbers/null | 从圆心向右为0°、图像顺时针增大 |
+| openingMidpointProfileDeg | number/null | 两交点环形中点；v2业务角唯一入口 |
+| failedChecks | string list | 支持不足、弱边、线残差、无/多义交点或角邻近失败 |
+
+## AutomaticVsReferenceComparison
+
+| Field | Type | Rule |
+|---|---|---|
+| schemaVersion | string | `slot-pose-reference-comparison/1` |
+| status | enum | `COMPARED`；任何前置条件不满足则CLI失败，不生成伪比较 |
+| imageSha256 | SHA-256 | 人工和自动记录必须一致 |
+| circleDelta | object | dx、dy、distance、有符号/绝对半径差及归一化差 |
+| centerErrorAngularUpperBoundDeg | number | `asin(min(1,centerDistance/referenceRadius))`的度数 |
+| manualOpeningMidpointDeg | number | 人工槽边界两端的环形中点 |
+| automaticOpeningMidpointDeg | number | 自动两侧壁圆交点的环形中点 |
+| openingMidpointCircularDeltaDeg | number | 自动减人工的最短有向环形差 |
+| productionAccuracyClaimed | boolean | 恒为`false`，直至冻结验收集和B-004阈值 |
 
 ## A2ManifestRecord
 
@@ -162,10 +237,10 @@ false-positive数/率、错误码和耗时，不含伪造的0度。
 
 `received → alignment_circle_located → physical_outer_circle_refined → profile_extracted → raw_candidates_extracted → grooves_recognized`；
 `multi_notch_roles`继续到`roles_assessed → diagnostic_ready`，`single_real_groove`在恰好1个接受槽时进入
-`single_image_pose_ready`。两条路径都只有在机械门全部确认后才能进入`pose_computed → succeeded`。
-任一阶段可进入`failed`终态；单槽图像姿态成功但datum未确认时以`single_image_pose_ready + mechanical_blocked`
-结束，正式角仍为空。
+`single_image_pose_ready`。v2继续到`groove_opening_refined → y_down_angle_measured → target_assessed`；精修失败进入
+`groove_refinement_failed`且不产生测量，精修成功后无论公差PASS/FAIL都保留成功的检测与测量状态。
+只有B-005下游权限全部确认后才能进入`plc_guidance_authorized`；否则以`target_assessed + plc_blocked`结束，顶层正式角仍为空。
 
 人工审阅旁路为`external_annotation_received → open_boundary_validated → locked_circle_fit →
-groove_geometry_assessed → image_measurement_ready → target_not_evaluated/comparable`；该旁路不连接
+development_reference_ready → same_image_runtime_compared → groove_geometry_assessed → image_measurement_ready → target_assessed`；该旁路不连接
 `pose_computed`，也不改变运行时状态机。

@@ -1,3 +1,3 @@
 """Fail-closed slot pose algorithm skeleton."""
 
-__version__ = "0.4.1"
+__version__ = "0.9.0"

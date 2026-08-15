@@ -30,6 +30,11 @@ from algorithms.slot_pose.angular_profile import (
 )
 from algorithms.slot_pose.contract import load_config, sha256_file
 from algorithms.slot_pose.legacy_adapter import LegacyAEndFaceAdapter
+from algorithms.slot_pose.single_groove_pose import (
+    DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2,
+    assess_y_down_target,
+    measure_y_down_opening,
+)
 
 
 SCHEMA_VERSION = "manual-groove-pose-review/1"
@@ -181,6 +186,46 @@ def assess_target(
     }
 
 
+def assess_confirmed_y_down_target(
+    endpoint_headings_image_deg: list[float],
+    center: tuple[float, float],
+    radius: float,
+    *,
+    geometry_accepted: bool,
+) -> dict[str, Any]:
+    """Apply the runtime v2 convention to manual geometry without making it runtime truth."""
+    measurement = None
+    datum = None
+    if geometry_accepted:
+        profile = [wrap_360_deg(float(value) - 90.0) for value in endpoint_headings_image_deg]
+        forward_span = (profile[1] - profile[0]) % 360.0
+        start, end = (profile[0], profile[1]) if 0.0 < forward_span < 180.0 else (profile[1], profile[0])
+        measurement, datum = measure_y_down_opening(
+            center,
+            radius,
+            start,
+            end,
+            midpoint_source="manual_boundary_endpoints_offline_only",
+            origin="manual_fitted_outer_circle_center_offline_only",
+        )
+        measurement["schemaVersion"] = "manual-groove-image-angle/1"
+        datum["schemaVersion"] = "manual-groove-y-down-angle/1"
+    target = copy.deepcopy(DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2["target"])
+    return {
+        "schemaVersion": "manual-groove-y-down-target-diagnostic/1",
+        "status": "accepted" if geometry_accepted else "failed",
+        "geometryValid": geometry_accepted,
+        "runtimeInputAllowed": False,
+        "imageMeasurement": measurement,
+        "datumMeasurement": datum,
+        "targetAssessment": assess_y_down_target(
+            target,
+            datum,
+            plc_mapping_confirmed=False,
+        ),
+    }
+
+
 def analyze_manual_groove_geometry(
     raw_circle_points: Any,
     raw_groove_points: Any,
@@ -289,6 +334,12 @@ def analyze_manual_groove_geometry(
         "quadrant": quadrant,
         "geometryMeasurementValid": True,
     }
+    y_down_target = assess_confirmed_y_down_target(
+        endpoint_headings,
+        center,
+        refined[2],
+        geometry_accepted=accepted,
+    )
     return {
         "algorithm": {
             "name": "locked-gyj-manual-groove-review",
@@ -326,6 +377,7 @@ def analyze_manual_groove_geometry(
         },
         "measurement": measurement,
         "targetAssessment": assess_target(opening_center if accepted else None, quadrant, target_contract),
+        "yDownTargetDiagnostic": y_down_target,
     }
 
 
@@ -422,10 +474,10 @@ def _draw_preview(
         measured = f"measured={measurement['openingCenterAzimuthImageDeg']:.3f}deg {measurement['quadrant']}"
     else:
         measured = "measured=invalid"
-    target = analysis["targetAssessment"]
+    target = analysis["yDownTargetDiagnostic"]["targetAssessment"]
     target_text = (
-        f"target={target['targetContract']['nominalDeg']:.3f}deg "
-        f"{target['targetContract']['expectedQuadrant']} status={target['status']}"
+        f"Y-down target={target['targetContract']['nominalDeg']:.3f}+/-"
+        f"{target['targetContract']['toleranceDeg']:.3f}deg status={target['toleranceStatus']}"
     )
     header_height = max(130, canvas.height // 20)
     draw.rectangle((0, 0, min(canvas.width, 3100), header_height), fill="#111111")
@@ -538,7 +590,7 @@ def review_labelme_groove_pose(
         "limitations": [
             "This manual annotation is external development evidence and is not consumed by runtime detection.",
             "Geometry acceptance can reject non-inward shadow contours but does not turn one sample into production accuracy.",
-            "The physical datum and target-angle mapping are unconfirmed; mechanical correction remains null.",
+            "The image Y-down target is diagnostic; PLC scaling, direction and transport remain unconfirmed, so mechanical correction remains null.",
         ],
     }
     report_path = report_path.resolve()

@@ -17,6 +17,12 @@
 - `targetAssessment.targetContract.schemaVersion=slot-groove-target/1`：目标角、目标象限、物理datum定义ID和目标角约定ID；
 - `targetAssessment.mechanicalCorrectionDeg`：本工具固定为`null`。
 
-物理datum定义ID或目标角约定ID为空时，目标状态必须为`NOT_EVALUATED`，偏差为空。目标左下85°
-不得覆盖当前图像实测右上约21.87°。派生语义LabelMe副本、报告和预览必须在Git工作树外；副本
+`yDownTargetDiagnostic.schemaVersion=manual-groove-y-down-target-diagnostic/1`使用与运行时v2相同的
+Y下半轴数学约定，但`midpointSource=manual_boundary_endpoints_offline_only`，不得伪装成自动亚像素结果。
+其角度/基准子契约分别为`manual-groove-image-angle/1`和`manual-groove-y-down-angle/1`，原点明确为
+`manual_fitted_outer_circle_center_offline_only`。
+目标固定为`+85°±5°`，同时检查`dx<0,dy>=0`。报告实测角、位置门、角度门、`PASS|FAIL`、
+有向偏差和图像纠偏建议，`runtimeInputAllowed=false`且PLC纠偏仍为`null`。
+旧v1物理datum定义ID或目标角约定ID为空时，目标状态继续为`NOT_EVALUATED`，偏差为空。目标左下85°
+不得覆盖任何不合格的当前实测值。派生语义LabelMe副本、报告和预览必须在Git工作树外；副本
 必须标记`runtime_input_allowed=false`、`formal_truth=false`，原始标注不得覆盖。

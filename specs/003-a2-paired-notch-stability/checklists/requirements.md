@@ -1,7 +1,7 @@
 # Specification Quality Checklist: A2双缺口槽姿态稳定检测与真实数据验收
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-08-14
+**Created**: 2026-08-14 | **Revalidated**: 2026-08-15
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- 16/16项通过；已复核2026-08-14图纸视频证据纠正。本清单不表示B-001至B-008已关闭。
-- 未确认的生产决策以显式BLOCKED和运行fail-closed表达，不是算法默认值。
+- 16/16项通过；已复核2026-08-15单真实槽、Y轴下半轴datum、左下位置硬门、`+85°±5°`及顺/逆时针契约。
+- B-001/B-003/B-006/B-007/B-008已关闭；B-002真实数据分组、B-004精度/节拍验收门槛和B-005 PLC契约仍显式BLOCKED。

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-pose-reference-comparison/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "referenceStatus", "source", "manualReference", "automatic", "circleDelta", "grooveOpeningDelta", "resolutionBudget", "productionAccuracyClaimed", "runtimeInputAllowed", "limitations"],
+  "properties": {
+    "schemaVersion": {"const": "slot-pose-reference-comparison/1"},
+    "status": {"const": "COMPARED"},
+    "referenceStatus": {"const": "DEVELOPMENT_REFERENCE"},
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["imageSha256", "annotationSha256", "circleFitSourceSha256", "manualRecordSha256", "runtimeRecordSha256"],
+      "properties": {
+        "imageSha256": {"$ref": "#/$defs/sha256"}, "annotationSha256": {"$ref": "#/$defs/sha256"},
+        "circleFitSourceSha256": {"$ref": "#/$defs/sha256"},
+        "manualRecordSha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+        "runtimeRecordSha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]}
+      }
+    },
+    "manualReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pointCount", "angularCoverageDeg", "circle", "radialResidualPx"],
+      "properties": {
+        "pointCount": {"type": "integer", "minimum": 8},
+        "angularCoverageDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 360},
+        "circle": {"$ref": "#/$defs/circle"}, "radialResidualPx": {"$ref": "#/$defs/summary"}
+      }
+    },
+    "automatic": {
+      "type": "object", "additionalProperties": false,
+      "required": ["circle", "grooveEndpointProfileDeg"],
+      "properties": {
+        "circle": {"$ref": "#/$defs/circle"},
+        "grooveEndpointProfileDeg": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "exclusiveMaximum": 360}}
+      }
+    },
+    "circleDelta": {
+      "type": "object", "additionalProperties": false,
+      "required": ["centerDxPx", "centerDyPx", "centerDistancePx", "centerDistanceRatio", "radiusSignedPx", "radiusAbsolutePx", "radiusSignedRatio", "centerErrorAngularUpperBoundDeg"],
+      "properties": {
+        "centerDxPx": {"type": "number"}, "centerDyPx": {"type": "number"},
+        "centerDistancePx": {"type": "number", "minimum": 0}, "centerDistanceRatio": {"type": "number", "minimum": 0},
+        "radiusSignedPx": {"type": "number"}, "radiusAbsolutePx": {"type": "number", "minimum": 0},
+        "radiusSignedRatio": {"type": "number"}, "centerErrorAngularUpperBoundDeg": {"type": "number", "minimum": 0, "maximum": 90}
+      }
+    },
+    "grooveOpeningDelta": {
+      "type": "object", "additionalProperties": false,
+      "required": ["manualImageUpClockwiseDeg", "automaticImageUpClockwiseDeg", "automaticMinusManualCircularDeg", "absoluteCircularDeg"],
+      "properties": {
+        "manualImageUpClockwiseDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "automaticImageUpClockwiseDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "automaticMinusManualCircularDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "absoluteCircularDeg": {"type": "number", "minimum": 0, "maximum": 180}
+      }
+    },
+    "resolutionBudget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["referenceRadiusPx", "theoreticalOnePixelArcDeg", "isProductionAccuracyEvidence"],
+      "properties": {
+        "referenceRadiusPx": {"type": "number", "exclusiveMinimum": 0},
+        "theoreticalOnePixelArcDeg": {"type": "number", "exclusiveMinimum": 0},
+        "isProductionAccuracyEvidence": {"const": false}
+      }
+    },
+    "productionAccuracyClaimed": {"const": false}, "runtimeInputAllowed": {"const": false},
+    "limitations": {"type": "array", "minItems": 3, "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "circle": {
+      "type": "object", "additionalProperties": false, "required": ["centerX", "centerY", "radiusPx"],
+      "properties": {"centerX": {"type": "number"}, "centerY": {"type": "number"}, "radiusPx": {"type": "number", "exclusiveMinimum": 0}}
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false, "required": ["median", "p95", "max"],
+      "properties": {"median": {"type": "number", "minimum": 0}, "p95": {"type": "number", "minimum": 0}, "max": {"type": "number", "minimum": 0}}
+    }
+  }
+}

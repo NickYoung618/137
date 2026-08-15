@@ -73,6 +73,28 @@
       "oneOf": [{"type": "null"}, {"$ref": "#/$defs/measurement"}]
     },
     "targetAssessment": {"$ref": "#/$defs/targetAssessment"},
+    "yDownTargetDiagnostic": {
+      "type": "object",
+      "required": ["schemaVersion", "status", "geometryValid", "runtimeInputAllowed", "imageMeasurement", "datumMeasurement", "targetAssessment"],
+      "properties": {
+        "schemaVersion": {"const": "manual-groove-y-down-target-diagnostic/1"},
+        "status": {"enum": ["accepted", "failed", "ambiguous"]},
+        "geometryValid": {"type": "boolean"},
+        "runtimeInputAllowed": {"const": false},
+        "imageMeasurement": {"type": ["object", "null"]},
+        "datumMeasurement": {"type": ["object", "null"]},
+        "targetAssessment": {
+          "type": "object",
+          "required": ["schemaVersion", "toleranceStatus", "mechanicalCorrectionDeg", "plcCommandAuthoritative"],
+          "properties": {
+            "schemaVersion": {"const": "slot-groove-target-assessment/2"},
+            "toleranceStatus": {"enum": ["PASS", "FAIL", "NOT_EVALUATED"]},
+            "mechanicalCorrectionDeg": {"type": ["number", "null"]},
+            "plcCommandAuthoritative": {"const": false}
+          }
+        }
+      }
+    },
     "artifacts": {
       "type": "object", "additionalProperties": false,
       "required": ["semanticCopyFile", "semanticCopySha256", "previewFile", "previewSha256"],

@@ -198,6 +198,29 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         record.get("result", {}).get("errorCode") == "DATUM_DEFINITION_UNCONFIRMED"
         for record in records
     )
+    refinements = [record.get("grooveRefinement") or {} for record in records]
+    refinement_status_counts = Counter(item.get("status") or "not_available" for item in refinements)
+    refinement_failures = Counter(
+        reason for item in refinements for reason in item.get("failedChecks") or []
+    )
+    datum_measurements = [pose.get("datumMeasurement") or {} for pose in single_poses]
+    y_down_angles = [
+        float(item["measuredFromPositiveYClockwiseDeg"])
+        for item in datum_measurements
+        if isinstance(item.get("measuredFromPositiveYClockwiseDeg"), (int, float))
+    ]
+    assessments = [pose.get("targetAssessment") or {} for pose in single_poses]
+    target_tolerance_statuses = Counter(
+        item.get("toleranceStatus") or "not_available" for item in assessments
+    )
+    position_pass_count = sum(item.get("positionGatePassed") is True for item in assessments)
+    angle_pass_count = sum(item.get("angleTolerancePassed") is True for item in assessments)
+    correction_count = sum(
+        isinstance(item.get("imageFrameCorrectionDeg"), (int, float)) for item in assessments
+    )
+    plc_blocked_count = sum(
+        "PLC_MAPPING_UNCONFIRMED" in (item.get("blockers") or []) for item in assessments
+    )
     role_status_counts = Counter(record.get("roleSuggestion", {}).get("status") or "not_available" for record in records)
     role_signatures = Counter(
         json.dumps(record.get("roleSuggestion", {}).get("selectedRoleCandidateIds"), sort_keys=True)
@@ -209,6 +232,14 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         1 for record in records
         if all(isinstance((record.get("face") or {}).get(key), (int, float)) for key in ("centerX", "centerY", "radiusPx"))
     )
+    physical_circle_count = sum(
+        (record.get("physicalOuterCircle") or {}).get("status") == "accepted" for record in records
+    )
+    physical_circle_failures = Counter(
+        reason
+        for record in records
+        for reason in (record.get("physicalOuterCircle") or {}).get("failedChecks") or []
+    )
     complete_ring_count = sum(1 for record in records if (record.get("angularProfile") or {}).get("completeRing") is True)
     candidate_extraction_count = sum(1 for record in records if record.get("candidateSummary") is not None)
     role_unique_count = sum(1 for record in records if record.get("roleSuggestion", {}).get("status") == "unique_diagnostic_hypothesis")
@@ -217,6 +248,11 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         "label": label,
         "imageCount": total,
         "circleEstimateAvailable": {"count": circle_count, "rate": circle_count / total if total else 0.0},
+        "alignmentCircleEstimateAvailable": {"count": circle_count, "rate": circle_count / total if total else 0.0},
+        "physicalOuterCircleAccepted": {
+            "count": physical_circle_count, "rate": physical_circle_count / total if total else 0.0,
+        },
+        "physicalOuterCircleFailureCounts": dict(sorted(physical_circle_failures.items())),
         "completeRingAccepted": {"count": complete_ring_count, "rate": complete_ring_count / total if total else 0.0},
         "candidateExtractionCompleted": {"count": candidate_extraction_count, "rate": candidate_extraction_count / total if total else 0.0},
         "candidateCountDistribution": {str(key): value for key, value in sorted(candidate_counts.items())},
@@ -242,6 +278,26 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
             "reason": "image bearings require confirmed condition/truth groups before cross-frame statistics",
         },
         "singleGrooveQuadrantCounts": dict(sorted(single_quadrants.items())),
+        "grooveRefinementStatusCounts": dict(sorted(refinement_status_counts.items())),
+        "grooveRefinementFailureCounts": dict(sorted(refinement_failures.items())),
+        "yDownDatumAngleAvailable": {
+            "count": len(y_down_angles), "rate": len(y_down_angles) / total if total else 0.0,
+            "unstratifiedRawAngleStatistics": "NOT_EVALUATED",
+            "reason": "different physical orientations require condition/truth groups before accuracy statistics",
+        },
+        "targetToleranceStatusCounts": dict(sorted(target_tolerance_statuses.items())),
+        "targetPositionGatePassed": {
+            "count": position_pass_count, "rate": position_pass_count / total if total else 0.0,
+        },
+        "targetAngleTolerancePassed": {
+            "count": angle_pass_count, "rate": angle_pass_count / total if total else 0.0,
+        },
+        "imageFrameCorrectionAvailable": {
+            "count": correction_count, "rate": correction_count / total if total else 0.0,
+        },
+        "plcGuidanceBlocked": {
+            "count": plc_blocked_count, "rate": plc_blocked_count / total if total else 0.0,
+        },
         "mechanicalGuidanceBlockedByDatum": {
             "count": datum_blocked_count,
             "rate": datum_blocked_count / total if total else 0.0,

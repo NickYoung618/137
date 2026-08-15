@@ -1,0 +1,170 @@
+{
+  "schemaVersion": "subpixel-y-down-v2-validation-evidence/1",
+  "createdAt": "2026-08-15",
+  "scope": "one external original-BMP manual development reference plus 25 external A2 JPEG diagnostic copies",
+  "algorithmVersion": "0.9.0",
+  "lockedReuse": {
+    "sourceSha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
+    "outerBoundaryFunctions": [
+      "outer_boundary_edge_point",
+      "bilinear_sample",
+      "parabolic_peak",
+      "fit_circle",
+      "robust_fit_circle",
+      "geometric_circle_fit"
+    ],
+    "copiedImplementation": false
+  },
+  "confirmedDiagnosticContract": {
+    "coordinateOrigin": "detected physical outer-circle center",
+    "xAxis": "image right",
+    "yAxis": "image down",
+    "datumRay": "positive Y down",
+    "positiveDirection": "clockwise",
+    "requiredRegion": "left and lower_or_axis",
+    "nominalDeg": 85.0,
+    "toleranceDeg": 5.0,
+    "acceptedIntervalDeg": [80.0, 90.0],
+    "plcMappingConfirmed": false,
+    "formalMechanicalOutputAllowed": false
+  },
+  "manualDevelopmentReference": {
+    "runtimeInputAllowed": false,
+    "productionAccuracyClaimed": false,
+    "annotationSha256": "5802c70662354399d097f3b04b2333a7d3249ac8bacbb162b98686038829dee4",
+    "imageSha256": "70c1251471b6f4ecf8d0ef20c989b8b8f7a9cab360b167e0112cd9b5073522a8",
+    "circlePointCount": 134,
+    "grooveBoundaryPointCount": 34,
+    "circleAngularCoverageDeg": 236.4326372977915,
+    "fittedCircle": {
+      "centerX": 2812.4125427331514,
+      "centerY": 1838.3947946983872,
+      "radiusPx": 1646.0803801455097,
+      "radialResidualPx": {
+        "median": 1.3505736426265003,
+        "p95": 3.6982381563546807,
+        "max": 8.271284811484747
+      }
+    },
+    "grooveOpening": {
+      "widthDeg": 23.656790233708506,
+      "imageUpClockwiseMidpointDeg": 21.880758063297044,
+      "yDownClockwiseSignedDeg": -158.1192419367029,
+      "position": "upper_right",
+      "targetToleranceStatus": "FAIL"
+    },
+    "interpretation": "This annotated instance is a current upper-right measurement, not a manufactured left-lower 85-degree target."
+  },
+  "sameImageAutomaticComparison": {
+    "status": "DEVELOPMENT_REFERENCE",
+    "automaticCircleMinusManual": {
+      "centerDxPx": -0.45302181289434884,
+      "centerDyPx": -2.459856829186265,
+      "centerDistancePx": 2.501224576692862,
+      "radiusSignedPx": -1.35266766114637,
+      "centerErrorAngularUpperBoundDeg": 0.0870611597921975
+    },
+    "automaticSubpixelOpening": {
+      "startProfileDeg": 280.0773315371146,
+      "endProfileDeg": 303.7172857358659,
+      "midpointProfileDeg": 291.89730863649027,
+      "imageUpClockwiseMidpointDeg": 21.897308636490266,
+      "automaticMinusManualCircularDeg": 0.0165505731932285
+    },
+    "theoreticalOnePixelArcDegAtReferenceRadius": 0.034807400783197176,
+    "isProductionAccuracyEvidence": false
+  },
+  "externalJpeg25": {
+    "directoryContentSummarySha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "datasetFingerprint": "fe7864df6557c9348e39bcc518c818f370e664faff8d7ec1d7f127e6998711fc",
+    "truthAvailable": false,
+    "developmentRoi": {
+      "physicalOuterCircleAccepted": 25,
+      "rawCandidateCountDistribution": {"3": 25},
+      "acceptedRealGrooveCountDistribution": {"1": 25},
+      "rejectedShadowAppearanceCountDistribution": {"2": 25},
+      "grooveRecognitionAccepted": 25,
+      "subpixelRefinement": {
+        "accepted": 21,
+        "failed": 4,
+        "failureChecks": {"endSide_line_residual": 1, "startSide_line_residual": 3},
+        "acceptedStartSupportPointRange": [22, 25],
+        "acceptedEndSupportPointRange": [21, 28],
+        "acceptedStartLineP95ResidualPxRange": [0.3558761563743245, 0.884036357494642],
+        "acceptedEndLineP95ResidualPxRange": [0.2286052114930044, 1.7950199980658679],
+        "acceptedOpeningWidthDegRange": [23.592866573859254, 23.656312057303126]
+      },
+      "yDownMeasurementAvailable": 21,
+      "unstratifiedDiagnosticModes": [
+        {"count": 19, "minimumDeg": -158.10660719839632, "maximumDeg": -158.0944639651473},
+        {"count": 2, "minimumDeg": 82.99287812668587, "maximumDeg": 82.99361833370489}
+      ],
+      "targetToleranceStatusCounts": {"PASS": 2, "FAIL": 19, "NOT_EVALUATED": 4},
+      "errorCodeCounts": {"GROOVE_REFINEMENT_FAILED": 4, "PLC_MAPPING_UNCONFIRMED": 21},
+      "formalValid": 0,
+      "nonNullSignedRelativeRotationDeg": 0,
+      "elapsedMs": {"p50": 1640.7395671121776, "p95": 1661.8287662044168, "max": 1764.8837890010327}
+    },
+    "fullFrame": {
+      "physicalOuterCircleAccepted": 0,
+      "physicalOuterCircleFailed": 25,
+      "failureCheckCounts": {
+        "angular_coverage": 25,
+        "center_shift": 4,
+        "inlier_ratio": 25,
+        "residual_p95": 25
+      },
+      "errorCodeCounts": {"PHYSICAL_OUTER_CIRCLE_FAILED": 25},
+      "formalValid": 0,
+      "nonNullSignedRelativeRotationDeg": 0,
+      "elapsedMs": {"p50": 1627.2264998406172, "p95": 1670.3355418983847, "max": 1697.7053019218147}
+    }
+  },
+  "regression": {
+    "legacy72": {
+      "valid": 72,
+      "total": 72,
+      "maeDeg": 0.1561191377641921,
+      "p95Deg": 0.30187302208952926,
+      "maxDeg": 0.3498688679892439
+    },
+    "pairedCompatibility": {
+      "positiveValid": 5,
+      "positiveTotal": 5,
+      "negativeInvalid": 3,
+      "negativeTotal": 3,
+      "falsePositiveCount": 0,
+      "maeDeg": 0.11638627711824938,
+      "p95Deg": 0.1807641365845029,
+      "maxDeg": 0.18510730851193102
+    }
+  },
+  "externalArtifactSha256": {
+    "developmentRoiConfig": "e4e1b5cf4dceea4dce76f4124471d253888276ba696311e0c0a8f56e6134ae27",
+    "fullFrameConfig": "4c90b8be5f1e2a51e604d96c85420925daefa7a3cbddc164e4016d8077043e91",
+    "manualRuntime": "2d272b78059feb7c05c04a7e89ff587b46093062375584f5e9d9318752f63f94",
+    "manualComparison": "94633e37c3e64e5713617bf31865a0271b4e4881f7c9425e0cdc85a72453b500",
+    "developmentRoiResults": "bbd1a37bfd44655d4ce137941a6d05ab8e15fd6c3721365dc74cd3d1a7394882",
+    "developmentRoiReview": "ceab8eacdfd5b56cb90f72376714fc43cc6fd40f7527365d80dce5f54b4f877c",
+    "developmentRoiContactSheet": "32c6eb27b959fe74caf55e23dd7b2871648e056d645901c490cc5491041a4b82",
+    "fullFrameResults": "56ea17bf54251b3bc1747a1b68f0378c5cdb7a24c361ad871608c4eaf8a5176f",
+    "fullFrameReview": "acbb2f9ae4405c4f672752102115366c23c6a53d21b7ae05ef038cd309718457",
+    "fullFrameContactSheet": "d17590cdf293241ba9282782caf69ed93fad638c5c26b0f02cda308d6dcca8ef",
+    "fullVsRoiSummary": "2bc191bde1e1e1917cb77321fa262db3908fc5b2ed5430e7891dab97b6a0847e",
+    "manualReview": "71f3f160c20aa00a3a1e7fb58ce585cd445bd76a0c0da402a3bfe021504541dc",
+    "manualPreview": "af25d177216b61388208d8debcbe22bb6b0b15c72bdd3ea8f42776bacd0491cb"
+  },
+  "verification": {
+    "fullUnitTests": {"discovered": 98, "passed": 95, "skippedOptionalSchema": 3},
+    "explicitJsonSchemaGate": {"status": "PASS", "configs": 3, "results": 50, "singleGrooveV2Poses": 25, "manualReports": 1, "referenceComparisons": 1},
+    "gitDiffCheck": "PASS",
+    "pollutionCheck": "PASS_NO_MEDIA_ARCHIVES_LARGE_FILES_OR_PRIVATE_DATA_PATHS"
+  },
+  "notProven": [
+    "One manually traced original-BMP image is development evidence, not an independently reviewed metrology truth set.",
+    "The 25 JPEG copies have no authoritative per-frame angle truth or confirmed capture grouping, so PASS/FAIL counts are diagnostic only.",
+    "The development ROI is not yet a production full-frame localization configuration.",
+    "The one-pixel arc calculation is a resolution budget and excludes center uncertainty, lens distortion, sidewall form, repeatability and calibration error.",
+    "PLC address, scale, byte order, stale-data policy and machine sign mapping remain blocked."
+  ]
+}

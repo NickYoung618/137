@@ -63,6 +63,7 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         run = summary["runs"][0]
         self.assertEqual({"1": 1, "0": 1}, run["candidateCountDistribution"])
         self.assertEqual(2, run["circleEstimateAvailable"]["count"])
+        self.assertEqual(0, run["physicalOuterCircleAccepted"]["count"])
         self.assertEqual(1, run["completeRingAccepted"]["count"])
         self.assertEqual(1, run["candidateExtractionCompleted"]["count"])
         self.assertEqual({"1": 1, "0": 1}, run["grooveCandidateCountDistribution"])
@@ -91,6 +92,38 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual(0, run["formalValid"]["count"])
         self.assertEqual({"upper_right": 2}, run["singleGrooveQuadrantCounts"])
         self.assertEqual(4, run["rejectedDarkCandidateCount"])
+
+    def test_v2_summary_separates_refinement_target_and_plc_block(self) -> None:
+        passed = record("a", [175.0], error="PLC_MAPPING_UNCONFIRMED")
+        passed["grooveRefinement"] = {"status": "accepted", "failedChecks": []}
+        passed["singleGroovePose"].update({
+            "schemaVersion": "slot-single-real-groove-pose/2",
+            "datumMeasurement": {
+                "measuredFromPositiveYClockwiseDeg": 85.0,
+                "position": {"requiredRegionPassed": True},
+            },
+            "targetAssessment": {
+                "status": "EVALUATED", "toleranceStatus": "PASS",
+                "positionGatePassed": True, "angleTolerancePassed": True,
+                "imageFrameCorrectionDeg": 0.0, "mechanicalCorrectionDeg": None,
+                "blockers": ["PLC_MAPPING_UNCONFIRMED"],
+            },
+        })
+        failed = record("b", [113.0], error="GROOVE_REFINEMENT_FAILED")
+        failed["grooveRefinement"] = {"status": "failed", "failedChecks": ["startSide_line_residual"]}
+        failed["singleGroovePose"] = {
+            "schemaVersion": "slot-single-real-groove-pose/2", "status": "failed",
+            "geometryValid": False, "imageMeasurement": None, "datumMeasurement": None,
+            "targetAssessment": {"status": "NOT_EVALUATED", "toleranceStatus": "NOT_EVALUATED"},
+        }
+        run = build_summary([("v2", {"records": [passed, failed]})], 5.0)["runs"][0]
+        self.assertEqual({"accepted": 1, "failed": 1}, run["grooveRefinementStatusCounts"])
+        self.assertEqual({"startSide_line_residual": 1}, run["grooveRefinementFailureCounts"])
+        self.assertEqual(1, run["yDownDatumAngleAvailable"]["count"])
+        self.assertEqual({"NOT_EVALUATED": 1, "PASS": 1}, run["targetToleranceStatusCounts"])
+        self.assertEqual(1, run["targetPositionGatePassed"]["count"])
+        self.assertEqual(1, run["imageFrameCorrectionAvailable"]["count"])
+        self.assertEqual(1, run["plcGuidanceBlocked"]["count"])
 
 
 if __name__ == "__main__":

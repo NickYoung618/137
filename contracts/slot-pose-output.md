@@ -15,17 +15,19 @@
 `SLOT_ROTATION_INCONSISTENT`、`SLOT_FIT_FAILED`、`QUALITY_REJECTED`、
 `SLOT_PAIR_NOT_FOUND`、`SLOT_PAIR_AMBIGUOUS`、`RING_TRUNCATED`、`TARGET_SEMANTICS_UNCONFIRMED`、
 `PHYSICAL_OUTER_CIRCLE_FAILED`、`GROOVE_RECOGNITION_FAILED`、`GROOVE_RECOGNITION_AMBIGUOUS`、
+`GROOVE_REFINEMENT_FAILED`、
 `ROLE_ASSIGNMENT_FAILED`、`ROLE_ASSIGNMENT_AMBIGUOUS`、`DATUM_DEFINITION_UNCONFIRMED`、
 `FEATURE_MAPPING_UNCONFIRMED`、`OUTPUT_PURPOSE_UNCONFIRMED`、
-`POSE_CONVENTION_UNCONFIRMED`、`ANGLE_OUT_OF_RANGE`、`INTERNAL_ERROR`。
+`POSE_CONVENTION_UNCONFIRMED`、`PLC_MAPPING_UNCONFIRMED`、`ANGLE_OUT_OF_RANGE`、`INTERNAL_ERROR`。
 
 多候选与paired数据仅增加在开放的`diagnostics`对象中，`schemaVersion`仍为`slot-pose-result/2`。
 旧消费者可忽略`diagnosticMode`、`angularProfile`、`candidates`、`candidateSummary`和`pairing`；
 任何诊断角均不是隐式PLC指令。
 
-`single_real_groove`中的`diagnostics.singleGroovePose.geometryValid=true`表示恰好一个真实槽通过
-单帧几何门，`imageMeasurement.azimuthDeg`是图像向上0°、顺时针正的绝对方位。它可以与顶层
-`result.valid=false`同时成立：前者是图像槽识别状态，后者仍是机械引导状态。datum未确认时
-必须返回`DATUM_DEFINITION_UNCONFIRMED`且正式角/置信度为空。
+`single_real_groove` v2中的`geometryValid=true`表示恰好一个真实槽通过且左右侧壁亚像素精修成功。
+最终槽口中点必须来自两条稳健侧壁与gyj拟合外圆的交点，不能用粗角度格或暗区质心替代。
+`datumMeasurement`给出以图像下方`+Y`为datum、顺时针正的有符号角；`targetAssessment`独立给出
+左下位置门、`85°±5°`、偏差和图像纠偏。B-005未确认时返回`PLC_MAPPING_UNCONFIRMED`且顶层正式
+角/置信度为空，这不等于槽识别失败或目标未评定。
 
 下游必须先检查`taskId`和`result.valid`，失败或超时立即清除上一任务角度并走现场确认的安全动作。

@@ -14,7 +14,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.8.0"
+ALGORITHM_VERSION = "0.9.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -28,6 +28,7 @@ ERROR_CODES = {
     "ROLE_ASSIGNMENT_AMBIGUOUS",
     "GROOVE_RECOGNITION_FAILED",
     "GROOVE_RECOGNITION_AMBIGUOUS",
+    "GROOVE_REFINEMENT_FAILED",
     "PHYSICAL_OUTER_CIRCLE_FAILED",
     "RING_TRUNCATED",
     "QUALITY_REJECTED",
@@ -35,6 +36,7 @@ ERROR_CODES = {
     "DATUM_DEFINITION_UNCONFIRMED",
     "FEATURE_MAPPING_UNCONFIRMED",
     "OUTPUT_PURPOSE_UNCONFIRMED",
+    "PLC_MAPPING_UNCONFIRMED",
     "POSE_CONVENTION_UNCONFIRMED",
     "ANGLE_OUT_OF_RANGE",
     "INTERNAL_ERROR",
@@ -120,6 +122,12 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["single_groove_pose"] = merged_single_groove_pose_config(
             detector.get("single_groove_pose")
         )
+        if detector["single_groove_pose"]["schema_version"] == "single-real-groove-pose-config/2":
+            from algorithms.slot_pose.groove_refinement import merged_groove_refinement_config
+
+            detector["groove_refinement"] = merged_groove_refinement_config(
+                detector.get("groove_refinement")
+            )
     return config
 
 

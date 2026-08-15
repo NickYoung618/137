@@ -42,8 +42,20 @@ diagnostics.grooveCandidates: [{
   grooveScore, radialDepthPx, tangentialWidthPx,
   pairedEdgeSupport, contourContinuity, thresholdVersion
 }]
+diagnostics.grooveRefinement: null | {
+  schemaVersion: slot-groove-subpixel-opening/1,
+  status: accepted | failed,
+  coarseCandidateId,
+  startSide, endSide,
+  outerCircleIntersections,
+  intersectionCircleResidualPx,
+  openingEndpointProfileDeg,
+  openingWidthDeg,
+  openingMidpointProfileDeg,
+  failedChecks
+}
 diagnostics.singleGroovePose: {
-  schemaVersion: slot-single-real-groove-pose/1,
+  schemaVersion: slot-single-real-groove-pose/1 | slot-single-real-groove-pose/2,
   status: accepted | failed | ambiguous,
   expectedAcceptedGrooveCount: 1,
   acceptedGrooveCount, geometryValid,
@@ -59,10 +71,11 @@ diagnostics.singleGroovePose: {
     circlePoint, radialAxis
   },
   targetAssessment: {
-    schemaVersion: slot-groove-target-assessment/1,
-    targetContract, status: NOT_EVALUATED,
-    signedMeasurementMinusTargetDeg: null,
-    mechanicalCorrectionDeg: null, blockers
+    schemaVersion: slot-groove-target-assessment/1 | slot-groove-target-assessment/2,
+    targetContract,
+    status: NOT_EVALUATED | EVALUATED,
+    signedMeasurementMinusTargetDeg,
+    mechanicalCorrectionDeg, blockers
   }
 }
 diagnostics.candidateSummary: {count, bestCandidateId, secondCandidateId, prominenceGap}
@@ -96,8 +109,58 @@ Diagnostic angles are image-frame observations and are never implicit machine co
 `grooveCandidates`。`multi_notch_roles`的角色分配只允许引用`grooveCandidates`。
 
 `single_real_groove`显式要求恰好一个`grooveCandidates`元素，不运行`roleAssignment`。该条件通过时
-`singleGroovePose.geometryValid=true`且图像绝对方位可用；物理datum未确认时，顶层result仍
-`valid=false`、正式角为空，错误码为`DATUM_DEFINITION_UNCONFIRMED`。这不是槽识别失败。
+`singleGroovePose.geometryValid=true`且图像绝对方位可用。v1配置保留原`NOT_EVALUATED`语义。
+
+v2新增：
+
+```text
+singleGroovePose.datumMeasurement: {
+  schemaVersion: slot-groove-y-down-angle/1,
+  coordinateConvention: {
+    origin: detected_physical_outer_circle_center,
+    xAxis: right, yAxis: down,
+    datumRay: positive_y_down,
+    positiveDirection: clockwise,
+    rangeDeg: "[-180,180)"
+  },
+  grooveOpening: {
+    startProfileDeg, endProfileDeg, midpointProfileDeg,
+    midpointSource: subpixel_sidewall_outer_circle_intersections
+  },
+  center, grooveOpeningPoint,
+  offset: {dx, dy},
+  position: {
+    horizontal: left | right | axis,
+    vertical: upper | lower | axis,
+    requiredRegionPassed
+  },
+  measuredFromPositiveYClockwiseDeg
+}
+singleGroovePose.targetAssessment: {
+  schemaVersion: slot-groove-target-assessment/2,
+  targetContract: {
+    schemaVersion: slot-groove-target/2,
+    nominalDeg: 85, toleranceDeg: 5,
+    acceptedMinDeg: 80, acceptedMaxDeg: 90,
+    requiredHorizontalPosition: left,
+    requiredVerticalPosition: lower_or_axis,
+    physicalDatumDefinitionId, angleConventionId
+  },
+  status: EVALUATED,
+  positionGatePassed, angleTolerancePassed,
+  toleranceStatus: PASS | FAIL,
+  signedMeasurementMinusTargetDeg,
+  absoluteDeviationDeg,
+  imageFrameCorrectionDeg,
+  mechanicalCorrectionDeg: null,
+  plcCommandAuthoritative: false,
+  blockers: [PLC_MAPPING_UNCONFIRMED]
+}
+```
+
+机器合格门为`offset.dx<0 && offset.dy>=0 && 80<=measuredFromPositiveYClockwiseDeg<=90`。`imageFrameCorrectionDeg`为
+`wrap(85-measured)`，正值表示顺时针、负值表示逆时针；它不是PLC编码。B-005未关闭时顶层result仍
+`valid=false`、正式角为空，错误码为`PLC_MAPPING_UNCONFIRMED`。这不是槽识别失败或公差未评定。
 
 `diagnostics.face.radiusPx`是历史配准半径，不是物理外圆。`multi_notch_roles`必须先获得
 `physicalOuterCircle.status=accepted`，才能用`physicalCircle`提取原始候选和评估凹入。

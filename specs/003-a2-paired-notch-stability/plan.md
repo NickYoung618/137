@@ -22,7 +22,7 @@ polar配准，复用指纹锁定的gyj外缘交点/稳健拟圆核心，再做�
 **Target Platform**: Linux服务器开发回归；macOS外置A2数据离线验收
 **Project Type**: 单体Python算法库和CLI工具
 **Performance Goals**: `5472×3648`单图P95不超过8.0秒；批处理逐图持久化且单图失败不中断整批
-**Constraints**: fail-closed；目标语义/机械契约未确认时正式角为空；不改历史资产和两个外部工作区；不接PLC
+**Constraints**: fail-closed；单槽实测/公差/图像纠偏与PLC可执行值分离；PLC映射未确认时顶层角为空；不改历史资产和两个外部工作区；不接PLC
 **Scale/Scope**: 服务器小型合成集；Mac端当前盘点约500张正常图和201张坏图，实际分组由采集记录确认
 
 ## Constitution Check
@@ -31,8 +31,8 @@ polar配准，复用指纹锁定的gyj外缘交点/稳健拟圆核心，再做�
 
 | Principle | Pre-design | Post-design | Evidence |
 |---|---|---|---|
-| I. 规格先行与场景闭环 | PASS | PASS | `spec.md`含4个独立场景、51条FR、18条SC及显式外部决策门 |
-| II. 坐标系与姿态契约明确 | PASS | PASS | 诊断角与正式机械角分离；环形角范围和方向在契约中显式化 |
+| I. 规格先行与场景闭环 | PASS | PASS | `spec.md`含4个独立场景、67条FR、24条SC及显式外部决策门 |
+| II. 坐标系与姿态契约明确 | PASS | PASS | 原点、图像`+X/+Y`、Y下半轴datum、顺时针正、环形角范围、实测/偏差/纠偏/PLC分层均显式版本化 |
 | III. 质量评估与安全失败 | PASS | PASS | paired逐项门控；失败角/置信度为空；坏图误引导单独统计 |
 | IV. 数据溯源与可复现验证 | PASS | PASS | 外置Manifest、truth、物理样品/split隔离、图像/配置/算法指纹 |
 | V. 模块化与集成可控 | PASS | PASS | 新候选模块只消费已有圆心/尺度/极坐标能力；v2诊断向后兼容；无PLC修改 |
@@ -56,6 +56,10 @@ polar配准，复用指纹锁定的gyj外缘交点/稳健拟圆核心，再做�
 10. **人工槽边界只走离线审阅**：新增工具显式读取Git外LabelMe标签映射，复用锁定gyj代数初值/稳健几何拟圆，验证开放槽边界后计算图像方位；该模块不被运行时适配器导入。
 11. **实测与目标分契约**：报告固定图像坐标定义并输出实测方位/象限；左下85°单独进入目标对象，物理datum和映射未确认时偏差、OK/NG及机械纠偏均为空。
 12. **单真实槽独立模式**：新增显式`single_real_groove`，复用物理外圆、原始暗区和凹槽几何门，但以恰好1个接受候选为图像槽姿态成功，不进入旧datum/target双角色分配。图像姿态诊断与result v2机械有效性分层表达。
+13. **Y下半轴目标评估**：单槽v2从亚像素侧壁—外圆交点求槽口中点，以物理圆心向下`+Y`半轴为0°，计算顺时针正的`[-180°,180°)`实测角。左下位置门与`[80°,90°]`角度门必须同时通过；输出偏差和图像纠偏，PLC映射未确认时不填顶层正式角。
+14. **诊断契约版本并存**：新增`slot-single-real-groove-pose/2`与独立Schema；v1配置/输出继续是未评定语义，不静默升权。顶层`slot-pose-result/2`不升版。
+15. **人工拟合参考与误差分解**：人工可见圆弧通过锁定gyj robust/geometric链形成离线参考圆；只在同一原图指纹下与自动圆、人工/自动槽口中点比较，单样本不作生产准确率。
+16. **槽侧壁亚像素精修**：粗暗区候选只作搜索初值和几何识别；唯一真槽通过后拟合左右亚像素侧壁及其外圆交点，v2角只消费精修槽口中点，任何一侧失败均fail-closed。
 
 ## Project Structure
 
@@ -83,6 +87,7 @@ specs/003-a2-paired-notch-stability/
 ```text
 algorithms/slot_pose/
 ├── angular_profile.py          # 新的外缘候选与配对纯函数
+├── groove_refinement.py        # 唯一真槽的亚像素侧壁与外圆交点
 ├── role_assignment.py         # 通用候选角色分配与datum/target环形夹角
 ├── single_groove_pose.py      # 恰好一个真实槽的版本化图像方位/象限
 ├── legacy_adapter.py           # 模式编排、已有中心/尺度/polar复用
@@ -92,7 +97,9 @@ algorithms/slot_pose/
 contracts/
 ├── slot-pose-config.schema.json
 ├── slot-pose-result.schema.json
-└── single-real-groove-pose.schema.json
+├── single-real-groove-pose.schema.json
+├── single-real-groove-pose-v2.schema.json
+└── pose-reference-comparison.schema.json
 
 config/
 └── inspection.example.json
@@ -106,13 +113,17 @@ tools/
 ├── run_slot_pose_batch.py
 ├── evaluate_slot_pose.py
 ├── run_a2_acceptance.py
-└── review_labelme_groove_pose.py # Git外人工圆弧/开放槽边界离线审阅
+├── review_labelme_groove_pose.py # Git外人工圆弧/开放槽边界离线审阅
+└── compare_pose_reference.py     # 同原图人工拟合参考/自动结果误差分解
 
 tests/
 ├── test_angular_profile.py
 ├── test_paired_slot_pose.py
 ├── test_role_assignment.py
 ├── test_multi_notch_roles.py
+├── test_groove_refinement.py
+├── test_pose_reference_comparison.py
+├── test_single_real_groove.py
 ├── test_slot_pose_contract.py
 ├── test_slot_pose_cli.py
 ├── test_slot_pose_batch.py
@@ -151,11 +162,20 @@ tests/
 - `label1`/`label2`只是一个外置开发样本的原始标签；工具通过显式参数映射为外圆可见弧和真实槽开放边界，不在代码中硬编码标签或点数。
 - 槽边界先验证有限性、连续性和开放轮廓基本条件；拟圆后再验证两端靠圆、内部径向凹入、最深点位置和槽口角宽。阴影若不形成真实向内开放轮廓必须拒绝。
 - 代数圆初值和稳健/几何圆都来自已锁定gyj模块；人工样本只在离线工具中使用，运行时检测仍只消费图像。
-- 图像实测角采用image-up=0°、y向下、顺时针正；目标左下85°因物理datum未确认保持`NOT_EVALUATED`。
+- 该阶段当时只报告image-up=0°绝对方位；其“datum未确认/NOT_EVALUATED”结论仅适用于v1历史产物，已由后续Y-Down 85-Degree Contract取代。
 
 ## 2026-08-15 Single Real-Groove Runtime Correction
 
 - 现场已确认每件只有1个真实凹槽，另外2个暗区属于遮挡阴影；这关闭图像目标数量歧义，不关闭85°相对datum或机械换算。
 - `single_real_groove`要求恰好1个接受候选，输出图像绝对方位/象限/径向轴；0个失败，多个歧义。
 - `multi_notch_roles`和paired继续原样保留用于兼容/其他诊断，不根据候选数自动切换模式。
-- datum未确认时单槽图像几何可以成功，result v2仍以空正式角和明确datum阻塞安全失败。
+- 该阶段的datum阻塞结论仅适用于v1；v2按后续Y-Down 85-Degree Contract评估目标，但B-005仍阻止PLC正式角。
+
+## 2026-08-15 Y-Down 85-Degree Contract
+
+- 权威坐标为物理外圆圆心原点、图像向右`+X`、向下`+Y`；datum是向下`+Y`半轴，不使用图纸其他槽或遮挡阴影。
+- 粗候选`startDeg/endDeg`只作局部搜索初值；槽口中点来自两条亚像素侧壁与物理外圆交点的环形中点。
+  实测角等价于`atan2(-dx,dy)`，顺时针正，规范化到`[-180°,180°)`。
+- 合格必须同时满足`x<centerX`、`y>=centerY`和`80°<=measured<=90°`；不用受图像Y轴方向影响的象限编号做机器门。
+- 有向偏差为`wrap(measured-85°)`，图像纠偏为`wrap(85°-measured)`；纠偏正为顺时针，负为逆时针。
+- v2诊断可评定实测、位置、公差和图像纠偏；B-005未关闭时`mechanicalCorrectionDeg`与顶层正式角仍为空。

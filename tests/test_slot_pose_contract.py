@@ -85,6 +85,7 @@ class SlotPoseContractTests(unittest.TestCase):
             "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS",
             "PHYSICAL_OUTER_CIRCLE_FAILED",
             "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED",
+            "PLC_MAPPING_UNCONFIRMED", "GROOVE_REFINEMENT_FAILED",
         }.issubset(ERROR_CODES))
 
     def test_old_config_defaults_to_legacy_but_unconfirmed_target(self) -> None:

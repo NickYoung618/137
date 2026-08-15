@@ -16,6 +16,7 @@ import numpy as np
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 from algorithms.slot_pose.groove_recognition import recognize_grooves
+from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
 from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
@@ -24,6 +25,8 @@ from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
 REQUIRED_FUNCTIONS = (
     "robust_fit_circle",
     "outer_boundary_edge_point",
+    "bilinear_sample",
+    "parabolic_peak",
     "object_bbox_center",
     "polar_resample",
     "find_outer_notch_angle",
@@ -455,25 +458,69 @@ class LegacyAEndFaceAdapter:
                 },
             })
             if mode == "single_real_groove":
+                pose_config = detector["single_groove_pose"]
+                is_v2 = pose_config["schema_version"] == "single-real-groove-pose-config/2"
+                if is_v2 and recognition["status"] == "accepted" and len(groove_candidates) == 1:
+                    refinement = refine_groove_opening(
+                        target_gray,
+                        groove_center,
+                        groove_outer_radius,
+                        groove_candidates[0],
+                        self.module.bilinear_sample,
+                        self.module.parabolic_peak,
+                        detector["groove_refinement"],
+                        pixel_scale=scale,
+                    )
+                    diagnostics["grooveRefinement"] = refinement
+                    groove_candidates = [{
+                        **groove_candidates[0],
+                        "refinedStartDeg": (
+                            None if refinement["openingEndpointProfileDeg"] is None
+                            else refinement["openingEndpointProfileDeg"][0]
+                        ),
+                        "refinedEndDeg": (
+                            None if refinement["openingEndpointProfileDeg"] is None
+                            else refinement["openingEndpointProfileDeg"][1]
+                        ),
+                        "grooveRefinement": refinement,
+                    }]
+                    diagnostics["grooveCandidates"] = groove_candidates
+                elif is_v2:
+                    diagnostics["grooveRefinement"] = None
                 single_pose = build_single_groove_pose(
                     groove_candidates,
                     groove_center,
                     groove_outer_radius,
-                    detector["single_groove_pose"],
+                    pose_config,
                     recognition_status=recognition["status"],
+                    plc_mapping_confirmed=bool(
+                        self.config["pose"].get("production_plc_mapping_confirmed", False)
+                    ),
                 )
                 diagnostics["singleGroovePose"] = single_pose
                 if single_pose["status"] != "accepted":
-                    code = (
-                        "GROOVE_RECOGNITION_AMBIGUOUS"
-                        if single_pose["status"] == "ambiguous"
-                        else "GROOVE_RECOGNITION_FAILED"
-                    )
+                    if is_v2 and isinstance(diagnostics.get("grooveRefinement"), dict) and diagnostics["grooveRefinement"]["status"] == "failed":
+                        code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
+                        failed_checks = diagnostics["grooveRefinement"].get("failedChecks") or ["unknown"]
+                        message = (
+                            "single real groove subpixel refinement failed; checks="
+                            + ",".join(map(str, failed_checks))
+                        )
+                    else:
+                        code = (
+                            "GROOVE_RECOGNITION_AMBIGUOUS"
+                            if single_pose["status"] == "ambiguous"
+                            else "GROOVE_RECOGNITION_FAILED"
+                        )
+                        stage = "groove_recognition"
+                        message = (
+                            "single_real_groove requires exactly one accepted groove; "
+                            f"accepted={single_pose['acceptedGrooveCount']}"
+                        )
                     raise LegacyAdapterError(
                         code,
-                        "groove_recognition",
-                        f"single_real_groove requires exactly one accepted groove; "
-                        f"accepted={single_pose['acceptedGrooveCount']}",
+                        stage,
+                        message,
                         diagnostics,
                     )
                 candidate_deg = float(single_pose["imageMeasurement"]["profileAzimuthXRightClockwiseDeg"])
@@ -574,7 +621,8 @@ class LegacyAEndFaceAdapter:
 
     def mechanical_angle(self, candidate_image_deg: float) -> float:
         pose = self.config["pose"]
-        if self.config["detector"].get("diagnostic_mode") in {"multi_notch_roles", "single_real_groove"}:
+        mode = self.config["detector"].get("diagnostic_mode")
+        if mode in {"multi_notch_roles", "single_real_groove"}:
             if not pose.get("drawing_datum_definition_confirmed"):
                 raise LegacyAdapterError(
                     "DATUM_DEFINITION_UNCONFIRMED", "pose_mapping",
@@ -604,7 +652,21 @@ class LegacyAEndFaceAdapter:
         direction = pose.get("positive_direction")
         if zero is None or direction not in {"cw", "ccw"}:
             raise LegacyAdapterError("POSE_CONVENTION_UNCONFIRMED", "pose_mapping", "pose convention is incomplete")
-        angle = signed_relative_angle(candidate_image_deg, float(zero), str(direction))
+        if (
+            mode == "single_real_groove"
+            and self.config["detector"]["single_groove_pose"]["schema_version"]
+            == "single-real-groove-pose-config/2"
+        ):
+            if not pose.get("production_plc_mapping_confirmed"):
+                raise LegacyAdapterError(
+                    "PLC_MAPPING_UNCONFIRMED", "pose_mapping",
+                    "image-frame correction is diagnostic until PLC mapping is confirmed",
+                )
+            measured = (float(candidate_image_deg) - 90.0 + 180.0) % 360.0 - 180.0
+            target = float(self.config["detector"]["single_groove_pose"]["target"]["nominal_deg"])
+            angle = (target - measured + 180.0) % 360.0 - 180.0
+        else:
+            angle = signed_relative_angle(candidate_image_deg, float(zero), str(direction))
         valid_range = pose.get("valid_range_deg")
         if valid_range is not None and not float(valid_range[0]) <= angle <= float(valid_range[1]):
             raise LegacyAdapterError("ANGLE_OUT_OF_RANGE", "pose_mapping", f"angle {angle:.6f}deg is outside valid range")

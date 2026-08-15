@@ -10,7 +10,8 @@
 
 - `/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py`
 - SHA-256：`36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35`
-- 复用函数：`robust_fit_circle`、`object_bbox_center`、`polar_resample`、`find_outer_notch_angle`、
+- 复用函数：`outer_boundary_edge_point`、`fit_circle`、`robust_fit_circle`（内部几何拟合）、
+  `bilinear_sample`、`parabolic_peak`、`object_bbox_center`、`polar_resample`、`find_outer_notch_angle`、
   `estimate_rotation_by_notch`、`estimate_rotation_by_polar`、`estimate_global_transform`、
   `build_reference_model`、`load_detection_gray`。
 
@@ -18,6 +19,8 @@
 
 - `algorithms/slot_pose/legacy_adapter.py`：哈希校验、只读动态加载、既有函数编排、质量门控和角度换算。
 - `algorithms/slot_pose/contract.py`、`main.py`：v2结果契约、fail-closed和单图CLI。
+- `algorithms/slot_pose/groove_refinement.py`：唯一真槽通过后，局部亚像素侧壁点、稳健直线和
+  侧壁—外圆交点精修；不复制圆拟合实现。
 - `tools/generate_synthetic_slot_pose.py`、`evaluate_slot_pose.py`：小图回归和角度评估。
 - `tools/make_manifest.py`、`validate_dataset.py`、`evaluate_repeatability.py`：外置数据清单与重复性。
 
@@ -56,8 +59,12 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
 - `tools/render_slot_pose_review.py`在仓库外生成候选编号叠加图、联系表、候选/`failures.csv`和非权威角色假设表。
 - `tools/summarize_slot_pose_diagnostics.py`比较多个审阅包的环形候选簇、跨帧稳定性、门控成功率、错误码和P50/P95/max耗时；稳定候选仍不等于已确认业务角色。
 - `multi_notch_roles`现在先将环形暗区输出为`rawCandidates`，再用径向深度、局部对比、成对边缘和轮廓一致性生成`grooveCandidates`；datum/target分配只消费后者。
-- `single_real_groove`落实“每件恰好1个真实槽、另外2个暗区为遮挡阴影”的业务决定：1个接受槽即可输出图像绝对方位/象限，0个或多个继续fail-closed；datum未确认时正式机械角仍为空。
+- `single_real_groove`落实“每件恰好1个真实槽、另外2个暗区为遮挡阴影”的业务决定：1个接受槽
+  继续拟合左右亚像素侧壁及其外圆交点，再以两个交点的环形中点计算Y下半轴有符号角；0个、多个或
+  任一侧精修失败继续fail-closed。
 - `tools/review_labelme_groove_pose.py`只在仓库外审阅人工外圆弧和开放槽边界：复用锁定gyj拟圆、验证槽口几何并输出图像方位/象限；人工标签不进入运行时，左下85°目标和机械纠偏保持独立。
+- `tools/compare_pose_reference.py`只在仓库外将人工robust/geometric参考圆与同一原图的自动圆/自动
+  槽口中点比较，分开报告圆心、半径和槽角误差；单张结果只标为开发参考。
 
 服务器paired合成冒烟：
 
@@ -71,9 +78,9 @@ uv run python tools/run_slot_pose_batch.py \
   --output "${TMPDIR:-/tmp}/slot-pose-paired/results.jsonl"
 ```
 
-现场图纸视频只证明竖向datum、左槽射线和`85°±5° (Z106)`的几何意图，不证明A2顶部两缺口的角色。
-目标、datum、A2映射和输出用途未确认前，所有模式都只能作诊断；默认配置的
-`target_semantics_confirmed=false`，因此绝不输出正式机械角。完整规格和Mac命令见
+当前单槽v2已确认：物理外圆圆心为原点，图像下方`+Y`半轴为datum，顺时针为正；唯一真槽必须在
+画面左下且实测角落在`+85°±5°`。默认模板仍保留legacy安全模式；PLC地址/缩放/字节序/握手未确认，
+因此单槽v2可输出测量、PASS/FAIL和图像纠偏诊断，但顶层正式机械角仍为空。完整规格和Mac命令见
 `specs/003-a2-paired-notch-stability/`。
 
 ## Mac A2后续验证
@@ -115,14 +122,14 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
 
 ## 生产阻塞（不能由算法默认值代替）
 
-- B-001 已关闭：每件只有1个真实凹槽，另外2个外观暗区为遮挡阴影；该决定不等于确认85°或机械datum。
+- B-001 已关闭：每件只有1个真实凹槽，另外2个外观暗区为遮挡阴影。
 - B-002 数据负责人：根据采集记录确认A2条件组、物理样品、split及与历史参考图的工位/视角/方向映射。
-- B-003 机械/机器人负责人：确认机械零位、正方向及图像到机械坐标映射。
+- B-003 已关闭：图像向右`+X`、向下`+Y`，以`+Y`下半轴为datum，顺时针为正。
 - B-004 质量负责人：确认MAE/P95/max、静态极差、跨组残差、有效率、坏图误引导率和节拍门限。
 - B-005 PLC/机器人工程师：确认字段、地址、缩放、握手、超时和失败动作。
-- B-006 设计/机械方：确认竖向datum是上槽射线、上下槽轴还是其他基准。
-- B-007 业务/质量方：确认85°±5°是尺寸OK/NG还是引导换算输入。
-- B-008 现场负责人：确认唯一真实槽是否对应图纸target左槽，以及图纸datum如何在A2图像中获得；两个遮挡阴影不得充当角色。
+- B-006 已关闭：datum就是图像/检测圆心向下的`+Y`半轴，不由其他暗区建立。
+- B-007 已关闭：独立输出`+85°±5°`判定和图像纠偏，正值顺时针、负值逆时针。
+- B-008 已关闭：唯一通过几何门的真实槽就是目标槽，另外两个暗区不得补角色。
 
-剩余关闭顺序：B-006/B-007/B-008 → B-002 → B-003 → 冻结Mac验证集 → B-004验收 → B-005上线。全部关闭前，本MVP
-只能用于离线诊断和验证，不能宣称生产可交付。
+剩余关闭顺序：B-002 → 冻结Mac原始BMP验证集/人工参考规程 → B-004验收 → B-005上线。关闭前可以
+离线输出图像测量与公差诊断，但不能宣称生产精度或向PLC写入。
