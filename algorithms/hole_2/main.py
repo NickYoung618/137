@@ -850,6 +850,7 @@ def detect_dimension_boundary(
 
     if diagnostics is not None:
         diagnostics["acceptedEdgePoints"] = len(edge_points)
+        diagnostics["rawEdgePointsPx"] = [list(point) for point in edge_points]
         diagnostics["medianEdgePeak"] = (
             float(np.median(edge_scores)) if edge_scores else None
         )
@@ -890,6 +891,14 @@ def detect_dimension_boundary(
         return None
     if diagnostics is not None:
         diagnostics["offsetPx"] = float(offset)
+        direction = np.asarray([-float(line[1]), float(line[0])], dtype=np.float64)
+        projections = inliers @ direction
+        diagnostics["inlierEdgePointsPx"] = inliers.tolist()
+        diagnostics["fittedLine"] = [float(value) for value in line]
+        diagnostics["fittedSegmentPointsPx"] = [
+            inliers[int(np.argmin(projections))].tolist(),
+            inliers[int(np.argmax(projections))].tolist(),
+        ]
     return BoundaryDetection(
         feature_point=feature_point,
         line=line,

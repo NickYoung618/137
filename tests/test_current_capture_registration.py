@@ -23,6 +23,7 @@ from algorithms.hole_2.current_capture import (
     _detect_phi12_2,
     _paired_contour_boundary,
     _ransac_circle,
+    _shared_parallel_boundary_geometry,
     _v6_d7_fallback,
     evaluate_geometry_consistency,
     fit_similarity_transform,
@@ -541,7 +542,7 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
             quality["candidate_edge_semantics"],
         )
 
-    def test_d7_paired_contour_uses_dark_band_center_not_outer_peak(self):
+    def test_d7_paired_transitions_estimate_physical_contour_locus(self):
         image = np.full((200, 220), 220.0)
         image[:, 56:64] = 20.0
         image[:, 136:144] = 20.0
@@ -565,9 +566,40 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertAlmostEqual(60.0, first.feature_point[0], delta=0.6)
         self.assertAlmostEqual(140.0, second.feature_point[0], delta=0.6)
         self.assertAlmostEqual(80.0, math.dist(first.feature_point, second.feature_point), delta=0.8)
-        self.assertEqual("paired_edge_centerline", first_diagnostic["boundarySemantics"])
+        self.assertEqual(
+            "paired_transition_center_estimate_of_outer_contour",
+            first_diagnostic["boundarySemantics"],
+        )
+        self.assertEqual(first_diagnostic["pairSupport"], len(first_diagnostic["transitionPairsPx"]))
+        self.assertEqual(2, len(first_diagnostic["fittedSegmentPointsPx"]))
         self.assertGreaterEqual(first_diagnostic["pairSupport"], 12)
         self.assertAlmostEqual(8.0, first_diagnostic["pairWidthMedianPx"], delta=1.0)
+
+    def test_d7_shared_parallel_fit_returns_exact_normal_distance(self):
+        evidence = [
+            {
+                "side": "A", "rawPointsPx": [[0.0, 1.0], [10.0, 1.2], [20.0, 1.4]],
+                "lineEquation": [-0.02, 0.9998, -1.0], "segmentPointsPx": [],
+            },
+            {
+                "side": "B", "rawPointsPx": [[0.0, 11.0], [10.0, 10.8], [20.0, 10.6]],
+                "lineEquation": [0.02, 0.9998, -11.0], "segmentPointsPx": [],
+            },
+        ]
+        shared = _shared_parallel_boundary_geometry(evidence)
+        self.assertIsNotNone(shared)
+        points, boundaries, quality = shared
+        self.assertEqual(boundaries[0]["lineEquation"][:2], boundaries[1]["lineEquation"][:2])
+        normal = np.asarray(boundaries[0]["lineEquation"][:2])
+        connector = np.asarray(points[1]) - np.asarray(points[0])
+        cross = normal[0] * connector[1] - normal[1] * connector[0]
+        self.assertAlmostEqual(0.0, float(cross), places=9)
+        self.assertAlmostEqual(
+            math.dist(*points),
+            quality["candidate_boundary_perpendicular_distance_target_px"],
+            places=9,
+        )
+        self.assertFalse(quality["candidate_boundary_nominal_adjustment_applied"])
 
     def test_geometry_ratio_alone_is_diagnostic_without_pulling_output(self):
         d7 = ShapeModel(
@@ -988,7 +1020,7 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertEqual(["p1", "p2"], quality["candidate_failed_sides"])
         for side in ("p1", "p2"):
             strip = quality[f"candidate_{side}_strip"]
-            self.assertEqual("paired_centerline_fit_failed", strip["failureStage"])
+            self.assertEqual("outer_contour_locus_fit_failed", strip["failureStage"])
             self.assertEqual(0, strip["pairSupport"])
 
     def test_phi_radius_expands_only_after_main_lower_bound_saturation(self):

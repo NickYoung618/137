@@ -18,6 +18,25 @@ def _feature(name, valid, failure=None):
             "coordinateSystem": "target_px",
             "pointsPx": [[40.0, 50.0], [140.0, 50.0]],
             "lengthPx": 100.0,
+            "rawEdgeEvidence": {
+                "semantics": "neck_outer_contour_edges",
+                "boundaries": [
+                    {"side": "A", "pointsPx": [[40.0, 35.0], [40.0, 65.0]]},
+                    {"side": "B", "pointsPx": [[140.0, 35.0], [140.0, 65.0]]},
+                ],
+            },
+            "fittedGeometry": {
+                "type": "parallel_lines",
+                "boundaries": [
+                    {"side": "A", "segmentPointsPx": [[40.0, 35.0], [40.0, 65.0]]},
+                    {"side": "B", "segmentPointsPx": [[140.0, 35.0], [140.0, 65.0]]},
+                ],
+            },
+            "measurementAnnotation": {
+                "type": "perpendicular_distance",
+                "pointsPx": [[40.0, 50.0], [140.0, 50.0]],
+                "valuePx": 100.0,
+            },
         }
     else:
         target = {
@@ -25,6 +44,20 @@ def _feature(name, valid, failure=None):
             "centerPx": [220.0, 100.0],
             "radiusPx": 35.0,
             "diameterPx": 70.0,
+            "rawEdgeEvidence": {
+                "semantics": "outer_contour_two_visible_arcs",
+                "arcSegments": [
+                    {"side": "reference_left", "pointsPx": [[190.0, 82.0], [185.0, 100.0], [190.0, 118.0]]},
+                    {"side": "reference_right", "pointsPx": [[250.0, 82.0], [255.0, 100.0], [250.0, 118.0]]},
+                ],
+            },
+            "fittedGeometry": {
+                "type": "circle_model",
+                "centerPx": [220.0, 100.0],
+                "radiusPx": 35.0,
+                "isDetectedContour": False,
+            },
+            "measurementAnnotation": {"type": "diameter", "valuePx": 70.0},
         }
     return {
         "measurementValid": valid,
@@ -145,9 +178,18 @@ class Hole2BatchReportTests(unittest.TestCase):
             self.assertEqual(300, labelme["imageWidth"])
             self.assertEqual(200, labelme["imageHeight"])
             shapes = {shape["label"]: shape for shape in labelme["shapes"]}
-            self.assertEqual({"prediction:7", "prediction:Phi12.2"}, set(shapes))
-            self.assertEqual([[40.0, 50.0], [140.0, 50.0]], shapes["prediction:7"]["points"])
-            self.assertEqual([[220.0, 100.0], [255.0, 100.0]], shapes["prediction:Phi12.2"]["points"])
+            self.assertEqual({
+                "prediction:7:boundary:A", "prediction:7:boundary:B",
+                "prediction:7:dimension",
+                "prediction:Phi12.2:arc:reference_left:0",
+                "prediction:Phi12.2:arc:reference_right:0",
+            }, set(shapes))
+            self.assertEqual(
+                [[40.0, 50.0], [140.0, 50.0]],
+                shapes["prediction:7:dimension"]["points"],
+            )
+            self.assertEqual("linestrip", shapes["prediction:Phi12.2:arc:reference_left:0"]["shape_type"])
+            self.assertNotIn("circle", {shape["shape_type"] for shape in shapes.values()})
             self.assertFalse(labelme["predictionMetadata"]["isGroundTruth"])
             self.assertFalse(labelme["predictionMetadata"]["isCompletePartContour"])
 

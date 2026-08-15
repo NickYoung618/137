@@ -17,6 +17,25 @@ def _feature(name, *, valid, failure=None, shift=0.0):
             "coordinateSystem": "target_px",
             "pointsPx": [[20.0 + shift, 30.0], [80.0 + shift, 30.0]],
             "lengthPx": 60.0,
+            "rawEdgeEvidence": {
+                "semantics": "neck_outer_contour_edges",
+                "boundaries": [
+                    {"side": "A", "pointsPx": [[20.0 + shift, 15.0], [20.0 + shift, 45.0]]},
+                    {"side": "B", "pointsPx": [[80.0 + shift, 15.0], [80.0 + shift, 45.0]]},
+                ],
+            },
+            "fittedGeometry": {
+                "type": "parallel_lines",
+                "boundaries": [
+                    {"side": "A", "segmentPointsPx": [[20.0 + shift, 15.0], [20.0 + shift, 45.0]]},
+                    {"side": "B", "segmentPointsPx": [[80.0 + shift, 15.0], [80.0 + shift, 45.0]]},
+                ],
+            },
+            "measurementAnnotation": {
+                "type": "perpendicular_distance",
+                "pointsPx": [[20.0 + shift, 30.0], [80.0 + shift, 30.0]],
+                "valuePx": 60.0,
+            },
         }
         quality = {
             "d7.quality.candidate_p1_edge_points": 31.0,
@@ -31,6 +50,18 @@ def _feature(name, *, valid, failure=None, shift=0.0):
             "centerPx": [120.0 + shift, 80.0],
             "radiusPx": 30.0,
             "diameterPx": 60.0,
+            "rawEdgeEvidence": {
+                "semantics": "outer_contour_two_visible_arcs",
+                "arcSegments": [
+                    {"side": "reference_left", "pointsPx": [[92.0 + shift, 70.0], [90.0 + shift, 80.0], [92.0 + shift, 90.0]]},
+                    {"side": "reference_right", "pointsPx": [[148.0 + shift, 70.0], [150.0 + shift, 80.0], [148.0 + shift, 90.0]]},
+                ],
+            },
+            "fittedGeometry": {
+                "type": "circle_model", "centerPx": [120.0 + shift, 80.0],
+                "radiusPx": 30.0, "isDetectedContour": False,
+            },
+            "measurementAnnotation": {"type": "diameter", "valuePx": 60.0},
         }
         quality = {
             "candidate_edge_semantics": "reference_phase_outer_polarity_edge",
@@ -130,10 +161,13 @@ class Hole2BatchReviewTests(unittest.TestCase):
             labelme = json.loads(
                 (output_dir / item["predictionLabelmeJson"]).read_text()
             )
-            self.assertEqual({"old:7", "old:Phi12.2", "new:Phi12.2"}, {
-                shape["label"] for shape in labelme["shapes"]
-            })
-            self.assertEqual({"line", "circle"}, {
+            labels = {shape["label"] for shape in labelme["shapes"]}
+            self.assertIn("old:7:boundary:A", labels)
+            self.assertIn("old:7:boundary:B", labels)
+            self.assertIn("old:7:dimension", labels)
+            self.assertIn("old:Phi12.2:arc:reference_left:0", labels)
+            self.assertIn("new:Phi12.2:arc:reference_right:0", labels)
+            self.assertNotIn("circle", {
                 shape["shape_type"] for shape in labelme["shapes"]
             })
             metadata = labelme["reviewMetadata"]

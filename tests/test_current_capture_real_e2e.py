@@ -47,12 +47,30 @@ class CurrentCaptureRealE2ETests(unittest.TestCase):
             self.assertIsNotNone(inverse)
             self.assertTrue(result["features"]["7"]["measurementValid"])
             self.assertTrue(result["features"]["Phi12.2"]["measurementValid"])
+            d7_target = result["features"]["7"]["target"]
+            phi_target = result["features"]["Phi12.2"]["target"]
             self.assertEqual(
-                "hole2-v6-current-capture-paired-contour-centerline",
+                "perpendicular_distance", d7_target["measurementAnnotation"]["type"]
+            )
+            self.assertEqual(2, len(d7_target["fittedGeometry"]["boundaries"]))
+            self.assertTrue(all(
+                boundary["transitionPairsPx"]
+                for boundary in d7_target["rawEdgeEvidence"]["boundaries"]
+            ))
+            self.assertFalse(phi_target["fittedGeometry"]["isDetectedContour"])
+            self.assertEqual(
+                {"reference_left", "reference_right"},
+                {
+                    segment["side"]
+                    for segment in phi_target["rawEdgeEvidence"]["arcSegments"]
+                },
+            )
+            self.assertEqual(
+                "hole2-v6-current-capture-paired-transition-outer-contour-lines",
                 result["features"]["7"]["sourceDetector"],
             )
             self.assertEqual(
-                "hole2-v6-current-capture-reference-phase-circle",
+                "hole2-v6-current-capture-reference-arc-with-opposite-arc-audit",
                 result["features"]["Phi12.2"]["sourceDetector"],
             )
             self.assertNotIn("target_annotation", {item["role"] for item in result["runtimeInputs"]})

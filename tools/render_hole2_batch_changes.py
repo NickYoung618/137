@@ -160,42 +160,54 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
         if not feature.get("measurementValid") or not isinstance(feature.get("target"), dict):
             continue
         target = feature["target"]
+        description = json.dumps({
+            "version": version,
+            "algorithmVersion": result.get("algorithmVersion"),
+            "measurementValid": True,
+            "failureReason": feature.get("failureReason"),
+            "sourceDetector": feature.get("sourceDetector"),
+            "recoveryPass": feature.get("recoveryPass"),
+            "quality": _quality_summary(feature),
+        }, ensure_ascii=False, separators=(",", ":"))
         if name == "7":
-            points = target.get("pointsPx")
-            shape_type = "line"
+            fitted = target.get("fittedGeometry", {})
+            boundaries = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
+            for boundary in boundaries:
+                points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
+                side = boundary.get("side") if isinstance(boundary, dict) else None
+                if isinstance(points, list) and len(points) >= 2 and side in {"A", "B"}:
+                    shapes.append({
+                        "label": f"{version}:7:boundary:{side}",
+                        "points": [[float(value) for value in point] for point in points],
+                        "group_id": f"{version}:7", "description": description,
+                        "shape_type": "line", "flags": {},
+                    })
+            annotation = target.get("measurementAnnotation", {})
+            points = annotation.get("pointsPx") if isinstance(annotation, dict) else None
+            if len(boundaries) >= 2 and isinstance(points, list) and len(points) == 2:
+                shapes.append({
+                    "label": f"{version}:7:dimension",
+                    "points": [[float(value) for value in point] for point in points],
+                    "group_id": f"{version}:7", "description": description,
+                    "shape_type": "line", "flags": {},
+                })
         else:
-            center = target.get("centerPx")
-            radius = target.get("radiusPx")
-            if not (
-                isinstance(center, list) and len(center) == 2
-                and isinstance(radius, (int, float)) and math.isfinite(float(radius))
-            ):
-                continue
-            points = [center, [float(center[0]) + float(radius), float(center[1])]]
-            shape_type = "circle"
-        if not isinstance(points, list) or len(points) != 2:
-            continue
-        description = json.dumps(
-            {
-                "version": version,
-                "algorithmVersion": result.get("algorithmVersion"),
-                "measurementValid": True,
-                "failureReason": feature.get("failureReason"),
-                "sourceDetector": feature.get("sourceDetector"),
-                "recoveryPass": feature.get("recoveryPass"),
-                "quality": _quality_summary(feature),
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-        shapes.append({
-            "label": f"{version}:{name}",
-            "points": [[float(value) for value in point] for point in points],
-            "group_id": version,
-            "description": description,
-            "shape_type": shape_type,
-            "flags": {},
-        })
+            evidence = target.get("rawEdgeEvidence", {})
+            segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
+            side_counts: dict[str, int] = {}
+            for segment in segments:
+                points = segment.get("pointsPx") if isinstance(segment, dict) else None
+                side = str(segment.get("side", "unknown")) if isinstance(segment, dict) else "unknown"
+                if not isinstance(points, list) or len(points) < 2:
+                    continue
+                index = side_counts.get(side, 0)
+                side_counts[side] = index + 1
+                shapes.append({
+                    "label": f"{version}:Phi12.2:arc:{side}:{index}",
+                    "points": [[float(value) for value in point] for point in points],
+                    "group_id": f"{version}:Phi12.2", "description": description,
+                    "shape_type": "linestrip", "flags": {},
+                })
     return shapes
 
 
@@ -270,21 +282,14 @@ def _draw_prediction(draw: ImageDraw.ImageDraw, record: dict[str, Any], version:
     radius_marker = max(5, width // 600)
     for shape in _shapes(record, version):
         points = [tuple(point) for point in shape["points"]]
-        if shape["shape_type"] == "line":
+        if shape["shape_type"] in {"line", "linestrip"}:
             draw.line(points, fill=color, width=line_width)
-            for x, y in points:
+            marker_points = points if shape["shape_type"] == "line" else (points[0], points[-1])
+            for x, y in marker_points:
                 draw.ellipse(
                     (x - radius_marker, y - radius_marker, x + radius_marker, y + radius_marker),
                     fill=color,
                 )
-        else:
-            (cx, cy), (rx, ry) = points
-            radius = math.hypot(rx - cx, ry - cy)
-            draw.ellipse(
-                (cx - radius, cy - radius, cx + radius, cy + radius),
-                outline=color,
-                width=line_width,
-            )
 
 
 def _render_overlay(image_path: Path, old: dict[str, Any], new: dict[str, Any], output: Path) -> None:

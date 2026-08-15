@@ -5,6 +5,8 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
+import jsonschema
+
 from algorithms.hole_2.current_capture import (
     SimilarityTransform,
     build_feature_outputs,
@@ -25,6 +27,14 @@ class CurrentCaptureContractTests(unittest.TestCase):
             "Phi12_2_diameter_px": 60.0, "Phi12_2.quality.edge_points": 77.0,
             "Phi12_2.quality.fit_residual_px": 0.4,
             "Phi12_2.quality.candidate_recovery_pass": "expanded_radius",
+            "Phi12_2.quality.candidate_evidence_arc_segments_target_px": [
+                {"side": "reference_left", "pointsPx": [[140.0, 92.5], [137.5, 100.0], [140.0, 107.5]]},
+                {"side": "reference_right", "pointsPx": [[170.0, 92.5], [172.5, 100.0], [170.0, 107.5]]},
+            ],
+            "d7.quality.candidate_boundary_evidence_target_px": [
+                {"side": "A", "rawPointsPx": [[85.0, 47.5], [85.0, 62.5]], "segmentPointsPx": [[85.0, 47.5], [85.0, 62.5]], "lineEquation": [1.0, 0.0, -85.0]},
+                {"side": "B", "rawPointsPx": [[85.0, 122.5], [85.0, 137.5]], "segmentPointsPx": [[85.0, 122.5], [85.0, 137.5]], "lineEquation": [1.0, 0.0, -85.0]},
+            ],
         }
         features, compatible = build_feature_outputs(measurements, transform, phi_support_angles=[0.0, math.pi / 2])
         self.assertEqual(100.0, compatible["d7_length"])
@@ -39,6 +49,31 @@ class CurrentCaptureContractTests(unittest.TestCase):
         self.assertEqual("expanded_radius", features["Phi12.2"]["recoveryPass"])
         self.assertAlmostEqual(22.5, features["Phi12.2"]["target"]["radiusPx"])
         self.assertEqual(2, len(features["Phi12.2"]["target"]["supportPointsPx"]))
+        self.assertEqual(
+            "outer_contour_two_visible_arcs",
+            features["Phi12.2"]["target"]["rawEdgeEvidence"]["semantics"],
+        )
+        self.assertEqual(
+            2, len(features["Phi12.2"]["target"]["rawEdgeEvidence"]["arcSegments"])
+        )
+        self.assertFalse(
+            features["Phi12.2"]["target"]["fittedGeometry"]["isDetectedContour"]
+        )
+        self.assertEqual(
+            "perpendicular_distance",
+            features["7"]["target"]["measurementAnnotation"]["type"],
+        )
+        self.assertEqual(
+            2, len(features["7"]["target"]["fittedGeometry"]["boundaries"])
+        )
+        schema = json.loads((
+            Path(__file__).resolve().parents[1]
+            / "specs/016-measurement-evidence-geometry-audit/contracts/measurement-evidence-v1.schema.json"
+        ).read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator(schema).validate({
+            "7": features["7"]["target"],
+            "Phi12.2": features["Phi12.2"]["target"],
+        })
 
     def test_partial_failure_does_not_change_other_feature(self):
         transform = SimilarityTransform(0.0, 0.0, 1.0, 0.0)

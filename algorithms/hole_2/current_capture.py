@@ -867,6 +867,17 @@ def build_feature_outputs(
     ]
     compatible = {key: measurements.get(key, float("nan")) for key in compatible_keys}
 
+    d7_boundary_evidence = measurements.get(
+        "d7.quality.candidate_boundary_evidence_target_px"
+    )
+    if not isinstance(d7_boundary_evidence, list):
+        d7_boundary_evidence = []
+    phi_arc_evidence = measurements.get(
+        "Phi12_2.quality.candidate_evidence_arc_segments_target_px"
+    )
+    if not isinstance(phi_arc_evidence, list):
+        phi_arc_evidence = []
+
     d7_keys = ["d7_x1", "d7_y1", "d7_x2", "d7_y2", "d7_length"]
     if _finite_values(measurements, d7_keys):
         reference_points = [
@@ -878,6 +889,37 @@ def build_feature_outputs(
                         "lengthPx": float(measurements["d7_length"])}
         d7_target = {"coordinateSystem": "target_px", "pointsPx": target_points,
                      "lengthPx": float(math.dist(target_points[0], target_points[1]))}
+        d7_target["rawEdgeEvidence"] = {
+            "semantics": "neck_outer_contour_edges",
+            "evidenceAvailable": bool(d7_boundary_evidence),
+            "boundaries": [
+                {
+                    "side": boundary.get("side"),
+                    "pointsPx": boundary.get("rawPointsPx", []),
+                    "transitionPairsPx": boundary.get("transitionPairsPx", []),
+                }
+                for boundary in d7_boundary_evidence
+                if isinstance(boundary, dict)
+            ],
+        }
+        d7_target["fittedGeometry"] = {
+            "type": "parallel_lines",
+            "isDetectedContour": False,
+            "boundaries": [
+                {
+                    "side": boundary.get("side"),
+                    "lineEquation": boundary.get("lineEquation"),
+                    "segmentPointsPx": boundary.get("segmentPointsPx", []),
+                }
+                for boundary in d7_boundary_evidence
+                if isinstance(boundary, dict)
+            ],
+        }
+        d7_target["measurementAnnotation"] = {
+            "type": "perpendicular_distance",
+            "pointsPx": target_points,
+            "valuePx": d7_target["lengthPx"],
+        }
         d7_valid, d7_reason = True, None
     else:
         d7_reference = d7_target = None
@@ -908,6 +950,28 @@ def build_feature_outputs(
             "radiusPx": transform.scale * radius,
             "diameterPx": 2.0 * transform.scale * radius,
             "supportPointsPx": support_target,
+        }
+        phi_target["rawEdgeEvidence"] = {
+            "semantics": "outer_contour_two_visible_arcs",
+            "evidenceAvailable": bool(phi_arc_evidence),
+            "arcSegments": [
+                {
+                    "side": segment.get("side"),
+                    "pointsPx": segment.get("pointsPx", []),
+                }
+                for segment in phi_arc_evidence
+                if isinstance(segment, dict)
+            ],
+        }
+        phi_target["fittedGeometry"] = {
+            "type": "circle_model",
+            "centerPx": list(target_center),
+            "radiusPx": transform.scale * radius,
+            "isDetectedContour": False,
+        }
+        phi_target["measurementAnnotation"] = {
+            "type": "diameter",
+            "valuePx": phi_target["diameterPx"],
         }
         phi_valid, phi_reason = True, None
     else:
@@ -1494,52 +1558,165 @@ def _refine_phi_reference_phase(
         return None, diagnostics
     polarity_sign = 1.0 if float(shape.polarity) > 0.0 else -1.0
     extension = math.radians(float(phi_config["phase_angle_extension_deg"]))
-    angle_start = float(shape.angle_start + transform.theta_rad - extension)
-    angle_end = float(shape.angle_end + transform.theta_rad + extension)
-    angles = np.linspace(angle_start, angle_end, max(160, int(phi_config["phase_min_points"] * 5)))
+    d7_shape = next(
+        (item for item in reference.shapes if item.sanitized == "d7"), None
+    )
+    if shape.circle is None or shape.angle_start is None or shape.angle_end is None:
+        diagnostics["candidate_phase_failure"] = "reference_arc_geometry_unavailable"
+        return None, diagnostics
+    left_start = float(shape.angle_start + transform.theta_rad - extension)
+    left_end = float(shape.angle_end + transform.theta_rad + extension)
+    samples_per_side = max(160, int(phi_config["phase_min_points"] * 5))
+    angle_groups: tuple[tuple[str, np.ndarray], ...] = ((
+        "reference_left", np.linspace(left_start, left_end, samples_per_side)
+    ),)
+    if d7_shape is not None and d7_shape.line_p1 is not None and d7_shape.line_p2 is not None:
+        ref_cx, ref_cy, _ = shape.circle
+        d7_midpoint = (
+            0.5 * (d7_shape.line_p1[0] + d7_shape.line_p2[0]),
+            0.5 * (d7_shape.line_p1[1] + d7_shape.line_p2[1]),
+        )
+        symmetry_axis = math.atan2(
+            d7_midpoint[1] - ref_cy, d7_midpoint[0] - ref_cx
+        )
+        right_start = float(
+            2.0 * symmetry_axis - shape.angle_end + transform.theta_rad - extension
+        )
+        right_end = float(
+            2.0 * symmetry_axis - shape.angle_start + transform.theta_rad + extension
+        )
+        angle_groups += ((
+            "reference_right", np.linspace(right_start, right_end, samples_per_side)
+        ),)
+    else:
+        diagnostics["candidate_opposite_arc_status"] = "reference_geometry_unavailable"
     image = contrast_stretch(target)
     points: list[tuple[float, float]] = []
     point_angles: list[float] = []
+    point_sides: list[str] = []
     edge_peaks: list[float] = []
     contrasts: list[float] = []
     polarity_support: list[bool] = []
     seed_center = (float(seed["target_cx"]), float(seed["target_cy"]))
     seed_radius = float(seed["target_radius"])
-    for angle in angles:
-        detected = _phase_edge_at_angle(
-            image, seed_center, seed_radius, float(angle), polarity_sign,
-            phase, phi_config,
-        )
-        if detected is None:
-            continue
-        point, edge_peak, contrast, local_polarity_margin = detected
-        points.append(point)
-        point_angles.append(float(angle))
-        edge_peaks.append(edge_peak)
-        contrasts.append(contrast)
-        polarity_support.append(local_polarity_margin >= 0.0)
+    for side_name, angles in angle_groups:
+        for angle in angles:
+            detected = _phase_edge_at_angle(
+                image, seed_center, seed_radius, float(angle), polarity_sign,
+                phase, phi_config,
+            )
+            if detected is None:
+                continue
+            point, edge_peak, contrast, local_polarity_margin = detected
+            points.append(point)
+            point_angles.append(float(angle))
+            point_sides.append(side_name)
+            edge_peaks.append(edge_peak)
+            contrasts.append(contrast)
+            polarity_support.append(local_polarity_margin >= 0.0)
+    point_array = np.asarray(points, dtype=np.float64)
+    angle_array = np.asarray(point_angles, dtype=np.float64)
+    side_array = np.asarray(point_sides, dtype=object)
+    polarity_array = np.asarray(polarity_support, dtype=bool)
+    edge_peak_array = np.asarray(edge_peaks, dtype=np.float64)
+    contrast_array = np.asarray(contrasts, dtype=np.float64)
+    reference_mask = side_array == "reference_left"
     fitted = _ransac_circle(
-        np.asarray(points, dtype=np.float64),
+        point_array[reference_mask],
         trials=int(phi_config["phase_ransac_trials"]),
         inlier_residual_px=float(phi_config["phase_ransac_inlier_residual_px"]),
         minimum_inliers=int(phi_config["phase_min_points"]),
-    ) if points else None
+    ) if reference_mask.any() else None
     if fitted is None:
         diagnostics.update({
             "candidate_phase_failure": "phase_circle_fit_failed",
-            "candidate_phase_edge_points": len(points),
-            "candidate_phase_raw_points": len(points),
+            "candidate_phase_edge_points": int(reference_mask.sum()),
+            "candidate_phase_raw_points": int(reference_mask.sum()),
             "candidate_phase_inlier_fraction": None,
         })
         return None, diagnostics
-    circle, inliers, residual = fitted
-    inlier_count = int(inliers.sum())
-    inlier_fraction = float(inlier_count / len(points)) if points else 0.0
+    circle, reference_inliers, residual = fitted
+    inliers = np.zeros(len(points), dtype=bool)
+    inliers[np.flatnonzero(reference_mask)] = reference_inliers
+    evidence_inliers = inliers.copy()
+    opposite_mask = side_array == "reference_right"
+    opposite_fit = _ransac_circle(
+        point_array[opposite_mask],
+        trials=int(phi_config["phase_ransac_trials"]),
+        inlier_residual_px=float(phi_config["phase_ransac_inlier_residual_px"]),
+        minimum_inliers=int(phi_config["phase_min_points"]),
+    ) if opposite_mask.any() else None
+    if opposite_fit is not None:
+        _, opposite_inliers, _ = opposite_fit
+        evidence_inliers[np.flatnonzero(opposite_mask)] = opposite_inliers
+    inlier_count = int(reference_inliers.sum())
+    reference_raw_count = int(reference_mask.sum())
+    inlier_fraction = float(inlier_count / reference_raw_count) if reference_raw_count else 0.0
     cx, cy, radius = (float(value) for value in circle)
-    inlier_angles = np.unwrap(np.asarray(point_angles, dtype=np.float64)[inliers])
-    expected_extent = max(1e-9, abs(angle_end - angle_start))
-    coverage = float(np.ptp(inlier_angles) / expected_extent) if len(inlier_angles) > 1 else 0.0
-    coverage = min(1.0, coverage)
+    side_diagnostics: list[dict[str, Any]] = []
+    evidence_segments: list[dict[str, Any]] = []
+    side_coverages: list[float] = []
+    side_inlier_counts: list[int] = []
+    side_circle_models: list[tuple[float, float, float]] = []
+    side_circle_residuals: list[float] = []
+    for side_name, side_angles in angle_groups:
+        side_mask = evidence_inliers & (side_array == side_name)
+        side_count = int(side_mask.sum())
+        side_inlier_counts.append(side_count)
+        selected_angles = np.unwrap(angle_array[side_mask])
+        expected_extent = max(1e-9, abs(float(side_angles[-1] - side_angles[0])))
+        side_coverage = (
+            float(np.ptp(selected_angles) / expected_extent)
+            if len(selected_angles) > 1 else 0.0
+        )
+        side_coverage = min(1.0, side_coverage)
+        side_coverages.append(side_coverage)
+        ordered = point_array[side_mask]
+        if len(ordered):
+            order = np.argsort(angle_array[side_mask])
+            ordered = ordered[order]
+        side_diagnostics.append({
+            "side": side_name,
+            "inlierPoints": side_count,
+            "angleCoverageFraction": side_coverage,
+            "polaritySupportFraction": (
+                float(np.mean(polarity_array[side_mask])) if side_count else 0.0
+            ),
+        })
+        if side_count >= int(phi_config["phase_min_points"]):
+            try:
+                side_circle = geometric_circle_fit(
+                    ordered, fit_circle_kasa(ordered)
+                )
+                side_circle_models.append(tuple(float(value) for value in side_circle))
+                side_circle_residuals.append(float(circular_residual(ordered, side_circle)))
+                side_diagnostics[-1].update({
+                    "circleCenterPx": [float(side_circle[0]), float(side_circle[1])],
+                    "circleRadiusPx": float(side_circle[2]),
+                    "circleResidualPx": side_circle_residuals[-1],
+                })
+            except (ValueError, np.linalg.LinAlgError):
+                side_diagnostics[-1]["circleFitFailure"] = "side_circle_fit_failed"
+    coverage = side_coverages[0] if side_coverages else 0.0
+    side_center_disagreement = None
+    side_radius_disagreement = None
+    if len(side_circle_models) == 2:
+        # Only reference_left has a LabelMe-defined subpixel edge phase in the
+        # legacy reference.  The mirrored side is still mandatory image
+        # evidence, but cannot safely redefine that phase.  Use the calibrated
+        # side for the one circle model and require the independently detected
+        # opposite arc to agree with it under the unchanged residual gate.
+        common_model_residuals = [
+            float(circular_residual(point_array[evidence_inliers & (side_array == side)],
+                                    (cx, cy, radius)))
+            for side, _ in angle_groups
+        ]
+        side_center_disagreement = math.dist(
+            side_circle_models[0][:2], side_circle_models[1][:2]
+        )
+        side_radius_disagreement = abs(
+            side_circle_models[0][2] - side_circle_models[1][2]
+        )
     offset_x = cx - predicted_center[0]
     offset_y = cy - predicted_center[1]
     phase_seed_offset_x = cx - seed_center[0]
@@ -1555,7 +1732,9 @@ def _refine_phi_reference_phase(
     radius_min = float(seed["radius_lower_bound"])
     radius_max = float(seed["radius_upper_bound"])
     reasons: list[str] = []
-    polarity_support_fraction = float(np.mean(polarity_support)) if polarity_support else 0.0
+    polarity_support_fraction = (
+        float(np.mean(polarity_array[reference_mask])) if reference_mask.any() else 0.0
+    )
     if not radius_min <= radius <= radius_max:
         reasons.append("phase_radius_out_of_bounds")
     if any(center_boundary[key] for key in ("xLower", "xUpper", "yLower", "yUpper")):
@@ -1571,7 +1750,7 @@ def _refine_phi_reference_phase(
     diagnostics.update({
         "candidate_phase_failure": None if not reasons else ",".join(reasons),
         "candidate_phase_edge_points": inlier_count,
-        "candidate_phase_raw_points": len(points),
+        "candidate_phase_raw_points": reference_raw_count,
         "candidate_phase_inlier_fraction": inlier_fraction,
         "candidate_phase_fit_residual_target_px": float(residual),
         "candidate_phase_seed_center_offset_x_target_px": phase_seed_offset_x,
@@ -1590,13 +1769,58 @@ def _refine_phi_reference_phase(
             "limitPx": center_limit,
         },
         "candidate_phase_angle_coverage_fraction": coverage,
+        "candidate_phase_side_diagnostics": side_diagnostics,
+        "candidate_phase_circle_fit_contract": (
+            "reference_calibrated_arc_model_with_opposite_arc_consistency"
+        ),
+        "candidate_phase_common_model_side_residuals_target_px": (
+            common_model_residuals if len(side_circle_models) == 2 else None
+        ),
+        "candidate_phase_side_center_disagreement_target_px": side_center_disagreement,
+        "candidate_phase_side_radius_disagreement_target_px": side_radius_disagreement,
         "candidate_phase_polarity_support_fraction": polarity_support_fraction,
         "candidate_phase_angle_extension_deg": float(phi_config["phase_angle_extension_deg"]),
-        "candidate_phase_edge_peak_normalized": float(np.median(edge_peaks) / normalizer),
-        "candidate_phase_contrast": float(np.median(contrasts)),
+        "candidate_phase_edge_peak_normalized": float(
+            np.median(edge_peak_array[reference_mask]) / normalizer
+        ),
+        "candidate_phase_contrast": float(np.median(contrast_array[reference_mask])),
     })
     if reasons:
+        diagnostics["candidate_evidence_arc_segments_status"] = "rejected_with_phase_candidate"
         return None, diagnostics
+    for index, (side_name, _) in enumerate(angle_groups):
+        side_info = side_diagnostics[index]
+        side_mask = evidence_inliers & (side_array == side_name)
+        side_model_residual = side_info.get("circleResidualPx")
+        side_accepted = (
+            int(side_info["inlierPoints"]) >= int(phi_config["phase_min_points"])
+            and float(side_info["angleCoverageFraction"])
+            >= float(phi_config["min_angle_coverage_fraction"])
+            and float(side_info["polaritySupportFraction"])
+            >= float(phi_config["min_angle_coverage_fraction"])
+            and side_model_residual is not None
+            and float(side_model_residual)
+            <= float(phi_config["max_fit_residual_target_px"])
+        )
+        side_info["acceptedAsVisibleArcEvidence"] = side_accepted
+        side_info["commonCircleResidualPx"] = (
+            None if len(side_circle_models) != 2
+            else common_model_residuals[index]
+        )
+        if not side_accepted:
+            continue
+        selected_points = point_array[side_mask]
+        selected_angles = angle_array[side_mask]
+        selected_points = selected_points[np.argsort(selected_angles)]
+        evidence_segments.append({
+            "side": side_name,
+            "pointsPx": [[float(x), float(y)] for x, y in selected_points],
+        })
+    diagnostics["candidate_evidence_arc_segments_status"] = (
+        "complete_two_side" if len(evidence_segments) == 2
+        else "reference_side_only_opposite_unverified"
+    )
+    diagnostics["candidate_evidence_arc_segments_target_px"] = evidence_segments
     refined = dict(seed)
     refined.update({
         "target_cx": cx,
@@ -1610,7 +1834,7 @@ def _refine_phi_reference_phase(
         "center_saturated": False,
         "lower_radius_saturated": radius <= radius_min + 1e-6,
         "upper_radius_saturated": radius >= radius_max - 1e-6,
-        "edge_peak": float(np.median(edge_peaks) / normalizer),
+        "edge_peak": float(np.median(edge_peak_array[reference_mask]) / normalizer),
         "phase_refined": True,
     })
     return refined, diagnostics
@@ -1970,10 +2194,17 @@ def _paired_contour_boundary(
     d7_config: dict[str, Any],
     diagnostics: dict[str, Any],
 ) -> BoundaryDetection | None:
-    """Fit the centerline of a dark physical contour from two edge polarities."""
+    """Use paired transitions to estimate the physical outer-contour locus.
+
+    The photographed contour is a finite-width dark edge response.  Its two
+    opposite-polarity transitions are raw image evidence; their midpoint is
+    the subpixel estimate of the underlying physical edge.  This distinction
+    prevents either side of the optical edge band from being misreported as
+    the part boundary.
+    """
     diagnostics.update({
         "endpoint": endpoint,
-        "boundarySemantics": "paired_edge_centerline",
+        "boundarySemantics": "paired_transition_center_estimate_of_outer_contour",
         "pairSupport": 0,
         "outerPeakMedian": None,
         "innerPeakMedian": None,
@@ -2007,7 +2238,9 @@ def _paired_contour_boundary(
     minimum_width = float(d7_config["paired_edge_min_width_target_px"])
     maximum_width = float(d7_config["paired_edge_max_width_target_px"])
     minimum_peak = float(d7_config["paired_edge_min_peak"])
-    edge_points: list[tuple[float, float]] = []
+    contour_points: list[tuple[float, float]] = []
+    outer_transition_points: list[tuple[float, float]] = []
+    inner_transition_points: list[tuple[float, float]] = []
     outer_peaks: list[float] = []
     inner_peaks: list[float] = []
     pair_widths: list[float] = []
@@ -2031,7 +2264,7 @@ def _paired_contour_boundary(
         derivative = np.diff(smooth_1d(profile, 7))
         outer_score = derivative * outer_sign
         inner_score = -derivative * outer_sign
-        best: tuple[float, float, float, float, float] | None = None
+        best: tuple[float, float, float, float, float, float, float] | None = None
         for outer_index in range(1, len(derivative) - 1):
             outer_peak = float(outer_score[outer_index])
             if (
@@ -2063,32 +2296,38 @@ def _paired_contour_boundary(
                     * math.sqrt(prior[outer_index] * prior[inner_index])
                 )
                 candidate = (
-                    pair_score, center_position, outer_peak, inner_peak,
+                    pair_score, center_position, outer_position, inner_position,
+                    outer_peak, inner_peak,
                     abs(inner_position - outer_position),
                 )
                 if best is None or candidate[0] > best[0]:
                     best = candidate
         if best is None:
             continue
-        _, center_position, outer_peak, inner_peak, pair_width = best
-        edge_points.append((
-            float(center[0] + center_position * axis[0]),
-            float(center[1] + center_position * axis[1]),
-        ))
+        (_, center_position, outer_position, inner_position,
+         outer_peak, inner_peak, pair_width) = best
+        contour_points.append((float(center[0] + center_position * axis[0]),
+                               float(center[1] + center_position * axis[1])))
+        outer_transition_points.append((
+            float(center[0] + outer_position * axis[0]),
+            float(center[1] + outer_position * axis[1])))
+        inner_transition_points.append((
+            float(center[0] + inner_position * axis[0]),
+            float(center[1] + inner_position * axis[1])))
         outer_peaks.append(outer_peak)
         inner_peaks.append(inner_peak)
         pair_widths.append(pair_width)
 
     diagnostics.update({
-        "pairSupport": len(edge_points),
+        "pairSupport": len(contour_points),
         "outerPeakMedian": None if not outer_peaks else float(np.median(outer_peaks)),
         "innerPeakMedian": None if not inner_peaks else float(np.median(inner_peaks)),
         "pairWidthMedianPx": None if not pair_widths else float(np.median(pair_widths)),
     })
     minimum_support = int(d7_config["paired_edge_min_support"])
-    fitted = robust_fit_line(edge_points, min_points=minimum_support)
+    fitted = robust_fit_line(contour_points, min_points=minimum_support)
     if fitted is None:
-        diagnostics["failureStage"] = "paired_centerline_fit_failed"
+        diagnostics["failureStage"] = "outer_contour_locus_fit_failed"
         return None
     line, inliers = fitted
     diagnostics["inlierPoints"] = int(len(inliers))
@@ -2112,6 +2351,24 @@ def _paired_contour_boundary(
     if abs(offset) > search_window:
         diagnostics["failureStage"] = "offset_out_of_search_window"
         return None
+    direction = np.asarray([-float(line[1]), float(line[0])], dtype=np.float64)
+    projections = inliers @ direction
+    segment = [
+        (inliers[int(np.argmin(projections))]).tolist(),
+        (inliers[int(np.argmax(projections))]).tolist(),
+    ]
+    diagnostics.update({
+        "rawContourLocusPointsPx": [list(point) for point in contour_points],
+        "rawOuterTransitionPointsPx": [list(point) for point in outer_transition_points],
+        "rawInnerTransitionPointsPx": [list(point) for point in inner_transition_points],
+        "transitionPairsPx": [
+            [list(outer), list(inner)]
+            for outer, inner in zip(outer_transition_points, inner_transition_points)
+        ],
+        "inlierContourLocusPointsPx": inliers.tolist(),
+        "fittedLine": [float(value) for value in line],
+        "fittedSegmentPointsPx": segment,
+    })
     return BoundaryDetection(
         feature_point=feature_point,
         line=tuple(float(value) for value in line),
@@ -2190,6 +2447,10 @@ def _d7_multiband_recovery(
                 "pointCount": int(boundary.point_count),
                 "residualTargetPx": float(boundary.median_residual_px),
                 "edgePeak": float(boundary.median_edge_score),
+                "rawPointsPx": first_diagnostic.get("rawEdgePointsPx", [])
+                if side_name == "p1" else second_diagnostic.get("rawEdgePointsPx", []),
+                "segmentPointsPx": first_diagnostic.get("fittedSegmentPointsPx", [])
+                if side_name == "p1" else second_diagnostic.get("fittedSegmentPointsPx", []),
             })
         if first is None or second is None:
             band["failureReasons"].append("boundary_fit_failed")
@@ -2277,6 +2538,7 @@ def _d7_multiband_recovery(
                 "point": tuple(float(value) for value in np.median(points, axis=0)),
                 "line": tuple(representative["line"]),
                 "inliers": inlier_candidates,
+                "representative": representative,
             }
         parallelism = boundary_parallelism_deg(
             aggregates["p1"]["line"], aggregates["p2"]["line"]
@@ -2297,6 +2559,16 @@ def _d7_multiband_recovery(
         )
         quality["candidate_multiband_aggregation"] = "independent_side_median"
         quality["candidate_multiband_failure"] = None
+        quality["candidate_boundary_semantics"] = "neck_outer_contour_edges"
+        quality["candidate_boundary_evidence_target_px"] = [
+            {
+                "side": side,
+                "rawPointsPx": aggregates[source]["representative"]["rawPointsPx"],
+                "segmentPointsPx": aggregates[source]["representative"]["segmentPointsPx"],
+                "lineEquation": list(aggregates[source]["line"]),
+            }
+            for side, source in (("A", "p1"), ("B", "p2"))
+        ]
         return (aggregates["p1"]["point"], aggregates["p2"]["point"]), quality
 
     if len(valid) < minimum_bands:
@@ -2336,7 +2608,91 @@ def _d7_multiband_recovery(
             aggregated_first, aggregated_second
         )),
     })
+    representative_band = min(
+        inliers,
+        key=lambda band: abs(float(band["lengthTargetPx"]) - median_length),
+    )
+    quality["candidate_boundary_semantics"] = "neck_outer_contour_edges"
+    quality["candidate_boundary_evidence_target_px"] = [
+        {
+            "side": side,
+            "rawPointsPx": representative_band[key].get("rawEdgePointsPx", []),
+            "segmentPointsPx": representative_band[key].get("fittedSegmentPointsPx", []),
+            "lineEquation": representative_band[key].get("fittedLine"),
+        }
+        for side, key in (("A", "p1Strip"), ("B", "p2Strip"))
+    ]
     return (aggregated_first, aggregated_second), quality
+
+
+def _shared_parallel_boundary_geometry(
+    evidence: list[dict[str, Any]],
+) -> tuple[
+    tuple[tuple[float, float], tuple[float, float]],
+    list[dict[str, Any]],
+    dict[str, Any],
+] | None:
+    """Fit a common line direction and return its exact normal connector.
+
+    The two offsets come only from their respective image-derived point
+    clouds.  No nominal dimension or target annotation participates.
+    """
+    if len(evidence) != 2:
+        return None
+    point_sets: list[np.ndarray] = []
+    normals: list[np.ndarray] = []
+    for boundary in evidence:
+        points = np.asarray(boundary.get("rawPointsPx", []), dtype=np.float64)
+        equation = boundary.get("lineEquation")
+        if (
+            points.ndim != 2 or points.shape[0] < 2 or points.shape[1] != 2
+            or not isinstance(equation, list) or len(equation) != 3
+        ):
+            return None
+        normal = np.asarray(equation[:2], dtype=np.float64)
+        norm = float(np.linalg.norm(normal))
+        if not math.isfinite(norm) or norm <= 1e-12:
+            return None
+        normal /= norm
+        if normals and float(normal @ normals[0]) < 0.0:
+            normal = -normal
+        point_sets.append(points)
+        normals.append(normal)
+    common_normal = normals[0] + normals[1]
+    normal_norm = float(np.linalg.norm(common_normal))
+    if normal_norm <= 1e-12:
+        return None
+    common_normal /= normal_norm
+    tangent = np.asarray([-common_normal[1], common_normal[0]], dtype=np.float64)
+    offsets = [float(np.median(points @ common_normal)) for points in point_sets]
+    tangent_coordinate = float(np.median(np.concatenate([
+        points @ tangent for points in point_sets
+    ])))
+    dimension_points = tuple(
+        tuple(float(value) for value in offset * common_normal + tangent_coordinate * tangent)
+        for offset in offsets
+    )
+    fitted_boundaries: list[dict[str, Any]] = []
+    for boundary, points, offset in zip(evidence, point_sets, offsets):
+        projections = points @ tangent
+        segment = [
+            (offset * common_normal + float(np.min(projections)) * tangent).tolist(),
+            (offset * common_normal + float(np.max(projections)) * tangent).tolist(),
+        ]
+        fitted_boundaries.append({
+            **boundary,
+            "lineEquation": [
+                float(common_normal[0]), float(common_normal[1]), -offset
+            ],
+            "segmentPointsPx": segment,
+        })
+    diagnostics = {
+        "candidate_boundary_fit_contract": "shared_parallel_direction_from_two_point_clouds",
+        "candidate_boundary_common_normal_target": common_normal.tolist(),
+        "candidate_boundary_perpendicular_distance_target_px": abs(offsets[0] - offsets[1]),
+        "candidate_boundary_nominal_adjustment_applied": False,
+    }
+    return dimension_points, fitted_boundaries, diagnostics
 
 
 def _detect_d7_tangent(
@@ -2430,6 +2786,13 @@ def _detect_d7_tangent(
         if recovered is None:
             return None, combined
         recovered_first, recovered_second = recovered
+        shared = _shared_parallel_boundary_geometry(
+            combined.get("candidate_boundary_evidence_target_px", [])
+        )
+        if shared is not None:
+            (recovered_first, recovered_second), shared_evidence, shared_quality = shared
+            combined["candidate_boundary_evidence_target_px"] = shared_evidence
+            combined.update(shared_quality)
         ref_first = transform.inverse(*recovered_first)
         ref_second = transform.inverse(*recovered_second)
         combined["candidate_primary_failed_sides"] = list(
@@ -2450,7 +2813,7 @@ def _detect_d7_tangent(
         ]
         return recover_multiband({
             "candidate_failure": "tangent_boundary_fit_failed",
-            "candidate_boundary_semantics": "paired_edge_centerline",
+            "candidate_boundary_semantics": "neck_outer_contour_edges",
             "candidate_reference_tangent_error_px": tangent_error_ref,
             "candidate_axis_shift_target_px": axis_shift,
             "candidate_failed_sides": failed_sides,
@@ -2470,7 +2833,7 @@ def _detect_d7_tangent(
     quality = {
         "candidate_failure": None if not reasons else ",".join(reasons),
         "candidate_recovery_pass": None,
-        "candidate_boundary_semantics": "paired_edge_centerline",
+        "candidate_boundary_semantics": "neck_outer_contour_edges",
         "candidate_reference_tangent_error_px": tangent_error_ref,
         "candidate_axis_shift_target_px": axis_shift,
         "candidate_p1_edge_points": float(first.point_count),
@@ -2491,11 +2854,35 @@ def _detect_d7_tangent(
         "candidate_p2_inner_peak": second_diagnostic["innerPeakMedian"],
         "candidate_p1_pair_width_target_px": first_diagnostic["pairWidthMedianPx"],
         "candidate_p2_pair_width_target_px": second_diagnostic["pairWidthMedianPx"],
+        "candidate_boundary_evidence_target_px": [
+            {
+                "side": "A",
+                "rawPointsPx": first_diagnostic.get("rawContourLocusPointsPx", []),
+                "transitionPairsPx": first_diagnostic.get("transitionPairsPx", []),
+                "segmentPointsPx": first_diagnostic.get("fittedSegmentPointsPx", []),
+                "lineEquation": first_diagnostic.get("fittedLine"),
+            },
+            {
+                "side": "B",
+                "rawPointsPx": second_diagnostic.get("rawContourLocusPointsPx", []),
+                "transitionPairsPx": second_diagnostic.get("transitionPairsPx", []),
+                "segmentPointsPx": second_diagnostic.get("fittedSegmentPointsPx", []),
+                "lineEquation": second_diagnostic.get("fittedLine"),
+            },
+        ],
     }
     if reasons:
         return recover_multiband(quality)
-    ref_first = transform.inverse(*first.feature_point)
-    ref_second = transform.inverse(*second.feature_point)
+    first_point, second_point = first.feature_point, second.feature_point
+    shared = _shared_parallel_boundary_geometry(
+        quality["candidate_boundary_evidence_target_px"]
+    )
+    if shared is not None:
+        (first_point, second_point), shared_evidence, shared_quality = shared
+        quality["candidate_boundary_evidence_target_px"] = shared_evidence
+        quality.update(shared_quality)
+    ref_first = transform.inverse(*first_point)
+    ref_second = transform.inverse(*second_point)
     return {
         "d7_x1": ref_first[0], "d7_y1": ref_first[1],
         "d7_x2": ref_second[0], "d7_y2": ref_second[1],
@@ -2517,6 +2904,8 @@ def _v6_d7_fallback(
     quality = dict(candidate_quality)
     quality["candidate_fallback_pass"] = None
     quality["candidate_fallback_failure"] = None
+    quality.pop("candidate_boundary_evidence_target_px", None)
+    quality["candidate_boundary_evidence_status"] = "unavailable_v6_original_quality_fallback"
     keys = ("d7_x1", "d7_y1", "d7_x2", "d7_y2", "d7_length")
     original_valid = (
         v6_measurements.get("d7.quality.upstream") == "ok:dual_boundary_fit"
@@ -2688,8 +3077,8 @@ def run_current_capture(
         if phi_quality.get("candidate_phase_fallback") == "legacy_magnitude_quality_fallback":
             phi_source = "hole2-v6-current-capture-legacy-magnitude-quality-fallback"
         elif phi_quality.get("candidate_polarity_enforced") is True:
-            phi_source = "hole2-v6-current-capture-reference-phase-circle"
-        d7_source = "hole2-v6-current-capture-paired-contour-centerline"
+            phi_source = "hole2-v6-current-capture-reference-arc-with-opposite-arc-audit"
+        d7_source = "hole2-v6-current-capture-paired-transition-outer-contour-lines"
         if phi_values is not None:
             measurements.update(phi_values)
             d7_values, d7_quality = _detect_d7_tangent(

@@ -277,37 +277,36 @@ def _draw_preview(
 
     d7 = _feature(record, "7")
     if _feature_valid(record, "7") and isinstance(d7.get("target"), dict):
-        points = d7["target"].get("pointsPx")
-        if isinstance(points, list) and len(points) == 2:
-            scaled = [
-                (float(point[0]) * scale, float(point[1]) * scale)
-                for point in points
-            ]
+        target = d7["target"]
+        fitted = target.get("fittedGeometry", {})
+        boundaries = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
+        for index, boundary in enumerate(boundaries):
+            points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
+            if isinstance(points, list) and len(points) >= 2:
+                scaled = [
+                    (float(point[0]) * scale, float(point[1]) * scale)
+                    for point in points
+                ]
+                color = (255, 190, 0) if index == 0 else (255, 110, 0)
+                draw.line(scaled, fill=color, width=line_width)
+        annotation = target.get("measurementAnnotation", {})
+        points = annotation.get("pointsPx") if isinstance(annotation, dict) else None
+        if len(boundaries) >= 2 and isinstance(points, list) and len(points) == 2:
+            scaled = [(float(p[0]) * scale, float(p[1]) * scale) for p in points]
             draw.line(scaled, fill=(0, 235, 255), width=line_width)
             for x, y in scaled:
-                draw.ellipse(
-                    (x - marker, y - marker, x + marker, y + marker),
-                    fill=(0, 235, 255),
-                )
+                draw.ellipse((x - marker, y - marker, x + marker, y + marker),
+                             fill=(0, 235, 255))
 
     phi = _feature(record, "Phi12.2")
     if _feature_valid(record, "Phi12.2") and isinstance(phi.get("target"), dict):
-        center = phi["target"].get("centerPx")
-        radius = phi["target"].get("radiusPx")
-        if (
-            isinstance(center, list) and len(center) == 2
-            and isinstance(radius, (int, float)) and math.isfinite(float(radius))
-        ):
-            cx, cy = float(center[0]) * scale, float(center[1]) * scale
-            scaled_radius = float(radius) * scale
-            draw.ellipse(
-                (
-                    cx - scaled_radius, cy - scaled_radius,
-                    cx + scaled_radius, cy + scaled_radius,
-                ),
-                outline=(0, 255, 80),
-                width=line_width,
-            )
+        evidence = phi["target"].get("rawEdgeEvidence", {})
+        segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
+        for segment in segments:
+            points = segment.get("pointsPx") if isinstance(segment, dict) else None
+            if isinstance(points, list) and len(points) >= 2:
+                scaled = [(float(p[0]) * scale, float(p[1]) * scale) for p in points]
+                draw.line(scaled, fill=(0, 255, 80), width=line_width)
 
     lines = _status_lines(record)
     font_size = max(9, min(24, image.width // 75))
@@ -338,31 +337,50 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
     shapes: list[dict[str, Any]] = []
     d7 = _feature(record, "7")
     if _feature_valid(record, "7") and isinstance(d7.get("target"), dict):
-        points = d7["target"].get("pointsPx")
-        if isinstance(points, list) and len(points) == 2:
+        target = d7["target"]
+        fitted = target.get("fittedGeometry", {})
+        boundaries = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
+        for boundary in boundaries:
+            points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
+            side = boundary.get("side") if isinstance(boundary, dict) else None
+            if isinstance(points, list) and len(points) >= 2 and side in {"A", "B"}:
+                shapes.append({
+                    "label": f"prediction:7:boundary:{side}",
+                    "points": [[float(value) for value in point] for point in points],
+                    "group_id": "prediction:7",
+                    "description": "fitted neck outer-contour boundary; original target pixels",
+                    "shape_type": "line",
+                    "flags": {},
+                })
+        annotation = target.get("measurementAnnotation", {})
+        points = annotation.get("pointsPx") if isinstance(annotation, dict) else None
+        if len(boundaries) >= 2 and isinstance(points, list) and len(points) == 2:
             shapes.append({
-                "label": "prediction:7",
+                "label": "prediction:7:dimension",
                 "points": [[float(value) for value in point] for point in points],
-                "group_id": None,
-                "description": "detector prediction in original target pixels",
+                "group_id": "prediction:7",
+                "description": "perpendicular distance annotation; not an edge",
                 "shape_type": "line",
                 "flags": {},
             })
     phi = _feature(record, "Phi12.2")
     if _feature_valid(record, "Phi12.2") and isinstance(phi.get("target"), dict):
-        center = phi["target"].get("centerPx")
-        radius = phi["target"].get("radiusPx")
-        if (
-            isinstance(center, list) and len(center) == 2
-            and isinstance(radius, (int, float)) and math.isfinite(float(radius))
-        ):
-            cx, cy, radius_value = float(center[0]), float(center[1]), float(radius)
+        evidence = phi["target"].get("rawEdgeEvidence", {})
+        segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
+        side_counts: dict[str, int] = {}
+        for segment in segments:
+            points = segment.get("pointsPx") if isinstance(segment, dict) else None
+            side = str(segment.get("side", "unknown")) if isinstance(segment, dict) else "unknown"
+            if not isinstance(points, list) or len(points) < 2:
+                continue
+            index = side_counts.get(side, 0)
+            side_counts[side] = index + 1
             shapes.append({
-                "label": "prediction:Phi12.2",
-                "points": [[cx, cy], [cx + radius_value, cy]],
-                "group_id": None,
-                "description": "detector prediction in original target pixels",
-                "shape_type": "circle",
+                "label": f"prediction:Phi12.2:arc:{side}:{index}",
+                "points": [[float(value) for value in point] for point in points],
+                "group_id": "prediction:Phi12.2",
+                "description": "detected visible outer-contour arc; no unobserved circle extrapolation",
+                "shape_type": "linestrip",
                 "flags": {},
             })
     return shapes
