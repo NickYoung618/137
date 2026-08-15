@@ -9,6 +9,7 @@ from algorithms.slot_pose.groove_refinement import (
     DEFAULT_GROOVE_REFINEMENT_CONFIG,
     _circle_intersection,
     _robust_fit_line,
+    _select_consensus_line,
     refine_groove_opening,
 )
 
@@ -79,6 +80,14 @@ def candidate(start: float, end: float) -> dict:
         "endDeg": end % 360.0,
         "centerDeg": (start + ((end - start) % 360.0) / 2.0) % 360.0,
         "radialDepthPx": 100.0,
+    }
+
+
+def v2_config(**overrides: object) -> dict:
+    return {
+        **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+        "threshold_version": "groove-sidewall-subpixel-v2",
+        **overrides,
     }
 
 
@@ -154,6 +163,67 @@ class GrooveRefinementTests(unittest.TestCase):
             _circle_intersection((1.0, 0.0, -500.0), (260.0, 250.0), 185.0, 0.0, 2.0)
         with self.assertRaisesRegex(ValueError, "not near coarse boundary"):
             _circle_intersection((1.0, 0.0, -100.0), (260.0, 250.0), 185.0, 0.0, 2.0)
+
+    def test_v2_consensus_keeps_long_straight_core_and_rejects_fillet_points(self) -> None:
+        ys = np.linspace(-70.0, 40.0, 20)
+        core = [(-50.0 + 0.12 * math.sin(index), float(y)) for index, y in enumerate(ys)]
+        fillet_and_texture = [
+            (-42.0, -86.0), (-44.0, -81.0), (-45.0, -76.0),
+            (-41.0, 44.0), (-43.0, 48.0), (-45.0, 52.0),
+        ]
+        decision = _select_consensus_line(
+            core + fillet_and_texture, minimum=16, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=3.0, config=v2_config(), pixel_scale=1.0,
+        )
+        self.assertEqual("accepted", decision["status"], decision)
+        self.assertGreaterEqual(decision["inlierCount"], 18)
+        self.assertGreaterEqual(decision["longitudinalCoverage"], 0.70)
+        self.assertLessEqual(decision["residualP95Px"], 2.0)
+        self.assertGreaterEqual(decision["rejectedPointCount"], 5)
+        self.assertAlmostEqual(240.0, decision["intersectionAngleDeg"], delta=0.2)
+
+    def test_v2_consensus_rejects_short_support_and_equal_two_line_ambiguity(self) -> None:
+        short = [(-50.0 + 0.05 * math.sin(index), float(y)) for index, y in enumerate(np.linspace(-10.0, 10.0, 16))]
+        spread = [(-25.0 + 3.0 * index, y) for index, y in enumerate((-80.0, -65.0, -50.0, 35.0, 50.0, 65.0))]
+        short_result = _select_consensus_line(
+            short + spread, minimum=12, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=15.0, config=v2_config(), pixel_scale=1.0,
+        )
+        self.assertEqual("not_found", short_result["status"])
+
+        first = [(-50.0, float(y)) for y in np.linspace(-70.0, 40.0, 16)]
+        second = [(-58.0, float(y)) for y in np.linspace(-70.0, 40.0, 16)]
+        ambiguous = _select_consensus_line(
+            first + second, minimum=12, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=10.0, config=v2_config(), pixel_scale=1.0,
+        )
+        self.assertEqual("ambiguous", ambiguous["status"], ambiguous)
+        self.assertEqual(0, ambiguous["supportMargin"])
+
+    def test_v2_is_deterministic_wrap_safe_and_emits_explainable_diagnostics(self) -> None:
+        center, radius = (260.35, 251.65), 185.4
+        image = groove_image(354.75, 5.35, center=center, radius=radius)
+        outputs = [
+            refine_groove_opening(
+                image, center, radius, candidate(355.0, 5.0),
+                bilinear_sample, parabolic_peak, v2_config(),
+            )
+            for _ in range(3)
+        ]
+        deterministic = [{key: value for key, value in item.items() if key != "elapsedMs"} for item in outputs]
+        self.assertTrue(all(item == deterministic[0] for item in deterministic[1:]))
+        result = outputs[0]
+        self.assertGreaterEqual(result["elapsedMs"], 0.0)
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual("slot-groove-subpixel-opening/2", result["schemaVersion"])
+        self.assertAlmostEqual(0.05, result["openingMidpointProfileDeg"], delta=0.10)
+        for side_name in ("startSide", "endSide"):
+            side = result[side_name]
+            self.assertEqual("deterministic-consensus-tls-v2", side["lineFitStrategy"])
+            self.assertEqual(side["detectedPointCount"], side["supportPointCount"] + side["rejectedPointCount"])
+            self.assertGreaterEqual(side["lineInlierRatio"], 0.5)
+            self.assertGreaterEqual(side["lineLongitudinalCoverage"], 0.7)
+            self.assertIsNotNone(side["bestModelId"])
 
 
 if __name__ == "__main__":

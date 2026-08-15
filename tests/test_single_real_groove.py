@@ -316,7 +316,10 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["config_id"] = "synthetic-single-real-groove-y-down-v2"
         config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2
-        config["detector"]["groove_refinement"] = DEFAULT_GROOVE_REFINEMENT_CONFIG
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
         config["pose"].update({
             "drawing_datum_definition_confirmed": True,
             "a2_drawing_feature_mapping_confirmed": True,
@@ -336,6 +339,11 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual("PLC_MAPPING_UNCONFIRMED", payload["error"]["code"], payload)
         diagnostics = payload["diagnostics"]
         self.assertEqual("accepted", diagnostics["grooveRefinement"]["status"])
+        self.assertEqual("slot-groove-subpixel-opening/2", diagnostics["grooveRefinement"]["schemaVersion"])
+        self.assertEqual(
+            "deterministic-consensus-tls-v2",
+            diagnostics["grooveRefinement"]["startSide"]["lineFitStrategy"],
+        )
         pose = diagnostics["singleGroovePose"]
         self.assertEqual("slot-single-real-groove-pose/2", pose["schemaVersion"])
         self.assertEqual("EVALUATED", pose["targetAssessment"]["status"])

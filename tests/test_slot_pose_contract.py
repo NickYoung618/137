@@ -204,6 +204,47 @@ class SlotPoseContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "single_real_groove"):
                 load_config(path)
 
+    def test_v2_groove_refinement_consensus_config_is_strict_and_finite(self) -> None:
+        from tools.generate_synthetic_multi_notches import build_dataset
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            try:
+                built = build_dataset(root, 137)
+            except FileNotFoundError as exc:
+                self.skipTest(f"historical source unavailable: {exc}")
+            path = Path(built["config"])
+            config = json.loads(path.read_text(encoding="utf-8"))
+            config["detector"]["diagnostic_mode"] = "single_real_groove"
+            from algorithms.slot_pose.single_groove_pose import DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2
+            config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V2
+            config["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+            }
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            refinement = loaded["detector"]["groove_refinement"]
+            self.assertEqual("groove-sidewall-subpixel-v2", refinement["threshold_version"])
+            self.assertEqual(0.5, refinement["line_consensus_min_inlier_ratio"])
+            self.assertEqual(0.7, refinement["line_consensus_min_span_ratio"])
+
+            invalid_cases = {
+                "threshold_version": "unknown-refiner",
+                "line_consensus_min_inlier_ratio": float("nan"),
+                "line_consensus_min_span_ratio": 1.1,
+                "line_consensus_min_pair_separation_ratio": 0.0,
+                "line_consensus_model_merge_deg": -1.0,
+                "line_consensus_min_support_margin": 0,
+                "line_consensus_max_refit_hypotheses": 1,
+            }
+            for key, value in invalid_cases.items():
+                config["detector"]["groove_refinement"] = {
+                    "threshold_version": "groove-sidewall-subpixel-v2", key: value,
+                }
+                path.write_text(json.dumps(config), encoding="utf-8")
+                with self.subTest(key=key), self.assertRaisesRegex(ValueError, "groove_refinement"):
+                    load_config(path)
+
 
 if __name__ == "__main__":
     unittest.main()

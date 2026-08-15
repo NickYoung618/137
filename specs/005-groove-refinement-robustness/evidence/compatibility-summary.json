@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "slot-pose-005-compatibility-summary/1",
+  "recordedAt": "2026-08-15",
+  "unitTestGate": {"discovered": 119, "passed": 119, "failed": 0, "jsonschemaEnabled": true},
+  "coveredRegressionPaths": [
+    "legacy asset hashing and reference baseline",
+    "legacy synthetic angle and CLI",
+    "paired positive, cropped, missing and ambiguous cases",
+    "multi-notch roles and rejected-shadow isolation",
+    "single-real-groove one/zero/multiple cardinality",
+    "v1 groove refinement compatibility",
+    "v2 deterministic consensus and fail-closed negatives",
+    "full-frame circle localization",
+    "batch continue-on-failure",
+    "same-image annotation and circular residual repeatability",
+    "top-level null mechanical angle while PLC mapping is unconfirmed"
+  ],
+  "configCompatibility": {
+    "defaultLibraryThresholdVersion": "groove-sidewall-subpixel-v1",
+    "exampleAdoptedThresholdVersion": "groove-sidewall-subpixel-v2",
+    "topLevelResultContract": "slot-pose-result/2",
+    "contractMajorVersionChanged": false
+  }
+}

@@ -200,9 +200,33 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
     )
     refinements = [record.get("grooveRefinement") or {} for record in records]
     refinement_status_counts = Counter(item.get("status") or "not_available" for item in refinements)
+    refinement_schema_counts = Counter(item.get("schemaVersion") or "unknown" for item in refinements)
+    refinement_threshold_counts = Counter(item.get("thresholdVersion") or "unknown" for item in refinements)
     refinement_failures = Counter(
         reason for item in refinements for reason in item.get("failedChecks") or []
     )
+    refinement_elapsed = [
+        float(item["elapsedMs"]) for item in refinements
+        if isinstance(item.get("elapsedMs"), (int, float))
+    ]
+    sidewalls = [
+        side for refinement in refinements for side_name in ("startSide", "endSide")
+        if isinstance((side := refinement.get(side_name)), dict)
+    ]
+    def side_values(key: str, nested: str | None = None) -> list[float]:
+        output: list[float] = []
+        for side in sidewalls:
+            value = (side.get(nested) or {}).get(key) if nested else side.get(key)
+            if isinstance(value, (int, float)):
+                output.append(float(value))
+        return output
+
+    def distribution(values: list[float]) -> dict[str, Any]:
+        return {
+            "n": len(values), "min": min(values) if values else None,
+            "p50": percentile(values, 0.5), "p95": percentile(values, 0.95),
+            "max": max(values) if values else None,
+        }
     datum_measurements = [pose.get("datumMeasurement") or {} for pose in single_poses]
     y_down_angles = [
         float(item["measuredFromPositiveYClockwiseDeg"])
@@ -302,7 +326,16 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         },
         "singleGrooveQuadrantCounts": dict(sorted(single_quadrants.items())),
         "grooveRefinementStatusCounts": dict(sorted(refinement_status_counts.items())),
+        "grooveRefinementSchemaCounts": dict(sorted(refinement_schema_counts.items())),
+        "grooveRefinementThresholdCounts": dict(sorted(refinement_threshold_counts.items())),
         "grooveRefinementFailureCounts": dict(sorted(refinement_failures.items())),
+        "grooveRefinementElapsedMs": distribution(refinement_elapsed),
+        "grooveSidewallEvidence": {
+            "lineInlierRatio": distribution(side_values("lineInlierRatio")),
+            "lineLongitudinalCoverage": distribution(side_values("lineLongitudinalCoverage")),
+            "lineResidualP95Px": distribution(side_values("p95", "lineResidualPx")),
+            "supportMargin": distribution(side_values("supportMargin")),
+        },
         "yDownDatumAngleAvailable": {
             "count": len(y_down_angles), "rate": len(y_down_angles) / total if total else 0.0,
             "unstratifiedRawAngleStatistics": "NOT_EVALUATED",
@@ -378,6 +411,36 @@ def paired_circle_comparisons(runs: list[tuple[str, dict[str, Any]]]) -> list[di
     return comparisons
 
 
+def paired_refinement_comparisons(runs: list[tuple[str, dict[str, Any]]]) -> list[dict[str, Any]]:
+    comparisons: list[dict[str, Any]] = []
+    for left_index in range(len(runs)):
+        for right_index in range(left_index + 1, len(runs)):
+            left_label, left_review = runs[left_index]
+            right_label, right_review = runs[right_index]
+            left_records = {str(item["imageId"]): item for item in left_review.get("records") or []}
+            right_records = {str(item["imageId"]): item for item in right_review.get("records") or []}
+            deltas: list[float] = []
+            for image_id in sorted(set(left_records) & set(right_records)):
+                refinements = [left_records[image_id].get("grooveRefinement") or {}, right_records[image_id].get("grooveRefinement") or {}]
+                if not all(item.get("status") == "accepted" for item in refinements):
+                    continue
+                midpoints = [item.get("openingMidpointProfileDeg") for item in refinements]
+                if not all(isinstance(value, (int, float)) for value in midpoints):
+                    continue
+                deltas.append(circular_delta_deg(float(midpoints[1]), float(midpoints[0])))
+            absolute = [abs(value) for value in deltas]
+            comparisons.append({
+                "left": left_label, "right": right_label,
+                "matchedAcceptedRefinementCount": len(deltas),
+                "midpointCircularDeltaDeg": {
+                    "p50": percentile(deltas, 0.5), "p95": percentile(deltas, 0.95),
+                    "maxAbsolute": max(absolute) if absolute else None,
+                    "absoluteP95": percentile(absolute, 0.95),
+                },
+            })
+    return comparisons
+
+
 def parse_run(value: str) -> tuple[str, Path]:
     label, separator, raw_path = value.partition("=")
     if not separator or not label or not raw_path:
@@ -394,6 +457,7 @@ def build_summary(runs: list[tuple[str, dict[str, Any]]], threshold_deg: float) 
         "roleSuggestionsAreAuthoritative": False,
         "runs": [summarize_run(label, review, threshold_deg) for label, review in runs],
         "pairedCircleComparisons": paired_circle_comparisons(runs),
+        "pairedRefinementComparisons": paired_refinement_comparisons(runs),
         "interpretationLimits": [
             "Cross-frame stability can identify repeatable image features but cannot prove a drawing datum/target role.",
             "A stable image-frame cluster can still be a fixture, occlusion or lighting boundary.",

@@ -182,6 +182,33 @@ def _point(center: tuple[float, float], radius: float, angle_deg: float) -> tupl
     return center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle)
 
 
+def _draw_sidewall_evidence(
+    draw: ImageDraw.ImageDraw, side: dict[str, Any], *, inlier_color: str, width: int,
+) -> None:
+    """Draw v2 detected/support/rejected points without hiding rejected evidence."""
+    detected = side.get("detectedPoints") or side.get("points") or []
+    supports = side.get("points") or []
+    rejected = side.get("rejectedPoints") or []
+    point_radius = max(2, width)
+    for point in detected:
+        x, y = map(float, point)
+        draw.ellipse((x - point_radius, y - point_radius, x + point_radius, y + point_radius), fill="#35c7ff")
+    for point in rejected:
+        x, y = map(float, point)
+        draw.line((x - point_radius, y - point_radius, x + point_radius, y + point_radius), fill="#ff5d73", width=width)
+        draw.line((x - point_radius, y + point_radius, x + point_radius, y - point_radius), fill="#ff5d73", width=width)
+    for point in supports:
+        x, y = map(float, point)
+        draw.ellipse((x - point_radius, y - point_radius, x + point_radius, y + point_radius), fill=inlier_color)
+    line = side.get("line") or {}
+    if len(supports) >= 2 and all(isinstance(line.get(key), (int, float)) for key in ("a", "b", "c")):
+        a, b = float(line["a"]), float(line["b"])
+        direction = (-b, a)
+        projections = [(float(point[0]) * direction[0] + float(point[1]) * direction[1], point) for point in supports]
+        endpoints = [min(projections)[1], max(projections)[1]]
+        draw.line((*map(float, endpoints[0]), *map(float, endpoints[1])), fill="#ffffff", width=max(width, 2))
+
+
 def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) -> None:
     with Image.open(image_path) as source:
         image = source.convert("RGB")
@@ -265,12 +292,11 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
                 fill="#ff5dce", width=width * 2,
             )
         refinement = record.get("grooveRefinement") or {}
+        for side_name, color in (("startSide", "#38d66b"), ("endSide", "#ffe14f")):
+            side = refinement.get(side_name) or {}
+            if side:
+                _draw_sidewall_evidence(draw, side, inlier_color=color, width=width)
         if refinement.get("status") == "accepted":
-            for side_name, color in (("startSide", "#38d66b"), ("endSide", "#ffe14f")):
-                for point in (refinement.get(side_name) or {}).get("points") or []:
-                    x, y = map(float, point)
-                    point_radius = max(2, width)
-                    draw.ellipse((x - point_radius, y - point_radius, x + point_radius, y + point_radius), fill=color)
             for point in refinement.get("outerCircleIntersections") or []:
                 x, y = float(point["x"]), float(point["y"])
                 point_radius = max(6, width * 2)
@@ -300,7 +326,7 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
         fill="white", font=font,
     )
     draw.text(
-        (18, 56), "yellow/red boxes=locator proposals; purple=selected sparse; cyan=final gyj; green/yellow=subpixel",
+        (18, 56), "cyan=all side points; green/yellow=inliers; red X=rejected; white=line/intersection",
         fill="white", font=font,
     )
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
@@ -466,8 +492,7 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                     "selected": bool(candidate) and candidate.get("candidateId") == selected_id,
                 })
             # A malformed or older diagnostic can omit proposalId while still
-            # carrying useful sparse-fit evidence.  Never silently lose such a
-            # circle candidate from the human-review export.
+            # carrying useful sparse-fit evidence. Never silently lose it.
             for candidate in circle_candidates:
                 if str(candidate.get("candidateId")) in emitted_candidate_ids:
                     continue
@@ -476,19 +501,56 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                     "image_id": record["imageId"], "relative_path": record["relativePath"],
                     "proposal_id": candidate.get("proposalId"), "proposal_status": None,
                     "bbox_normalized": None,
-                    "proposal_center_x": coarse.get("centerX"),
-                    "proposal_center_y": coarse.get("centerY"),
-                    "proposal_radius_px": coarse.get("radiusPx"),
-                    "proposal_failed_checks": None,
-                    "candidate_id": candidate.get("candidateId"),
-                    "candidate_status": candidate.get("status"),
+                    "proposal_center_x": coarse.get("centerX"), "proposal_center_y": coarse.get("centerY"),
+                    "proposal_radius_px": coarse.get("radiusPx"), "proposal_failed_checks": None,
+                    "candidate_id": candidate.get("candidateId"), "candidate_status": candidate.get("status"),
                     "rank": candidate.get("rank"), "score": candidate.get("score"),
-                    "edge_point_count": candidate.get("edgePointCount"),
-                    "inlier_ratio": candidate.get("inlierRatio"),
+                    "edge_point_count": candidate.get("edgePointCount"), "inlier_ratio": candidate.get("inlierRatio"),
                     "angular_coverage": candidate.get("angularCoverage"),
                     "residual_p95_px": candidate.get("residualP95Px"),
                     "candidate_failed_checks": "|".join(candidate.get("failedChecks") or []),
                     "selected": candidate.get("candidateId") == selected_id,
+                })
+    with (output_dir / "sidewall-models.csv").open("w", newline="", encoding="utf-8") as handle:
+        fields = [
+            "image_id", "relative_path", "refinement_status", "schema_version", "threshold_version",
+            "side", "line_fit_strategy", "detected_point_count", "support_point_count",
+            "rejected_point_count", "line_inlier_ratio", "line_longitudinal_coverage",
+            "line_residual_median_px", "line_residual_p95_px", "line_residual_max_px",
+            "raw_hypothesis_count", "refit_hypothesis_count", "final_hypothesis_count",
+            "best_model_id", "second_model_id", "best_support_count", "second_support_count",
+            "support_margin", "refinement_elapsed_ms", "failed_checks",
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for record in records:
+            refinement = record.get("grooveRefinement") or {}
+            for side_name in ("startSide", "endSide"):
+                side = refinement.get(side_name) or {}
+                if not side:
+                    continue
+                residual = side.get("lineResidualPx") or {}
+                writer.writerow({
+                    "image_id": record["imageId"], "relative_path": record["relativePath"],
+                    "refinement_status": refinement.get("status"),
+                    "schema_version": refinement.get("schemaVersion"),
+                    "threshold_version": refinement.get("thresholdVersion"), "side": side_name,
+                    "line_fit_strategy": side.get("lineFitStrategy"),
+                    "detected_point_count": side.get("detectedPointCount", len(side.get("detectedPoints") or [])),
+                    "support_point_count": side.get("supportPointCount", len(side.get("points") or [])),
+                    "rejected_point_count": side.get("rejectedPointCount", len(side.get("rejectedPoints") or [])),
+                    "line_inlier_ratio": side.get("lineInlierRatio"),
+                    "line_longitudinal_coverage": side.get("lineLongitudinalCoverage"),
+                    "line_residual_median_px": residual.get("median"),
+                    "line_residual_p95_px": residual.get("p95"), "line_residual_max_px": residual.get("max"),
+                    "raw_hypothesis_count": side.get("rawLineHypothesisCount"),
+                    "refit_hypothesis_count": side.get("refitLineHypothesisCount"),
+                    "final_hypothesis_count": side.get("lineHypothesisCount"),
+                    "best_model_id": side.get("bestModelId"), "second_model_id": side.get("secondModelId"),
+                    "best_support_count": side.get("bestSupportCount"),
+                    "second_support_count": side.get("secondSupportCount"), "support_margin": side.get("supportMargin"),
+                    "refinement_elapsed_ms": refinement.get("elapsedMs"),
+                    "failed_checks": "|".join(refinement.get("failedChecks") or []),
                 })
     with (output_dir / "failures.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[

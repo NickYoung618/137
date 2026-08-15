@@ -97,6 +97,20 @@ uv run python tools/run_slot_pose_batch.py \
 逐图输出人工值、自动值及圆心/半径/环形槽角差。静态重复性按明确的同样品同条件组统计环形残差；当前25张分组
 和同图truth不完整，因此该项明确为`NOT_EVALUATED`，不冒充准确率。完整命令见
 `specs/004-full-frame-circle-localization/quickstart.md`。
+
+## 005槽壁亚像素精修稳定性
+
+`groove-sidewall-subpixel-v2`不改上游圆、暗区候选或真槽选择，也不放宽2 px侧壁P95残差门。
+它在每侧全部亚像素边缘点中确定性生成有限直线假设，只保留内点数/比例、纵向覆盖、
+残差和外圆交点均合格且没有同等次优模型的唯一直槽壁。审阅包每图含叠加图和
+`sidewall-models.csv`：蓝色是全部检测点，绿/黄是两侧有效内点，红叉是拒绝的圆角/纹理点，白线为最终槽壁。
+
+真实精度案例必须一图一份同哈希LabelMe人工外圆+真槽开放边界，并由不同人复核；
+`tools/prepare_real_case_annotations.py`生成空白模板（不用算法值预填真值），
+`tools/evaluate_annotated_real_cases.py`逐图生成人工/自动圆心、半径、槽角、象限与环形差值。
+静态重复性是同样品/同位置/同条件重复帧的“检测-同图人工”环形残差极差、标准差和P95；
+无明确分组或未完成标注时严格输出`NOT_EVALUATED`。完整流程见
+`specs/005-groove-refinement-robustness/quickstart.md`。
 同步本仓库到Mac后：
 
 1. 将配置的`legacy_asset`路径改为Mac同源源码、标注和参考图，并核对内容SHA-256。

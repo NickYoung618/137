@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "slot-pose-005-annotation-status/1",
+  "recordedAt": "2026-08-15",
+  "datasetFingerprint": "fe7864df6557c9348e39bcc518c818f370e664faff8d7ec1d7f127e6998711fc",
+  "realImageCount": 25,
+  "oneToOneLabelmeTemplateCount": 25,
+  "annotationIndexSha256": "fedfc243d6f127d382e23047684ee279a775b57af58979ea65fd15ebfc370f65",
+  "reviewedSameImageTruthCount": 0,
+  "pendingAnnotationCount": 25,
+  "strictAnnotatedEvaluationExitCode": 3,
+  "accuracyStatus": "NOT_EVALUATED",
+  "accuracyReason": "SAME_IMAGE_REVIEWED_TRUTH_MISSING",
+  "staticRepeatability": {
+    "status": "NOT_EVALUATED",
+    "reason": "GROUPING_NOT_EXPLICIT",
+    "metricSource": "circular_detection_minus_human_truth_residual",
+    "requiredGroup": "same split, physical sample, fixed position and fixed condition",
+    "requiredStatistics": ["residualCircularRangeDeg", "residualStdDeg", "residualAbsoluteDeviationP95Deg"]
+  },
+  "annotationPolicy": {
+    "requiredShapesPerAccuracyImage": ["physical_outer_circle_truth", "target_groove_open_boundary_manual"],
+    "humanVerified": true,
+    "independentReviewerRequired": true,
+    "algorithmPrefillAsTruthForbidden": true,
+    "runtimeInputAllowed": false
+  }
+}

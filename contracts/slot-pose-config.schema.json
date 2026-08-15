@@ -158,9 +158,9 @@
         "groove_refinement": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["threshold_version", "radial_inset_min_px", "radial_inset_max_px", "radial_sample_count", "tangential_search_margin_deg", "tangential_sample_step_px", "contrast_inner_offset_px", "contrast_outer_offset_px", "min_side_points", "min_edge_contrast", "min_edge_gradient_per_px", "max_line_residual_p95_px", "max_intersection_coarse_delta_deg", "allow_endpoint_reversal"],
+          "required": ["threshold_version", "radial_inset_min_px", "radial_inset_max_px", "radial_sample_count", "tangential_search_margin_deg", "tangential_sample_step_px", "contrast_inner_offset_px", "contrast_outer_offset_px", "min_side_points", "min_edge_contrast", "min_edge_gradient_per_px", "max_line_residual_p95_px", "max_intersection_coarse_delta_deg", "allow_endpoint_reversal", "line_consensus_min_inlier_ratio", "line_consensus_min_span_ratio", "line_consensus_min_pair_separation_ratio", "line_consensus_model_merge_deg", "line_consensus_min_support_margin", "line_consensus_max_refit_hypotheses"],
           "properties": {
-            "threshold_version": {"type": "string", "minLength": 1},
+            "threshold_version": {"enum": ["groove-sidewall-subpixel-v1", "groove-sidewall-subpixel-v2"]},
             "radial_inset_min_px": {"type": "number", "exclusiveMinimum": 0},
             "radial_inset_max_px": {"type": "number", "exclusiveMinimum": 0},
             "radial_sample_count": {"type": "integer", "minimum": 3},
@@ -173,7 +173,13 @@
             "min_edge_gradient_per_px": {"type": "number", "exclusiveMinimum": 0},
             "max_line_residual_p95_px": {"type": "number", "exclusiveMinimum": 0},
             "max_intersection_coarse_delta_deg": {"type": "number", "exclusiveMinimum": 0},
-            "allow_endpoint_reversal": {"type": "boolean"}
+            "allow_endpoint_reversal": {"type": "boolean"},
+            "line_consensus_min_inlier_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "line_consensus_min_span_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "line_consensus_min_pair_separation_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "line_consensus_model_merge_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+            "line_consensus_min_support_margin": {"type": "integer", "minimum": 1},
+            "line_consensus_max_refit_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128}
           }
         },
         "physical_outer_circle": {

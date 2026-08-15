@@ -29,6 +29,12 @@
   `single_groove_pose.expected_accepted_groove_count=1`；v1只输出旧图像方位，v2在唯一槽通过后使用
   `groove_refinement`密集双线性采样、亚像素边缘、稳健侧壁线和外圆交点，输出Y下半轴有符号角、
   左下位置门和`85°±5°`判定。0个/多个槽或任一侧精修失败均不回退到粗角度栅格。
+- `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
+  `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
+  执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，
+  并对几何不同的次优直线执行支持度差距门。参数均已进入Schema，不得按某张图的点数写死。
+- v2侧壁诊断分开`detectedPoints`/`points`/`rejectedPoints`，并记录内点率、覆盖率、
+  残差、原始/重拟合/去重候选数和最佳/次佳支持度。只有唯一高质量两侧都通过才计算槽口中点。
 - 半径约1646 px时，理想圆周`1 px`弧长约为`0.0348°`；这是分辨率预算，不是生产准确率。
   生产精度必须用原始BMP人工拟合参考、独立复核及冻结validation/acceptance split实测。
 - `mm_per_px`为统一保留字段；纯角度输出不使用。`ANGLE_PENDING.limit=null`表示只统计、不判定。

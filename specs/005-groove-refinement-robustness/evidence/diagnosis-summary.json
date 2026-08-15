@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "slot-pose-005-diagnosis/1",
+  "failureFrameOrdinals": [23, 24, 25],
+  "failedSide": "startSide",
+  "oldAllPointResidualP95Px": [5.079105210101716, 6.893348545917704, 6.945186493966956],
+  "deterministicConsensusDevelopmentProbe": {
+    "inlierCount": [16, 16, 16],
+    "detectedPointCount": [26, 29, 29],
+    "inlierRatio": [0.6153846153846154, 0.5517241379310345, 0.5517241379310345],
+    "longitudinalCoverage": [0.7582843207684964, 0.7583283183695878, 0.7582818510889072],
+    "residualP95Px": [1.378294936682778, 1.4884099092585075, 1.3275149404299782],
+    "startIntersectionProfileDeg": [100.96141355836218, 100.93492709676404, 100.9406169982687],
+    "openingMidpointProfileDeg": [112.83366399603472, 112.82060280903036, 112.82316728888478],
+    "midpointRangeDeg": 0.013061187004361097,
+    "distinctAlternativeModelCount": [0, 0, 0]
+  },
+  "diagnosis": "The failure is caused by entrance/bottom fillet and texture points contaminating a whole-set TLS line, not by missing groove recognition or an absent straight sidewall core.",
+  "accuracyClaimed": false,
+  "blocked": [
+    "No same-image reviewed groove annotation exists for these three JPEG files.",
+    "Capture grouping does not prove that these frames form a formal static-repeatability group."
+  ]
+}

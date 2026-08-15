@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "slot-pose-005-performance-summary/1",
+  "recordedAt": "2026-08-15",
+  "machine": {"logicalCpuCount": 2, "memoryGiBApprox": 7.5},
+  "cleanBatchEvidence": {
+    "imageCount": 25,
+    "wallSeconds": 36.62,
+    "throughputImagesPerSecond": 0.6826870562534134,
+    "algorithmElapsedMs": {"p50": 1205.1541700493544, "p95": 1262.7370128408074, "max": 1273.5089960042387},
+    "peakRssKiB": 1188896,
+    "peakRssGiB": 1.133819580078125,
+    "cpuUtilizationPercent": 98,
+    "resultSha256": "3d99e437a422e9b0e618409bbf1231e7525dad03baeb3dda28d05067ee316eda",
+    "finalGeometryEquivalence": "All 25 final records are identical to the final implementation after removing timestamps and timing-only fields."
+  },
+  "pairedSavedPointMicrobenchmark": {
+    "method": "50 detected side point sets from 25 images; 20 repetitions; v1 TLS/intersection versus v2 consensus/intersection",
+    "v1PerImageMs": {"p50": 1.2472465, "p95": 1.702847, "max": 9.18883},
+    "v2PerImageMs": {"p50": 23.0021275, "p95": 28.2166164, "max": 49.959079},
+    "addedPerImageMs": {"p50": 21.704367, "p95": 26.5994065, "max": 48.815392}
+  },
+  "acceptance": {
+    "fullAlgorithmP95AtMost2500Ms": true,
+    "batchThroughputAtLeast0_3ImagesPerSecond": true,
+    "peakRssAtMost1_5GiB": true,
+    "consensusAddedP95AtMost50Ms": true
+  },
+  "contentionAudit": {
+    "status": "EXCLUDED_FROM_GATE",
+    "reason": "Later exact-code reruns overlapped an unrelated dotnet compiler/build using the same two-CPU host and received only 51-79 percent CPU. They are retained outside Git but are not compared to the clean paired gate."
+  }
+}

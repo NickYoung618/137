@@ -95,7 +95,20 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
 
     def test_v2_summary_separates_refinement_target_and_plc_block(self) -> None:
         passed = record("a", [175.0], error="PLC_MAPPING_UNCONFIRMED")
-        passed["grooveRefinement"] = {"status": "accepted", "failedChecks": []}
+        passed["grooveRefinement"] = {
+            "schemaVersion": "slot-groove-subpixel-opening/2",
+            "thresholdVersion": "groove-sidewall-subpixel-v2",
+            "status": "accepted", "failedChecks": [], "elapsedMs": 12.0,
+            "openingMidpointProfileDeg": 175.0,
+            "startSide": {
+                "lineInlierRatio": 0.8, "lineLongitudinalCoverage": 0.75,
+                "supportMargin": 3, "lineResidualPx": {"p95": 1.2},
+            },
+            "endSide": {
+                "lineInlierRatio": 0.9, "lineLongitudinalCoverage": 0.85,
+                "supportMargin": None, "lineResidualPx": {"p95": 1.0},
+            },
+        }
         passed["singleGroovePose"].update({
             "schemaVersion": "slot-single-real-groove-pose/2",
             "datumMeasurement": {
@@ -124,6 +137,9 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual(1, run["targetPositionGatePassed"]["count"])
         self.assertEqual(1, run["imageFrameCorrectionAvailable"]["count"])
         self.assertEqual(1, run["plcGuidanceBlocked"]["count"])
+        self.assertEqual({"slot-groove-subpixel-opening/2": 1, "unknown": 1}, run["grooveRefinementSchemaCounts"])
+        self.assertEqual(12.0, run["grooveRefinementElapsedMs"]["p95"])
+        self.assertEqual(0.8, run["grooveSidewallEvidence"]["lineInlierRatio"]["min"])
 
     def test_locator_candidates_and_paired_circle_deltas_are_summarized(self) -> None:
         first = record("a", [10.0])
@@ -152,6 +168,22 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual(1, comparison["matchedAcceptedCircleCount"])
         self.assertAlmostEqual(0.5, comparison["centerDistancePx"]["max"])
         self.assertAlmostEqual(0.2, comparison["radiusAbsoluteDifferencePx"]["max"])
+
+    def test_paired_refinement_comparison_uses_circular_delta_and_only_accepted_pairs(self) -> None:
+        first = record("a", [10.0])
+        second = record("a", [10.0])
+        first["grooveRefinement"] = {
+            "status": "accepted", "openingMidpointProfileDeg": 359.9,
+            "schemaVersion": "slot-groove-subpixel-opening/1",
+        }
+        second["grooveRefinement"] = {
+            "status": "accepted", "openingMidpointProfileDeg": 0.1,
+            "schemaVersion": "slot-groove-subpixel-opening/2",
+        }
+        summary = build_summary([("v1", {"records": [first]}), ("v2", {"records": [second]})], 5.0)
+        comparison = summary["pairedRefinementComparisons"][0]
+        self.assertEqual(1, comparison["matchedAcceptedRefinementCount"])
+        self.assertAlmostEqual(0.2, comparison["midpointCircularDeltaDeg"]["maxAbsolute"])
 
 
 if __name__ == "__main__":

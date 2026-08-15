@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "slot-pose-005-real-data-summary/1",
+  "recordedAt": "2026-08-15",
+  "dataset": {
+    "imageCount": 25,
+    "format": "JPEG diagnostic copy",
+    "width": 5472,
+    "height": 3648,
+    "datasetFingerprint": "fe7864df6557c9348e39bcc518c818f370e664faff8d7ec1d7f127e6998711fc"
+  },
+  "pairedRuns": {
+    "v1ResultSha256": "a6d68dd415bccd9b95da0bea004aff958d90a488510dd2ce85139d6562eeb455",
+    "v2ResultSha256": "44e0abf244618fd513c4a48330eff14a8fd0077caff8530bd886936d5afe9693",
+    "physicalCircleAccepted": {"v1": 25, "v2": 25},
+    "rawDarkCandidatePattern": {"threePerImage": 25},
+    "acceptedGroovePattern": {"onePerImage": 25},
+    "rejectedShadowCount": 50,
+    "refinementAccepted": {"v1": 22, "v2": 25},
+    "v1Failures": {"startSide_line_residual": 3},
+    "v2Failures": {},
+    "topLevelErrorCountsV2": {"PLC_MAPPING_UNCONFIRMED": 25},
+    "formalMechanicalValidCount": 0
+  },
+  "commonAccepted22": {
+    "v2MinusV1MidpointAbsoluteCircularDeg": {
+      "p50": 0.007628173514916625,
+      "p95": 0.012710852468755716,
+      "max": 0.012924364894502105
+    },
+    "physicalCircleCenterDifferencePx": {"p95": 0.0, "max": 0.0},
+    "physicalCircleRadiusAbsoluteDifferencePx": {"p95": 0.0, "max": 0.0}
+  },
+  "recoveredFrames23To25": {
+    "openingMidpointProfileDeg": [112.83366399603472, 112.82060280903036, 112.82316728888478],
+    "midpointRangeDeg": 0.01306118700435377,
+    "fineMinusCoarseCircularDeg": [-0.16041846211453503, -0.17215517830021554, -0.17073055753260746],
+    "startSideSupportPointCount": [16, 16, 16],
+    "startSideDetectedPointCount": [30, 30, 30],
+    "startSideInlierRatio": [0.5333333333333333, 0.5333333333333333, 0.5333333333333333],
+    "startSideLongitudinalCoverage": [0.7485414681532995, 0.7473023460596642, 0.7475464003634713],
+    "startSideResidualP95Px": [1.378294936682778, 1.4884099092585075, 1.3275149404299782]
+  },
+  "manualBmpDevelopmentComparison": {
+    "comparisonSha256": "1aa6f47ddd3e99364f5f1b5501e4605529206c8f399bfd3207c13638679ce126",
+    "circleCenterDistancePx": 2.4177839083133095,
+    "radiusAbsoluteDifferencePx": 1.396724368526975,
+    "automaticMinusManualOpeningCircularDeg": 0.00937308645069379,
+    "productionAccuracyClaimed": false
+  },
+  "interpretation": "The 25 JPEG results prove development consistency and recovery only. They do not have reviewed same-image truth and are not a production accuracy claim."
+}

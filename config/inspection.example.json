@@ -127,7 +127,7 @@
       }
     },
     "groove_refinement": {
-      "threshold_version": "groove-sidewall-subpixel-v1",
+      "threshold_version": "groove-sidewall-subpixel-v2",
       "radial_inset_min_px": 12.0,
       "radial_inset_max_px": 95.0,
       "radial_sample_count": 31,
@@ -140,7 +140,13 @@
       "min_edge_gradient_per_px": 2.0,
       "max_line_residual_p95_px": 2.0,
       "max_intersection_coarse_delta_deg": 2.0,
-      "allow_endpoint_reversal": false
+      "allow_endpoint_reversal": false,
+      "line_consensus_min_inlier_ratio": 0.5,
+      "line_consensus_min_span_ratio": 0.7,
+      "line_consensus_min_pair_separation_ratio": 0.25,
+      "line_consensus_model_merge_deg": 0.1,
+      "line_consensus_min_support_margin": 2,
+      "line_consensus_max_refit_hypotheses": 32
     },
     "pairing": {
       "min_candidates": 2,

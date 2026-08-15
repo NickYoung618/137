@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "slot-pose-005-baseline/1",
+  "recordedAt": "2026-08-15",
+  "branch": "003-a2-paired-notch-stability",
+  "baselineCommit": "5e3a5ce",
+  "worktreeBefore005": "clean",
+  "unitTests": {"discovered": 114, "passed": 110, "skippedOptionalJsonschema": 4, "failed": 0},
+  "external25": {
+    "physicalCircleAccepted": 25,
+    "singleRealGrooveAccepted": 25,
+    "oneGrooveTwoShadowPattern": 25,
+    "subpixelOpeningAccepted": 22,
+    "subpixelOpeningFailed": 3,
+    "failureChecks": {"startSide_line_residual": 3}
+  },
+  "formalMechanicalAngleValidCount": 0,
+  "interpretation": "The 25 JPEG files are external development diagnostics, not same-image reviewed angle truth."
+}

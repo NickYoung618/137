@@ -94,9 +94,40 @@ class SlotPoseReviewTests(unittest.TestCase):
                         },
                     },
                     "grooveRefinement": {
+                        "schemaVersion": "slot-groove-subpixel-opening/2",
+                        "thresholdVersion": "groove-sidewall-subpixel-v2",
                         "status": "accepted", "openingEndpointProfileDeg": [170.0, 180.0],
                         "openingMidpointProfileDeg": 175.0,
                         "outerCircleIntersections": [{"x": 30.0, "y": 55.0}, {"x": 25.0, "y": 50.0}],
+                        "elapsedMs": 12.5,
+                        "startSide": {
+                            "detectedPointCount": 4, "supportPointCount": 3, "rejectedPointCount": 1,
+                            "lineFitStrategy": "deterministic-consensus-tls-v2",
+                            "lineInlierRatio": 0.75, "lineLongitudinalCoverage": 0.8,
+                            "rawLineHypothesisCount": 5, "refitLineHypothesisCount": 4,
+                            "lineHypothesisCount": 1, "bestModelId": "side-model-001",
+                            "secondModelId": None, "bestSupportCount": 3,
+                            "secondSupportCount": None, "supportMargin": None,
+                            "line": {"a": 1.0, "b": 0.0, "c": -30.0},
+                            "lineResidualPx": {"median": 0.2, "p95": 0.7, "max": 0.9},
+                            "detectedPoints": [[30.0, 45.0], [30.0, 48.0], [30.0, 51.0], [34.0, 55.0]],
+                            "points": [[30.0, 45.0], [30.0, 48.0], [30.0, 51.0]],
+                            "rejectedPoints": [[34.0, 55.0]],
+                        },
+                        "endSide": {
+                            "detectedPointCount": 4, "supportPointCount": 3, "rejectedPointCount": 1,
+                            "lineFitStrategy": "deterministic-consensus-tls-v2",
+                            "lineInlierRatio": 0.75, "lineLongitudinalCoverage": 0.82,
+                            "rawLineHypothesisCount": 6, "refitLineHypothesisCount": 4,
+                            "lineHypothesisCount": 1, "bestModelId": "side-model-001",
+                            "secondModelId": None, "bestSupportCount": 3,
+                            "secondSupportCount": None, "supportMargin": None,
+                            "line": {"a": 0.0, "b": 1.0, "c": -50.0},
+                            "lineResidualPx": {"median": 0.3, "p95": 0.8, "max": 1.0},
+                            "detectedPoints": [[25.0, 50.0], [28.0, 50.0], [31.0, 50.0], [35.0, 54.0]],
+                            "points": [[25.0, 50.0], [28.0, 50.0], [31.0, 50.0]],
+                            "rejectedPoints": [[35.0, 54.0]],
+                        },
                     },
                     "roleAssignment": {
                         "unique": True,
@@ -145,6 +176,10 @@ class SlotPoseReviewTests(unittest.TestCase):
             circle_candidates_csv = (output / "circle-candidates.csv").read_text(encoding="utf-8")
             self.assertIn("proposal-001", circle_candidates_csv)
             self.assertIn("circle-candidate-001", circle_candidates_csv)
+            sidewall_csv = (output / "sidewall-models.csv").read_text(encoding="utf-8")
+            self.assertIn("deterministic-consensus-tls-v2", sidewall_csv)
+            self.assertIn("startSide", sidewall_csv)
+            self.assertIn("rejected_point_count", sidewall_csv)
             failures = (output / "failures.csv").read_text(encoding="utf-8")
             self.assertIn("nested/frame.jpg", failures)
             self.assertIn("DATUM_DEFINITION_UNCONFIRMED", failures)
