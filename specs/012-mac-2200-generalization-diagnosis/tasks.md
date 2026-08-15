@@ -50,8 +50,17 @@
 - [x] T030 运行unittest、compileall、Schema、SpecKit analyze和Git大文件门
 - [ ] T031 Mac严格分组复跑normal 2000与defective 200，并核验最终接受门
 
+## Phase 6 - External old/new visual review
+
+- [x] T032 先增加默认状态变化、显式帧和工作树输出拒绝红灯测试
+- [x] T033 实现通用old/new batch JSONL匹配与状态变化选择，不读取目标真值
+- [x] T034 在仓库外输出红/青PNG叠加图与LabelMe预测JSON，只画尺寸7和Phi
+- [x] T035 输出版本、有效状态、失败原因、source/recovery与关键质量字段
+- [x] T036 用组名一致的外置9帧结果对控制帧620完成真实工具小样并人工检查
+- [x] T037 更新012 quickstart并执行全套测试、静态检查和大文件审计
+
 ## Dependencies and stop condition
 
 - T018依赖T001–T017；T019依赖T018；T020依赖T019。
-- T021–T030已在明确实施授权后完成；T031依赖Mac外置2200张资产。
+- T021–T030及T032–T037已在明确实施授权后完成；T031依赖Mac外置2200张资产。
 - 在T031完成前，只能称为服务器验证通过的候选，不得宣称normal 2000已达标。

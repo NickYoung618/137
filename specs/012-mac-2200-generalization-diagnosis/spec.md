@@ -100,6 +100,24 @@ normal geometry rejected 的分布和30张旧有效转失效。
    registration `>=1962`、尺寸7 `>=1863`、Phi `>=1922`，比例离群不增加。
 3. **Given** defective 200 张输出，**When** 汇报结果，**Then** 必须单列观察，不进入上述门。
 
+---
+
+### User Story 5 - 双版本预测可离线人工审核（Priority: P2）
+
+算法工程师可以把旧版和新版batch JSONL与外置图片根目录交给通用审核工具，只为状态变化帧
+或明确指定帧生成外置叠加图和LabelMe预测JSON，不需要也不得向工具提供目标真值。
+
+**Independent Test**: 用两帧合成batch契约数据验证默认只渲染状态变化帧；显式指定未变化帧时
+可单独渲染；输出到Git工作树内时必须拒绝。
+
+**Acceptance Scenarios**:
+
+1. **Given** 同组同文件名的old/new记录，**When** 尺寸7或Phi的有效状态/失败原因变化，**Then**
+   PNG用不同颜色叠加可用预测，并写出版本、有效状态、失败原因和关键质量字段。
+2. **Given** 一个未变化帧，**When** 通过`--frame`明确选择，**Then** 仍生成该帧审核资产。
+3. **Given** 输出的LabelMe JSON，**When** 在LabelMe打开，**Then** 只包含old/new尺寸7线和端点、
+   Phi圆，以及审核元数据；必须声明这不是零件轮廓标注。
+
 ## Edge Cases
 
 - 同一帧可能同时发生注册变化、Phi变化和尺寸7变化；归因必须依据逐特征 old→new 状态，不能
@@ -126,13 +144,22 @@ normal geometry rejected 的分布和30张旧有效转失效。
   残差、点数、极性支持和角覆盖。
 - **FR-010**: MUST 明确能区分“正确弱相位边”和“错误边”的多证据组合，不依赖目标标注、
   文件名、哈希、标称尺寸或固定像素补偿。
-- **FR-011**: MUST 给出测试先行的定向修复候选；本轮不得实施候选。
+- **FR-011**: MUST 测试先行实施经授权的A1/B1；C1只解除Phi单一错误评分口径造成的D7连带
+  失效，不绕过真实Phi定位失败，也不放宽D7自身质量门。
 - **FR-012**: MUST 保持最新唯一真值单图尺寸7误差 `<=2 px`、Phi直径误差 `<=1 px` 为后续门。
 - **FR-013**: MUST 保持 normal 最终门 registration `>=1962`、尺寸7 `>=1863`、Phi `>=1922`，
   且按同一统计定义的比例离群不增加。
 - **FR-014**: MUST NOT 让运行时读取目标真值，或硬编码文件名/hash、310、541.13、12.2及固定补偿。
-- **FR-015**: MUST NOT 修改本诊断阶段的算法、配置、Schema、契约或测试门。
-- **FR-016**: MUST 在纯文档提交后停止，等待明确的实现指令。
+- **FR-015**: MUST 保持legacy `0.35`、geometry `0.08`、注册主门、D7自身门和错误极性拒绝。
+- **FR-016**: MUST 在服务器单图、9帧、全套测试和审核工具小样通过后停止，等待Mac T031。
+- **FR-017**: MUST 提供不读取目标真值的通用old/new batch JSONL离线审核工具。
+- **FR-018**: MUST 默认只渲染状态变化帧，并支持显式`--frame`渲染指定帧；old/new必须按
+  同一group与文件名配对，防止normal和defective/diagnostic混组。
+- **FR-019**: MUST 在仓库外生成不同颜色PNG叠加图和可由LabelMe打开的预测JSON；只画尺寸7
+  与Phi，不得暗示为完整零件轮廓。
+- **FR-020**: MUST 在审核资产中保留算法版本、注册/特征有效状态、失败原因、sourceDetector、
+  recoveryPass和关键候选质量字段。
+- **FR-021**: MUST NOT 提交输入图片、batch JSONL、LabelMe预测JSON、PNG或运行输出。
 
 ## Key Entities
 
@@ -149,7 +176,9 @@ normal geometry rejected 的分布和30张旧有效转失效。
 - **SC-003**: 105张的全部要求维度和连续序号簇有可追溯统计，不把20帧连续段解释成样品组。
 - **SC-004**: 修复候选不包含全局门限放宽、真值泄漏、标称值拉回或固定像素补偿。
 - **SC-005**: 测试矩阵覆盖强正确、弱但一致、错误极性/低覆盖/高残差、geometry离群和D7上游耦合。
-- **SC-006**: 本提交相对 `3ee4b4f` 只新增 `specs/012-mac-2200-generalization-diagnosis/` 文档。
+- **SC-006**: A1/B1实现通过单图、9帧、全套unittest、Schema和静态门禁，配置值不变。
+- **SC-007**: 离线审核工具契约测试覆盖状态变化、指定帧、外置输出，真实9帧小样成功输出
+  PNG与LabelMe JSON，且Git不跟踪任何生成资产。
 
 ## Assumptions
 

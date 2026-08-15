@@ -116,10 +116,12 @@ specs/012-mac-2200-generalization-diagnosis/
 ├── research.md
 ├── analysis.md
 ├── plan.md
+├── quickstart.md
 └── tasks.md
 ```
 
-**Structure Decision**: 本阶段无源码、配置、测试、契约或工具变更；五个文档构成完整诊断交付。
+**Structure Decision**: 诊断文档之后，定向实现修改current-capture适配层、结果契约与测试；通用
+离线审核工具位于`tools/render_hole2_batch_changes.py`，生成物强制位于Git工作树外。
 
 ## Implementation outcome
 

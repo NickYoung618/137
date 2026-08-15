@@ -5,10 +5,11 @@
 
 ## 1. Cross-artifact consistency
 
-- `spec.md` 的16项FR映射到 `tasks.md` T001–T031；本轮范围对应T001–T020，未来实现明确阻塞。
+- `spec.md` 的21项FR映射到 `tasks.md` T001–T037；诊断、A1/B1实现和离线审核工具均已完成，
+  只有依赖Mac 2200外置资产的T031未完成。
 - `research.md` 分别回答A相位分数语义、B geometry硬拒绝、C尺寸7上游耦合、D 105张分布、
   E修复候选/测试/风险/Mac门。
-- `plan.md` 把完成的纯诊断Phase 0与未授权的测试/实现Phase 1–2分开，没有把候选写成既成行为。
+- `plan.md` 保留纯诊断Phase 0的历史边界，并记录明确授权后的测试先行实现结果和Mac停止门。
 - 所有文档统一使用normal 2000作为验收组，defective 200只作独立观察。
 - 最新唯一真值单图门在spec、plan和tasks中一致为尺寸7 `<=2 px`、Phi直径 `<=1 px`。
 
@@ -59,8 +60,9 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 | C D7 upstream coupling | research §4、plan 1C、tasks T010/T024 | covered |
 | D 105 frame distributions | research §2 sequence/source/fallback/ratio/quality | covered |
 | E fixes/tests/risks/Mac gate | research §5–6、plan matrix、tasks T021–T031 | covered |
-| strict cohort split | all artifacts | covered |
-| no runtime changes in diagnosis | scope/stop gates | covered |
+| strict cohort split | all artifacts及审核工具group+文件名配对 | covered |
+| 离线old/new人工审核 | spec US5/FR017–021、tasks T032–T037、quickstart | covered |
+| diagnosis与授权实现边界 | scope/stop gates及两次里程碑提交 | covered |
 
 ## 5. Safety and constitution review
 
@@ -69,11 +71,13 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 - 未把全局降低0.35或直接放宽0.08列为方案。
 - sequence suffix仅用于簇描述，明确禁止推断20帧样品组。
 - defective增益未用于接受normal退化。
-- 本阶段不修改核心、适配层、配置、Schema、测试或运行时质量门。
+- 复用核心与配置未修改；授权后只修改current-capture适配层和结果Schema以分离证据语义，
+  legacy/geometry数值门均保持，测试冻结这些值。
+- 审核工具只读old/new预测JSONL和外置图片，不接受目标标注参数，也不写入Git工作树。
 
 ## 6. Testability review
 
-未来测试矩阵同时覆盖：
+已执行的测试矩阵覆盖：
 
 - legacy强边；
 - phase分数较弱但多证据一致；
@@ -81,7 +85,7 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 - geometry离群但无独立错边证据；
 - geometry离群且存在独立错边证据；
 - D7上游连带与自身检测失败；
-- 最新唯一真值单图、分层shadow、9帧、normal 2000、defective 200和比例离群。
+- 最新唯一真值单图、9帧控制和审核工具；normal 2000、defective 200及比例离群仍待Mac T031。
 
 这些测试可以在不向运行时提供目标标注的前提下执行；只有离线单图验收读取最新真值。
 
@@ -106,6 +110,10 @@ phase候选的 `edge_peak` 是一维有符号相位峰统计，legacy候选的 `
 - 单元负例覆盖错误极性、高残差、少点和fallback不绕过legacy门；Schema要求geometry决策、
   离群与佐证字段一致。
 - 最新唯一真值单图和9帧控制通过，但105/36分层和normal 2000检测率只能由Mac外置资产确认。
+- 离线审核工具不接受目标标注参数，按group+文件名配对old/new，防止跨组混合；默认只渲染
+  状态变化帧，显式帧模式可审核控制帧。PNG与LabelMe JSON均强制输出到工作树外。
+- 外置9帧小样匹配9帧、识别4帧状态变化，并成功为指定控制帧620生成一张3072×2048叠加图
+  和包含old/new尺寸7、Phi四个预测shape的LabelMe JSON。
 
 ## 9. Analyze verdict
 
