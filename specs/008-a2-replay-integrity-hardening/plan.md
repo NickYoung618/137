@@ -10,14 +10,14 @@
 
 ## Technical Context
 
-**Language/Version**: Python 3.12  
-**Primary Dependencies**: NumPy 2.4.4、Pillow 12.2.0；Schema 门使用临时锁定的 `jsonschema`，生产运行时不新增依赖  
-**Storage**: 外置图片、JSONL、Manifest、CSV、JSON/Markdown 报告；Git 仅保存代码、Schema、规格和脱敏小证据  
-**Testing**: `unittest`、JSON Schema Draft 2020-12、合成几何样本、锁定700条结果的只读审计  
-**Target Platform**: Linux 服务器与 macOS 12+/Python 3.12 离线命令行  
-**Project Type**: Python 算法库与离线 CLI  
-**Performance Goals**: 700条 JSONL+Manifest 审计在同机 5 秒内完成且峰值内存小于512 MiB；歧义恢复最多精修3个候选，单图新增工作有硬上限  
-**Constraints**: 不训练；不改85°/坐标约定；不改PLC/上位机；不以700张 acceptance 调生产阈值；历史模式兼容；失败不填0；媒体和绝对现场路径不进Git  
+**Language/Version**: Python 3.12
+**Primary Dependencies**: NumPy 2.4.4、Pillow 12.2.0；Schema 门使用临时锁定的 `jsonschema`，生产运行时不新增依赖
+**Storage**: 外置图片、JSONL、Manifest、CSV、JSON/Markdown 报告；Git 仅保存代码、Schema、规格和脱敏小证据
+**Testing**: `unittest`、JSON Schema Draft 2020-12、合成几何样本、锁定700条结果的只读审计
+**Target Platform**: Linux 服务器与 macOS 12+/Python 3.12 离线命令行
+**Project Type**: Python 算法库与离线 CLI
+**Performance Goals**: 700条 JSONL+Manifest 审计在同机 5 秒内完成且峰值内存小于512 MiB；歧义恢复最多精修3个候选，单图新增工作有硬上限
+**Constraints**: 不训练；不改85°/坐标约定；不改PLC/上位机；不以700张 acceptance 调生产阈值；历史模式兼容；失败不填0；媒体和绝对现场路径不进Git
 **Scale/Scope**: 700条锁定 acceptance 回放（开发期不反复跑）、小型合成/单元开发集、待补的独立标注 validation/test；单图粗槽候选上限3；v3 closed-loop 为新权威统计路径，v1/v2继续兼容
 
 ## Constitution Check
