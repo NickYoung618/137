@@ -182,7 +182,6 @@ class Hole2BatchReportTests(unittest.TestCase):
                 "prediction:7:boundary:A", "prediction:7:boundary:B",
                 "prediction:7:dimension",
                 "prediction:Phi12.2:arc:reference_left:0",
-                "prediction:Phi12.2:arc:reference_right:0",
             }, set(shapes))
             self.assertEqual(
                 [[40.0, 50.0], [140.0, 50.0]],
@@ -192,6 +191,10 @@ class Hole2BatchReportTests(unittest.TestCase):
             self.assertNotIn("circle", {shape["shape_type"] for shape in shapes.values()})
             self.assertFalse(labelme["predictionMetadata"]["isGroundTruth"])
             self.assertFalse(labelme["predictionMetadata"]["isCompletePartContour"])
+            self.assertEqual(
+                "complete",
+                labelme["predictionMetadata"]["features"]["Phi12.2"]["evidenceAuditStatus"],
+            )
 
             failed = next(row for row in rows if row["imageName"].endswith("_5.bmp"))
             with Image.open(output / failed["previewJpeg"]).convert("RGB") as preview:
@@ -242,6 +245,9 @@ class Hole2BatchReportTests(unittest.TestCase):
             self.assertEqual(1, normal["featureValid"]["7"])
             self.assertEqual(3, normal["featureInvalid"]["7"])
             self.assertEqual(2, normal["featureValid"]["Phi12.2"])
+            self.assertEqual(1, normal["evidenceComplete"]["7"])
+            self.assertEqual(2, normal["evidenceComplete"]["Phi12.2"])
+            self.assertEqual(2, normal["evidenceAuditStatus"]["Phi12.2"]["complete"])
             self.assertEqual(1, normal["bothMeasurementsValid"])
             self.assertEqual(1, normal["failureReasons"]["executionError"]["RuntimeError"])
             self.assertEqual(3, defective["total"])
@@ -262,6 +268,39 @@ class Hole2BatchReportTests(unittest.TestCase):
             self.assertIn("group=normal estimatedCaptureGroupCount=2", summary_text)
             self.assertIn("complete=1 incomplete=1", summary_text)
             self.assertIn("gaps=4,6", summary_text)
+
+    def test_valid_measurement_without_evidence_is_warned_not_fabricated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jsonl, image_root = self._fixture(root)
+            records = [json.loads(line) for line in jsonl.read_text().splitlines()]
+            phi = records[0]["result"]["features"]["Phi12.2"]
+            phi["target"]["rawEdgeEvidence"]["arcSegments"] = []
+            jsonl.write_text(
+                "".join(json.dumps(record) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            output = root / "report"
+            completed = self._run(jsonl, image_root, output)
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            with (output / "index.csv").open(encoding="utf-8-sig") as stream:
+                row = next(csv.DictReader(stream))
+            self.assertEqual("True", row["phiValid"])
+            self.assertEqual("False", row["phiEvidenceComplete"])
+            self.assertEqual("unavailable", row["phiEvidenceAuditStatus"])
+            labelme = json.loads((output / row["predictionLabelmeJson"]).read_text())
+            self.assertFalse(any(
+                shape["label"].startswith("prediction:Phi12.2")
+                for shape in labelme["shapes"]
+            ))
+            self.assertEqual(
+                "unavailable",
+                labelme["predictionMetadata"]["features"]["Phi12.2"]["evidenceAuditStatus"],
+            )
+            with Image.open(output / row["previewJpeg"]).convert("RGB") as preview:
+                red, green, blue = preview.getpixel((preview.width - 2, 2))
+            self.assertGreater(red, green)
+            self.assertGreater(green, blue)
 
     def test_output_inside_worktree_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -6,9 +6,9 @@ usage() {
 Usage:
   run_hole2_single_acceptance.sh REFERENCE_ANNOTATION REFERENCE_IMAGE TARGET_IMAGE LATEST_TRUTH_JSON OUTPUT_DIRECTORY
 
-The five paths may instead be supplied with environment variables:
-  REFERENCE_ANNOTATION, REFERENCE_IMAGE, TARGET_IMAGE,
-  LATEST_TRUTH_JSON, OUTPUT_DIRECTORY
+The paths may instead be supplied with environment variables:
+  REFERENCE_ANNOTATION, REFERENCE_IMAGE,
+  TARGET_IMAGE, LATEST_TRUTH_JSON, OUTPUT_DIRECTORY
 
 Optional environment variable:
   REGISTRATION_CONFIG (default repository config/current_capture_registration.v1.json)
@@ -71,7 +71,7 @@ annotation_sha256=$(sha256sum -- "$latest_truth_json" | awk '{print $1}')
 
 set +e
 uv run --project "$repository_root" python "$repository_root/tools/run_current_capture.py" \
-  --label "$reference_annotation" \
+  --reference-annotation "$reference_annotation" \
   --reference-image "$reference_image" \
   --target-image "$target_image" \
   --config "$registration_config" \

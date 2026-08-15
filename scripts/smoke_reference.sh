@@ -1,24 +1,46 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-asset_dir=${HOLE2_ASSET_DIR:-/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/hole_2}
-output_dir=${HOLE2_SMOKE_OUTPUT:-"$project_root/outputs/reference-smoke"}
+usage() {
+  cat <<'EOF'
+Usage:
+  smoke_reference.sh REFERENCE_ANNOTATION REFERENCE_IMAGE TARGET_IMAGE OUTPUT_JSON
 
-mkdir -p "$output_dir"
-cd "$project_root"
+REFERENCE_ANNOTATION and REFERENCE_IMAGE must be the frozen authoritative
+018e/faf manual reference. OUTPUT_JSON must remain outside the Git worktree.
+EOF
+}
 
-uv run python algorithms/hole_2/main.py \
-  --label "$asset_dir/annotation.json" \
-  --reference-image "$asset_dir/reference.bmp" \
-  --input-dir "$asset_dir" \
-  --include-reference \
-  --print-confirmed-features \
-  --out "$output_dir/measurements.csv"
+if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
+  usage
+  exit 0
+fi
 
-uv run python tools/evaluate_repeatability.py \
-  --measurements "$output_dir/measurements.csv" \
-  --config config/hole2_inspection.example.json \
-  --output-dir "$output_dir/repeatability"
+reference_annotation=${REFERENCE_ANNOTATION:-${1:-}}
+reference_image=${REFERENCE_IMAGE:-${2:-}}
+target_image=${TARGET_IMAGE:-${3:-}}
+output_json=${OUTPUT_JSON:-${4:-}}
+if [[ -z $reference_annotation || -z $reference_image || -z $target_image || -z $output_json ]]; then
+  usage >&2
+  exit 64
+fi
 
-echo "Smoke outputs: $output_dir"
+project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+output_json=$(uv run --project "$project_root" python - "$project_root" "$output_json" <<'PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv[1]).resolve()
+output = Path(sys.argv[2]).expanduser().resolve()
+if output == root or root in output.parents:
+    raise SystemExit("OUTPUT_JSON must remain outside the Git worktree")
+print(output)
+PY
+)
+mkdir -p -- "$(dirname -- "$output_json")"
+
+uv run --project "$project_root" python "$project_root/tools/run_current_capture.py" \
+  --reference-annotation "$reference_annotation" \
+  --reference-image "$reference_image" \
+  --target-image "$target_image" \
+  --config "$project_root/config/current_capture_registration.v1.json" \
+  --out "$output_json"

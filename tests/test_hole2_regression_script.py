@@ -10,7 +10,10 @@ class Hole2RegressionScriptTests(unittest.TestCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         help_result = subprocess.run(["bash", str(script), "--help"], capture_output=True, text=True)
         self.assertEqual(0, help_result.returncode, help_result.stderr)
-        for name in ("REFERENCE_ANNOTATION", "REFERENCE_IMAGE", "NORMAL_DIRECTORY", "DEFECTIVE_DIRECTORY", "OUTPUT_DIRECTORY"):
+        for name in (
+            "REFERENCE_ANNOTATION", "REFERENCE_IMAGE",
+            "NORMAL_DIRECTORY", "DEFECTIVE_DIRECTORY", "OUTPUT_DIRECTORY",
+        ):
             self.assertIn(name, help_result.stdout)
 
     def test_script_rejects_worktree_output_before_creating_logs(self):

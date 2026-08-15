@@ -36,7 +36,9 @@ INDEX_FIELDS = [
     "executionSuccess", "executionError",
     "registrationValid", "registrationFailureReason",
     "d7Valid", "d7FailureReason", "d7LengthPx",
+    "d7EvidenceComplete", "d7EvidenceAuditStatus", "d7EvidenceAuditReason",
     "phiValid", "phiFailureReason", "phiDiameterPx",
+    "phiEvidenceComplete", "phiEvidenceAuditStatus", "phiEvidenceAuditReason",
     "bothMeasurementsValid", "previewJpeg", "predictionLabelmeJson",
     "captureGroupIndex", "captureGroupComplete",
 ]
@@ -116,6 +118,63 @@ def _feature_valid(record: dict[str, Any], name: str) -> bool:
     return (
         not record.get("executionError")
         and bool(_feature(record, name).get("measurementValid", False))
+    )
+
+
+def _usable_points(value: Any) -> bool:
+    return isinstance(value, list) and len(value) >= 2
+
+
+def _evidence_audit(record: dict[str, Any], name: str) -> dict[str, Any]:
+    feature = _feature(record, name)
+    if not _feature_valid(record, name):
+        return {"complete": False, "status": "not_applicable", "reason": "measurement_invalid"}
+    explicit_status = feature.get("evidenceAuditStatus")
+    if explicit_status in {"complete", "partial", "unavailable"}:
+        return {
+            "complete": bool(feature.get("evidenceComplete", explicit_status == "complete")),
+            "status": explicit_status,
+            "reason": feature.get("evidenceAuditReason"),
+        }
+    target = feature.get("target")
+    if not isinstance(target, dict):
+        return {"complete": False, "status": "unavailable", "reason": "target_geometry_unavailable"}
+    if name == "7":
+        evidence = target.get("rawEdgeEvidence", {})
+        fitted = target.get("fittedGeometry", {})
+        raw_sides = {
+            item.get("side") for item in evidence.get("boundaries", [])
+            if isinstance(item, dict) and _usable_points(item.get("pointsPx"))
+        } if isinstance(evidence, dict) else set()
+        fitted_sides = {
+            item.get("side") for item in fitted.get("boundaries", [])
+            if isinstance(item, dict) and _usable_points(item.get("segmentPointsPx"))
+        } if isinstance(fitted, dict) else set()
+        sides = raw_sides & fitted_sides
+        if sides == {"A", "B"}:
+            return {"complete": True, "status": "complete", "reason": None}
+        if sides:
+            return {"complete": False, "status": "partial", "reason": "only_one_boundary_evidence_available"}
+        return {"complete": False, "status": "unavailable", "reason": "boundary_evidence_unavailable"}
+    evidence = target.get("rawEdgeEvidence", {})
+    segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
+    calibrated = any(
+        isinstance(item, dict)
+        and item.get("side") == "reference_left"
+        and _usable_points(item.get("pointsPx"))
+        for item in segments
+    )
+    return (
+        {"complete": True, "status": "complete", "reason": None}
+        if calibrated else
+        {"complete": False, "status": "unavailable", "reason": "calibrated_arc_evidence_unavailable"}
+    )
+
+
+def _record_evidence_warning(record: dict[str, Any]) -> bool:
+    return any(
+        _feature_valid(record, name) and not _evidence_audit(record, name)["complete"]
+        for name in ("7", "Phi12.2")
     )
 
 
@@ -248,11 +307,13 @@ def _status_lines(record: dict[str, Any]) -> list[str]:
     )
     lines.append(
         f"7 valid={d7_valid} reason={_reason(record, '7')} "
-        f"lengthPx={_format_number(_measurement(record, '7', 'lengthPx'))}"
+        f"lengthPx={_format_number(_measurement(record, '7', 'lengthPx'))} "
+        f"evidence={_evidence_audit(record, '7')['status']}"
     )
     lines.append(
         f"Phi12.2 valid={phi_valid} reason={_reason(record, 'Phi12.2')} "
-        f"diameterPx={_format_number(_measurement(record, 'Phi12.2', 'diameterPx'))}"
+        f"diameterPx={_format_number(_measurement(record, 'Phi12.2', 'diameterPx'))} "
+        f"evidence={_evidence_audit(record, 'Phi12.2')['status']}"
     )
     return lines
 
@@ -303,6 +364,8 @@ def _draw_preview(
         evidence = phi["target"].get("rawEdgeEvidence", {})
         segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
         for segment in segments:
+            if not isinstance(segment, dict) or segment.get("side") != "reference_left":
+                continue
             points = segment.get("pointsPx") if isinstance(segment, dict) else None
             if isinstance(points, list) and len(points) >= 2:
                 scaled = [(float(p[0]) * scale, float(p[1]) * scale) for p in points]
@@ -313,7 +376,11 @@ def _draw_preview(
     font = _font(font_size)
     line_height = font_size + 3
     panel_height = min(image.height, 8 + line_height * len(lines))
-    panel_color = (120, 0, 0) if _record_invalid(record) else (0, 0, 0)
+    panel_color = (
+        (120, 0, 0) if _record_invalid(record)
+        else (145, 92, 0) if _record_evidence_warning(record)
+        else (0, 0, 0)
+    )
     draw.rectangle((0, 0, image.width - 1, panel_height), fill=panel_color)
     y = 4
     for line in lines:
@@ -371,6 +438,8 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
         for segment in segments:
             points = segment.get("pointsPx") if isinstance(segment, dict) else None
             side = str(segment.get("side", "unknown")) if isinstance(segment, dict) else "unknown"
+            if side != "reference_left":
+                continue
             if not isinstance(points, list) or len(points) < 2:
                 continue
             index = side_counts.get(side, 0)
@@ -407,6 +476,8 @@ def _prediction_document(
             "isGroundTruth": False,
             "isCompletePartContour": False,
             "algorithmVersion": None if result is None else result.get("algorithmVersion"),
+            "authoritativeReference": None if result is None else result.get("authoritativeReference"),
+            "runtimeInputProvenance": None if result is None else result.get("runtimeInputs"),
             "group": str(record["group"]),
             "executionError": record.get("executionError"),
             "registration": {
@@ -418,11 +489,17 @@ def _prediction_document(
                     "valid": _feature_valid(record, "7"),
                     "failureReason": _reason(record, "7"),
                     "lengthPx": _measurement(record, "7", "lengthPx"),
+                    "evidenceComplete": _evidence_audit(record, "7")["complete"],
+                    "evidenceAuditStatus": _evidence_audit(record, "7")["status"],
+                    "evidenceAuditReason": _evidence_audit(record, "7")["reason"],
                 },
                 "Phi12.2": {
                     "valid": _feature_valid(record, "Phi12.2"),
                     "failureReason": _reason(record, "Phi12.2"),
                     "diameterPx": _measurement(record, "Phi12.2", "diameterPx"),
+                    "evidenceComplete": _evidence_audit(record, "Phi12.2")["complete"],
+                    "evidenceAuditStatus": _evidence_audit(record, "Phi12.2")["status"],
+                    "evidenceAuditReason": _evidence_audit(record, "Phi12.2")["reason"],
                 },
             },
         },
@@ -438,6 +515,8 @@ def _new_group_stats() -> dict[str, Any]:
         "registrationInvalid": 0,
         "featureValid": {"7": 0, "Phi12.2": 0},
         "featureInvalid": {"7": 0, "Phi12.2": 0},
+        "evidenceComplete": {"7": 0, "Phi12.2": 0},
+        "evidenceAuditStatus": {"7": Counter(), "Phi12.2": Counter()},
         "bothMeasurementsValid": 0,
         "failureReasons": {
             "executionError": Counter(),
@@ -481,6 +560,10 @@ def _group_stats(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             valid = _feature_valid(record, name)
             valid_features.append(valid)
             stats["featureValid" if valid else "featureInvalid"][name] += 1
+            audit = _evidence_audit(record, name)
+            stats["evidenceAuditStatus"][name][audit["status"]] += 1
+            if audit["complete"]:
+                stats["evidenceComplete"][name] += 1
             if not valid:
                 stats["failureReasons"][name][
                     _reason(record, name) or "invalid_without_reason"
@@ -494,6 +577,11 @@ def _serialize_group_stats(stats: dict[str, Any]) -> dict[str, Any]:
     value = dict(stats)
     value["featureValid"] = dict(stats["featureValid"])
     value["featureInvalid"] = dict(stats["featureInvalid"])
+    value["evidenceComplete"] = dict(stats["evidenceComplete"])
+    value["evidenceAuditStatus"] = {
+        name: dict(sorted(counter.items()))
+        for name, counter in stats["evidenceAuditStatus"].items()
+    }
     value["failureReasons"] = {
         role: dict(sorted(counter.items()))
         for role, counter in stats["failureReasons"].items()
@@ -600,7 +688,9 @@ def _summary_text(summary: dict[str, Any]) -> str:
             f"executionSuccess={stats['executionSuccess']} executionError={stats['executionError']}",
             f"registrationValid={stats['registrationValid']} registrationInvalid={stats['registrationInvalid']}",
             f"7Valid={stats['featureValid']['7']} 7Invalid={stats['featureInvalid']['7']}",
+            f"7EvidenceComplete={stats['evidenceComplete']['7']} auditStatus={json.dumps(stats['evidenceAuditStatus']['7'], sort_keys=True)}",
             f"Phi12.2Valid={stats['featureValid']['Phi12.2']} Phi12.2Invalid={stats['featureInvalid']['Phi12.2']}",
+            f"Phi12.2EvidenceComplete={stats['evidenceComplete']['Phi12.2']} auditStatus={json.dumps(stats['evidenceAuditStatus']['Phi12.2'], sort_keys=True)}",
             f"bothMeasurementsValid={stats['bothMeasurementsValid']}",
             f"generatedPreviewCount={stats['generatedPreviewCount']} generatedLabelmeCount={stats['generatedLabelmeCount']}",
             "failureReasons=" + json.dumps(stats["failureReasons"], ensure_ascii=False, sort_keys=True),
@@ -696,6 +786,8 @@ def render_batch_report(
         membership = capture_membership.get(_identity(record), {})
         d7_valid = _feature_valid(record, "7")
         phi_valid = _feature_valid(record, "Phi12.2")
+        d7_audit = _evidence_audit(record, "7")
+        phi_audit = _evidence_audit(record, "Phi12.2")
         index_rows.append({
             "group": group,
             "imageName": image_name,
@@ -708,9 +800,15 @@ def render_batch_report(
             "d7Valid": d7_valid,
             "d7FailureReason": _reason(record, "7") or "",
             "d7LengthPx": _measurement(record, "7", "lengthPx") or "",
+            "d7EvidenceComplete": d7_audit["complete"],
+            "d7EvidenceAuditStatus": d7_audit["status"],
+            "d7EvidenceAuditReason": d7_audit["reason"] or "",
             "phiValid": phi_valid,
             "phiFailureReason": _reason(record, "Phi12.2") or "",
             "phiDiameterPx": _measurement(record, "Phi12.2", "diameterPx") or "",
+            "phiEvidenceComplete": phi_audit["complete"],
+            "phiEvidenceAuditStatus": phi_audit["status"],
+            "phiEvidenceAuditReason": phi_audit["reason"] or "",
             "bothMeasurementsValid": d7_valid and phi_valid,
             "previewJpeg": str(preview_path.relative_to(output_dir)),
             "predictionLabelmeJson": str(prediction_path.relative_to(output_dir)),

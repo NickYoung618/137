@@ -38,15 +38,26 @@ def _truth(radius=25.0, point_count=77):
 
 def _result(target_sha: str):
     return {
-        "schemaVersion": "hole2-current-capture-result/1",
+        "schemaVersion": "hole2-current-capture-result/2",
         "algorithmVersion": "test/1",
         "configVersion": "test-v1",
         "runtimeInputs": [
-            {"role": "reference_annotation", "path": "old.json", "sha256": "1" * 64},
-            {"role": "reference_image", "path": "old.bmp", "sha256": "2" * 64},
+            {"role": "authoritative_reference_annotation", "path": "manual.json", "sha256": "018e3449c051c15f7946315bd0d7f21cd79f4d4983efca0d11c7d98f02bfffa6"},
+            {"role": "authoritative_reference_image", "path": "manual.bmp", "sha256": "faf357c2e6e8e58d667f76a3d9ed4f4d51ab4d451c2661cf0efbc641405b2d8b"},
             {"role": "target_image", "path": "target.bmp", "sha256": target_sha},
             {"role": "configuration", "path": "config.json", "sha256": "3" * 64},
         ],
+        "authoritativeReference": {
+            "referenceVersion": "hole2-authoritative-manual-reference/1",
+            "templateSelfCheck": False,
+            "transformDirection": "authoritative_reference_px_to_target_px",
+            "transform": {"dx": 0.0, "dy": 0.0, "scale": 1.0, "thetaDeg": 0.0},
+            "registrationEvidenceSource": "authoritative_reference_image_pixels",
+            "annotationShapeSummary": {
+                "7": {"shapeType": "line", "pointCount": 2},
+                "Phi12.2": {"shapeType": "linestrip", "pointCount": 80},
+            },
+        },
         "registration": {
             "registrationValid": True, "failureReason": None,
             "primaryFailureReason": None, "registrationRecoveryPass": None,
@@ -68,6 +79,8 @@ def _result(target_sha: str):
         "features": {
             "7": {
                 "featureCode": "HOLE2-DIM-7", "measurementValid": True,
+                "evidenceComplete": False, "evidenceAuditStatus": "unavailable",
+                "evidenceAuditReason": "boundary_evidence_unavailable",
                 "qualityStatus": "valid",
                 "failureReason": None, "sourceDetector": "test", "recoveryPass": None,
                 "reference": {},
@@ -76,6 +89,8 @@ def _result(target_sha: str):
             },
             "Phi12.2": {
                 "featureCode": "HOLE2-DIA-12_2", "measurementValid": True,
+                "evidenceComplete": False, "evidenceAuditStatus": "unavailable",
+                "evidenceAuditReason": "calibrated_arc_evidence_unavailable",
                 "qualityStatus": "valid",
                 "failureReason": None, "sourceDetector": "test", "recoveryPass": None,
                 "reference": {},
@@ -91,7 +106,7 @@ def _result(target_sha: str):
         "geometryConsistency": {
             "evaluated": True, "outlier": False, "rejected": False,
             "failureReason": None, "outlierReason": None,
-            "ratioSource": "old_reference_annotation_geometry",
+            "ratioSource": "authoritative_manual_reference_geometry",
             "referenceRatio": 1.0, "targetRatio": 1.0,
             "absoluteDeviation": 0.0, "maximumAbsoluteDeviation": 0.08,
             "decision": "consistent", "corroboratingEvidence": [],
@@ -206,7 +221,7 @@ class CurrentCaptureAcceptanceTests(unittest.TestCase):
                 result_path, image_path, truth_path, _sha(image_path), _sha(truth_path)
             )
         schema = json.loads((
-            ROOT / "specs/002-current-capture-registration/contracts/current-capture-acceptance-v1.schema.json"
+            ROOT / "specs/017-manual-measurement-template/contracts/current-capture-acceptance-v2.schema.json"
         ).read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator.check_schema(schema)
         jsonschema.validate(report, schema)

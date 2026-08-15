@@ -97,7 +97,7 @@
           "type": "object",
           "required": ["semantics", "evidenceAvailable", "arcSegments"],
           "properties": {
-            "semantics": {"const": "outer_contour_two_visible_arcs"},
+            "semantics": {"const": "outer_contour_calibrated_visible_arc"},
             "evidenceAvailable": {"type": "boolean"},
             "arcSegments": {
               "type": "array",
@@ -105,7 +105,7 @@
                 "type": "object",
                 "required": ["side", "pointsPx"],
                 "properties": {
-                  "side": {"enum": ["reference_left", "reference_right"]},
+                  "side": {"const": "reference_left"},
                   "pointsPx": {"$ref": "#/$defs/pointList"}
                 }
               }

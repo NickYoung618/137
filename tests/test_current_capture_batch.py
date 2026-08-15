@@ -48,7 +48,7 @@ class CurrentCaptureBatchTests(unittest.TestCase):
             summary["overall"]["candidateRejectionReasons"]["support_count_below_gate"],
         )
         summary["runtimeInputs"] = {
-            "referenceAnnotation": {}, "referenceImage": {},
+            "authoritativeReferenceAnnotation": {}, "authoritativeReferenceImage": {},
             "configuration": {}, "groups": [],
         }
         validate_batch_summary_contract(summary)

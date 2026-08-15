@@ -166,7 +166,7 @@ class Hole2BatchReviewTests(unittest.TestCase):
             self.assertIn("old:7:boundary:B", labels)
             self.assertIn("old:7:dimension", labels)
             self.assertIn("old:Phi12.2:arc:reference_left:0", labels)
-            self.assertIn("new:Phi12.2:arc:reference_right:0", labels)
+            self.assertNotIn("new:Phi12.2:arc:reference_right:0", labels)
             self.assertNotIn("circle", {
                 shape["shape_type"] for shape in labelme["shapes"]
             })
@@ -178,9 +178,39 @@ class Hole2BatchReviewTests(unittest.TestCase):
                 metadata["new"]["features"]["Phi12.2"]["quality"],
             )
             self.assertEqual(
+                "complete",
+                metadata["new"]["features"]["Phi12.2"]["evidenceAuditStatus"],
+            )
+            self.assertEqual(
                 "Only dimension 7 and Phi12.2 predictions are drawn; this is not a part contour annotation.",
                 metadata["scope"],
             )
+
+    def test_evidence_only_change_is_reviewable_without_fabricated_arc(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image_root, old_path, new_path = self._fixture(root)
+            records = [json.loads(line) for line in new_path.read_text().splitlines()]
+            records[1]["result"]["features"]["Phi12.2"]["target"]["rawEdgeEvidence"]["arcSegments"] = []
+            new_path.write_text(
+                "".join(json.dumps(record) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            output_dir = root / "review"
+            completed = self._run(old_path, new_path, image_root, output_dir)
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            summary = json.loads((output_dir / "review-summary.json").read_text())
+            self.assertEqual(2, summary["renderedFrames"])
+            item = next(item for item in summary["items"] if item["imageName"] == "unchanged.bmp")
+            labelme = json.loads((output_dir / item["predictionLabelmeJson"]).read_text())
+            self.assertEqual(
+                "unavailable",
+                labelme["reviewMetadata"]["new"]["features"]["Phi12.2"]["evidenceAuditStatus"],
+            )
+            self.assertFalse(any(
+                shape["label"].startswith("new:Phi12.2")
+                for shape in labelme["shapes"]
+            ))
 
     def test_explicit_frame_can_render_unchanged_status(self):
         with tempfile.TemporaryDirectory() as directory:

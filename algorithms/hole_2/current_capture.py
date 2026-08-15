@@ -1,8 +1,9 @@
-"""Current-capture pose registration adapter for the existing hole-2 v6 core.
+"""Current-capture registration and measurement from one manual reference.
 
-The runtime API deliberately has no target-annotation argument.  It derives a
-pose from the old reference annotation and the target pixels, gates the pose
-with spatially distributed edge supports, then delegates measurements to v6.
+The frozen two-shape manual annotation and its paired image are the only
+runtime reference.  Registration supports are derived from that image's own
+pixels; dimension 7 and Phi12.2 are seeded by its annotation and re-detected
+from every target image under the existing quality gates.
 """
 from __future__ import annotations
 
@@ -46,9 +47,16 @@ from .main import (
 )
 
 
-ALGORITHM_VERSION = "hole2-current-capture-registration/4"
-RESULT_SCHEMA_VERSION = "hole2-current-capture-result/1"
+ALGORITHM_VERSION = "hole2-current-capture-registration/5"
+RESULT_SCHEMA_VERSION = "hole2-current-capture-result/2"
 EVIDENCE_SCOPE = "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng"
+AUTHORITATIVE_REFERENCE_VERSION = "hole2-authoritative-manual-reference/1"
+AUTHORITATIVE_REFERENCE_ANNOTATION_SHA256 = (
+    "018e3449c051c15f7946315bd0d7f21cd79f4d4983efca0d11c7d98f02bfffa6"
+)
+AUTHORITATIVE_REFERENCE_IMAGE_SHA256 = (
+    "faf357c2e6e8e58d667f76a3d9ed4f4d51ab4d451c2661cf0efbc641405b2d8b"
+)
 
 
 @dataclass(frozen=True)
@@ -108,6 +116,54 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def load_authoritative_reference(
+    annotation_path: Path,
+    image_path: Path,
+) -> ReferenceModel:
+    """Load the only authoritative runtime reference or fail closed."""
+    if not annotation_path.is_file():
+        raise FileNotFoundError(
+            f"authoritative reference annotation does not exist: {annotation_path}"
+        )
+    if not image_path.is_file():
+        raise FileNotFoundError(
+            f"authoritative reference image does not exist: {image_path}"
+        )
+    annotation_sha = sha256_file(annotation_path)
+    if annotation_sha != AUTHORITATIVE_REFERENCE_ANNOTATION_SHA256:
+        raise ValueError(
+            "authoritative reference annotation SHA-256 mismatch: "
+            f"expected={AUTHORITATIVE_REFERENCE_ANNOTATION_SHA256} actual={annotation_sha}"
+        )
+    image_sha = sha256_file(image_path)
+    if image_sha != AUTHORITATIVE_REFERENCE_IMAGE_SHA256:
+        raise ValueError(
+            "authoritative reference image SHA-256 mismatch: "
+            f"expected={AUTHORITATIVE_REFERENCE_IMAGE_SHA256} actual={image_sha}"
+        )
+    model = build_reference(annotation_path, image_path)
+    shapes = {shape.sanitized: shape for shape in model.shapes}
+    if set(shapes) != {"d7", "Phi12_2"}:
+        raise ValueError("authoritative reference must contain exactly 7 and Phi12.2")
+    d7 = shapes["d7"]
+    phi = shapes["Phi12_2"]
+    if d7.kind != "line" or len(d7.points) != 2:
+        raise ValueError("authoritative reference 7 must be a two-point line")
+    if phi.kind != "arc" or len(phi.points) != 80 or phi.circle is None:
+        raise ValueError("authoritative reference Phi12.2 must be an 80-point arc")
+    return model
+
+
+def _transform_from_registration(registration: dict[str, Any]) -> SimilarityTransform:
+    value = registration.get("transform")
+    if not registration.get("registrationValid") or not isinstance(value, dict):
+        raise ValueError("registration transform is unavailable")
+    return SimilarityTransform(
+        float(value["dx"]), float(value["dy"]),
+        float(value["scale"]), float(value["thetaDeg"]),
+    )
 
 
 def load_registration_config(path: Path) -> dict[str, Any]:
@@ -255,6 +311,10 @@ def _primary_group(groups: list[_SupportGroup]) -> _SupportGroup:
     return max(
         groups,
         key=lambda group: (
+            any(
+                shape.source_shape_type != "derived_image_edge_support"
+                for shape in group.shapes
+            ),
             len(group.shapes),
             sum(len(shape.points) for shape in group.shapes),
             sum(float(shape.circle[2]) for shape in group.shapes),
@@ -276,6 +336,91 @@ def _resize_gradient(gray: np.ndarray, downsample: int) -> np.ndarray:
             dtype=np.float64,
         )
     return gradient_magnitude(small)
+
+
+def _derive_image_registration_reference(
+    reference: ReferenceModel,
+    config: dict[str, Any],
+) -> ReferenceModel:
+    """Add distributed pixel-edge supports derived only from the new image.
+
+    The two manual shapes retain their measurement meaning.  The synthetic
+    support shapes are an internal registration representation of stable,
+    spatially distributed high-gradient patches in the same authoritative
+    image; they never enter measurement extraction or result geometry.
+    """
+    downsample = int(config["supports"]["downsample"])
+    gradient = _resize_gradient(reference.gray, downsample)
+    height, width = gradient.shape
+    global_scale = _gradient_normalizer(gradient)
+    cluster_distance = float(
+        config["supports"]["reference_cluster_distance_px"]
+    )
+    circular_centers = [
+        (float(shape.circle[0]), float(shape.circle[1]))
+        for shape in reference.shapes
+        if shape.circle is not None
+    ]
+    supports: list[ShapeModel] = []
+    rows, columns = 4, 6
+    margin_y = max(2, height // 20)
+    margin_x = max(2, width // 20)
+    usable_height = max(1, height - 2 * margin_y)
+    usable_width = max(1, width - 2 * margin_x)
+    for row in range(rows):
+        y0 = margin_y + row * usable_height // rows
+        y1 = margin_y + (row + 1) * usable_height // rows
+        for column in range(columns):
+            x0 = margin_x + column * usable_width // columns
+            x1 = margin_x + (column + 1) * usable_width // columns
+            cell = gradient[y0:y1, x0:x1]
+            if cell.size < 24:
+                continue
+            flat = np.argsort(cell.ravel())[::-1]
+            selected: list[tuple[int, int]] = []
+            for flat_index in flat:
+                local_y, local_x = np.unravel_index(int(flat_index), cell.shape)
+                y, x = y0 + int(local_y), x0 + int(local_x)
+                if float(gradient[y, x]) / global_scale < float(
+                    config["supports"]["min_edge_peak_normalized"]
+                ):
+                    break
+                if any(abs(x - px) <= 2 and abs(y - py) <= 2 for py, px in selected):
+                    continue
+                selected.append((y, x))
+                if len(selected) >= 20:
+                    break
+            if len(selected) < 12:
+                continue
+            points = [
+                (float(x * downsample), float(y * downsample))
+                for y, x in selected
+            ]
+            center_x = float(np.mean([point[0] for point in points]))
+            center_y = float(np.mean([point[1] for point in points]))
+            if any(
+                math.hypot(center_x - x, center_y - y) <= 1.1 * cluster_distance
+                for x, y in circular_centers
+            ):
+                continue
+            supports.append(ShapeModel(
+                index=10_000 + len(supports),
+                label=f"__image_registration_support_{row}_{column}",
+                sanitized=f"__image_registration_support_{row}_{column}",
+                kind="arc",
+                points=points,
+                circle=(center_x, center_y, 1.0),
+                source_shape_type="derived_image_edge_support",
+            ))
+    if len(supports) < int(config["quality"]["min_support_groups"]):
+        raise ValueError("authoritative reference image has insufficient registration supports")
+    return ReferenceModel(
+        annotation=reference.annotation,
+        image_path=reference.image_path,
+        gray=reference.gray,
+        shapes=[*reference.shapes, *supports],
+        anchor_indices=list(reference.anchor_indices),
+    )
 
 
 def _ring_kernel(shape: tuple[int, int], radii: list[float]) -> np.ndarray:
@@ -349,6 +494,132 @@ def _coarse_hypotheses(
             continue
         selected.append(item)
         if len(selected) >= int(coarse["max_global_hypotheses"]):
+            break
+    return selected
+
+
+def _summed_area(array: np.ndarray) -> np.ndarray:
+    return np.pad(array.cumsum(axis=0).cumsum(axis=1), ((1, 0), (1, 0)))
+
+
+def _window_sums(integral: np.ndarray, height: int, width: int) -> np.ndarray:
+    return (
+        integral[height:, width:]
+        - integral[:-height, width:]
+        - integral[height:, :-width]
+        + integral[:-height, :-width]
+    )
+
+
+def _image_template_hypotheses(
+    reference: ReferenceModel,
+    target: np.ndarray,
+    primary: _SupportGroup,
+    config: dict[str, Any],
+) -> list[dict[str, float | str]]:
+    """Find coarse poses by matching the new reference's measured-part ROI."""
+    coarse = config["coarse"]
+    downsample = int(coarse["downsample"])
+    reference_gradient = _resize_gradient(reference.gray, downsample)
+    target_gradient = _resize_gradient(target, downsample)
+    measurement_shapes = [
+        shape for shape in reference.shapes
+        if shape.source_shape_type != "derived_image_edge_support"
+    ]
+    points = [point for shape in measurement_shapes for point in shape.points]
+    if not points:
+        return []
+    xs = [point[0] / downsample for point in points]
+    ys = [point[1] / downsample for point in points]
+    radius = max(
+        (float(shape.circle[2]) / downsample for shape in measurement_shapes
+         if shape.circle is not None),
+        default=20.0,
+    )
+    margin = max(12, int(math.ceil(0.45 * radius)))
+    x0 = max(0, int(math.floor(min(xs))) - margin)
+    x1 = min(reference_gradient.shape[1], int(math.ceil(max(xs))) + margin + 1)
+    y0 = max(0, int(math.floor(min(ys))) - margin)
+    y1 = min(reference_gradient.shape[0], int(math.ceil(max(ys))) + margin + 1)
+    template_base = reference_gradient[y0:y1, x0:x1]
+    if min(template_base.shape) < 12:
+        return []
+    target_cap = float(np.percentile(target_gradient, 99.5))
+    if not math.isfinite(target_cap) or target_cap <= 1e-9:
+        return []
+    target_gradient = np.clip(target_gradient, 0.0, target_cap)
+    target_integral = _summed_area(target_gradient)
+    target_square_integral = _summed_area(target_gradient * target_gradient)
+    raw: list[dict[str, float | str]] = []
+    scales = np.arange(
+        float(coarse["scale_min"]),
+        float(coarse["scale_max"]) + 0.5 * float(coarse["scale_step"]),
+        float(coarse["scale_step"]),
+    )
+    for scale in scales:
+        template = np.asarray(
+            Image.fromarray(template_base.astype(np.float32)).resize(
+                (max(8, int(round(template_base.shape[1] * scale))),
+                 max(8, int(round(template_base.shape[0] * scale)))),
+                Image.Resampling.BILINEAR,
+            ),
+            dtype=np.float64,
+        )
+        height, width = template.shape
+        if height >= target_gradient.shape[0] or width >= target_gradient.shape[1]:
+            continue
+        template = template - float(np.mean(template))
+        template_norm = float(np.linalg.norm(template))
+        if template_norm <= 1e-9:
+            continue
+        fft_shape = (
+            target_gradient.shape[0] + height - 1,
+            target_gradient.shape[1] + width - 1,
+        )
+        correlation = np.fft.irfft2(
+            np.fft.rfft2(target_gradient, fft_shape)
+            * np.conj(np.fft.rfft2(template, fft_shape)),
+            s=fft_shape,
+        ).real[:target_gradient.shape[0] - height + 1,
+               :target_gradient.shape[1] - width + 1]
+        sums = _window_sums(target_integral, height, width)
+        squares = _window_sums(target_square_integral, height, width)
+        count = float(height * width)
+        local_energy = np.maximum(squares - sums * sums / count, 1e-9)
+        normalized = correlation / (template_norm * np.sqrt(local_energy))
+        peak_count = min(int(coarse["max_peaks_per_scale"]), normalized.size)
+        indices = np.argpartition(normalized.ravel(), -peak_count)[-peak_count:]
+        for flat_index in indices:
+            row, column = np.unravel_index(int(flat_index), normalized.shape)
+            center_x = (
+                float(column)
+                + scale * (primary.reference_point[0] / downsample - x0)
+            ) * downsample
+            center_y = (
+                float(row)
+                + scale * (primary.reference_point[1] / downsample - y0)
+            ) * downsample
+            raw.append({
+                "score": float(normalized[row, column]),
+                "scale": float(scale),
+                "centerX": float(center_x),
+                "centerY": float(center_y),
+                "hypothesisSource": "authoritative_reference_image_roi",
+            })
+    selected: list[dict[str, float | str]] = []
+    nms = float(coarse["nonmaximum_distance_px"])
+    for item in sorted(raw, key=lambda value: float(value["score"]), reverse=True):
+        if any(
+            math.hypot(
+                float(item["centerX"]) - float(previous["centerX"]),
+                float(item["centerY"]) - float(previous["centerY"]),
+            ) < nms
+            and abs(float(item["scale"]) - float(previous["scale"])) < 0.08
+            for previous in selected
+        ):
+            continue
+        selected.append(item)
+        if len(selected) >= 8:
             break
     return selected
 
@@ -673,6 +944,45 @@ def _roundtrip_error(transform: SimilarityTransform, groups: list[_SupportGroup]
     )
 
 
+def _distinct_pose_candidates(
+    candidates: list[dict[str, Any]],
+    reference_point: tuple[float, float],
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Collapse coarse seeds that refined to the same physical pose."""
+    distinct: list[dict[str, Any]] = []
+    position_tolerance = 0.25 * float(config["coarse"]["nonmaximum_distance_px"])
+    for candidate in candidates:
+        value = candidate.get("transform")
+        if not isinstance(value, dict):
+            continue
+        transform = SimilarityTransform(
+            float(value["dx"]), float(value["dy"]),
+            float(value["scale"]), float(value["thetaDeg"]),
+        )
+        center = transform.forward(*reference_point)
+        duplicate = False
+        for previous in distinct:
+            previous_value = previous["transform"]
+            previous_transform = SimilarityTransform(
+                float(previous_value["dx"]), float(previous_value["dy"]),
+                float(previous_value["scale"]), float(previous_value["thetaDeg"]),
+            )
+            previous_center = previous_transform.forward(*reference_point)
+            if (
+                math.dist(center, previous_center) <= position_tolerance
+                and abs(transform.scale / previous_transform.scale - 1.0) <= 0.05
+                and abs(_angle_difference_degrees(
+                    transform.theta_deg, previous_transform.theta_deg
+                )) <= 3.0
+            ):
+                duplicate = True
+                break
+        if not duplicate:
+            distinct.append(candidate)
+    return distinct
+
+
 def _registration_coordinate_fields(
     reference: ReferenceModel,
     target_gray: np.ndarray,
@@ -685,6 +995,118 @@ def _registration_coordinate_fields(
         "inverseTransformDirection": "target_px_to_reference_px",
         "inverseTransform": None if transform is None else transform.inverse_as_dict(),
     }
+
+
+def _registration_image_consistency(
+    reference_gray: np.ndarray,
+    target_gray: np.ndarray,
+    transform: SimilarityTransform,
+    downsample: int = 8,
+) -> dict[str, float | int]:
+    """Compare a pose against distributed pixels from the sole reference image."""
+    ref_image = Image.fromarray(reference_gray.astype(np.float32)).resize(
+        (max(16, reference_gray.shape[1] // downsample),
+         max(16, reference_gray.shape[0] // downsample)),
+        Image.Resampling.BILINEAR,
+    )
+    target_image = Image.fromarray(target_gray.astype(np.float32)).resize(
+        (max(16, target_gray.shape[1] // downsample),
+         max(16, target_gray.shape[0] // downsample)),
+        Image.Resampling.BILINEAR,
+    )
+    reference = np.asarray(ref_image, dtype=np.float64)
+    target = np.asarray(target_image, dtype=np.float64)
+    ref_gy, ref_gx = np.gradient(reference)
+    target_gy, target_gx = np.gradient(target)
+    ref_magnitude = np.hypot(ref_gx, ref_gy)
+    threshold = float(np.percentile(ref_magnitude, 70.0))
+    ys, xs = np.nonzero(ref_magnitude >= threshold)
+    if len(xs) > 6000:
+        indices = np.linspace(0, len(xs) - 1, 6000, dtype=np.int64)
+        xs, ys = xs[indices], ys[indices]
+    reference_x = xs.astype(np.float64) * downsample
+    reference_y = ys.astype(np.float64) * downsample
+    theta = transform.theta_rad
+    c, s = math.cos(theta), math.sin(theta)
+    target_x = (
+        transform.dx + transform.scale * (c * reference_x - s * reference_y)
+    ) / downsample
+    target_y = (
+        transform.dy + transform.scale * (s * reference_x + c * reference_y)
+    ) / downsample
+    visible = (
+        (target_x >= 1.0) & (target_x < target.shape[1] - 2.0)
+        & (target_y >= 1.0) & (target_y < target.shape[0] - 2.0)
+    )
+    if int(visible.sum()) < 200:
+        return {"score": -1.0, "intensityCorrelation": -1.0,
+                "gradientDirectionSupport": 0.0, "visiblePoints": int(visible.sum())}
+    xs = xs[visible]
+    ys = ys[visible]
+    target_x = target_x[visible]
+    target_y = target_y[visible]
+    ref_values = reference[ys, xs]
+    target_values = bilinear_sample(target, target_x, target_y)
+    finite = np.isfinite(target_values)
+    ref_values = ref_values[finite]
+    target_values = target_values[finite]
+    ref_values = ref_values - float(np.mean(ref_values))
+    target_values = target_values - float(np.mean(target_values))
+    denominator = float(np.linalg.norm(ref_values) * np.linalg.norm(target_values))
+    if denominator <= 1e-9:
+        return {"score": -1.0, "intensityCorrelation": -1.0,
+                "gradientDirectionSupport": 0.0, "visiblePoints": int(len(ref_values))}
+    intensity_correlation = float(np.dot(ref_values, target_values) / denominator)
+    ref_gx_values = ref_gx[ys, xs][finite]
+    ref_gy_values = ref_gy[ys, xs][finite]
+    target_gx_values = bilinear_sample(target_gx, target_x[finite], target_y[finite])
+    target_gy_values = bilinear_sample(target_gy, target_x[finite], target_y[finite])
+    rotated_x = c * ref_gx_values - s * ref_gy_values
+    rotated_y = s * ref_gx_values + c * ref_gy_values
+    direction_denominator = (
+        np.hypot(rotated_x, rotated_y)
+        * np.hypot(target_gx_values, target_gy_values)
+    )
+    usable = direction_denominator > 1e-9
+    if usable.any():
+        direction_cosine = (
+            rotated_x[usable] * target_gx_values[usable]
+            + rotated_y[usable] * target_gy_values[usable]
+        ) / direction_denominator[usable]
+        gradient_support = float(np.mean(np.clip(direction_cosine, -1.0, 1.0)))
+    else:
+        gradient_support = 0.0
+    score = 0.5 * intensity_correlation + 0.5 * gradient_support
+    return {
+        "score": float(score),
+        "intensityCorrelation": float(intensity_correlation),
+        "gradientDirectionSupport": float(gradient_support),
+        "visiblePoints": int(len(ref_values)),
+    }
+
+
+def _add_image_consistency_scores(
+    candidates: list[dict[str, Any]],
+    reference_gray: np.ndarray,
+    target_gray: np.ndarray,
+) -> None:
+    for candidate in candidates:
+        value = candidate.get("transform")
+        if not isinstance(value, dict):
+            diagnostic = {"score": -1.0, "intensityCorrelation": -1.0,
+                          "gradientDirectionSupport": 0.0, "visiblePoints": 0}
+        else:
+            diagnostic = _registration_image_consistency(
+                reference_gray,
+                target_gray,
+                SimilarityTransform(
+                    float(value["dx"]), float(value["dy"]),
+                    float(value["scale"]), float(value["thetaDeg"]),
+                ),
+            )
+        candidate["imageConsistency"] = diagnostic
+        candidate["rawSupportScore"] = candidate["score"]
+        candidate["score"] = float(candidate["score"] + 3.0 * diagnostic["score"])
 
 
 def _unscored_orientation_candidates(config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -703,17 +1125,57 @@ def _unscored_orientation_candidates(config: dict[str, Any]) -> list[dict[str, A
     } for orientation in config["orientations_deg"]]
 
 
+def _identity_self_registration(
+    reference: ReferenceModel,
+    target_gray: np.ndarray,
+) -> dict[str, Any]:
+    transform = SimilarityTransform(0.0, 0.0, 1.0, 0.0)
+    selected = {
+        "orientationDeg": 0,
+        "coarse": {"score": 1.0, "scale": 1.0, "centerX": None, "centerY": None},
+        "transform": transform.as_dict(),
+        "score": 1.0,
+        "supportCount": None,
+        "spatialCoverage": 1.0,
+        "medianResidualPx": 0.0,
+        "maxResidualPx": 0.0,
+        "supports": [],
+        "gateDiagnostics": {"identitySelfCheck": {"passed": True}},
+        "valid": True,
+        "failureReasons": [],
+        "registrationPass": "authoritative_reference_identity",
+    }
+    return {
+        "registrationValid": True,
+        "failureReason": None,
+        "primaryFailureReason": None,
+        "registrationRecoveryPass": None,
+        "candidates": [selected],
+        "selected": selected,
+        "transform": transform.as_dict(),
+        "candidateScoreMargin": None,
+        "roundtripErrorPx": 0.0,
+        **_registration_coordinate_fields(reference, target_gray, transform),
+    }
+
+
 def register_current_capture(
     reference: ReferenceModel,
     target_gray: np.ndarray,
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    """Register one target using old-reference geometry only."""
+    """Register one target using only authoritative-reference image evidence."""
     groups = _cluster_supports(
         reference, float(config["supports"]["reference_cluster_distance_px"])
     )
     primary = _primary_group(groups)
-    hypotheses = _coarse_hypotheses(target_gray, primary, config)
+    ring_hypotheses = _coarse_hypotheses(target_gray, primary, config)
+    for hypothesis in ring_hypotheses:
+        hypothesis["hypothesisSource"] = "annotated_circle_ring"
+    image_hypotheses = _image_template_hypotheses(
+        reference, target_gray, primary, config
+    )
+    hypotheses = [*image_hypotheses, *ring_hypotheses]
     if not hypotheses:
         return {
             "registrationValid": False,
@@ -733,6 +1195,7 @@ def register_current_capture(
         for hypothesis in hypotheses
         for orientation in config["orientations_deg"]
     ]
+    _add_image_consistency_scores(candidates, reference.gray, target_gray)
     for candidate in candidates:
         candidate["registrationPass"] = "primary"
     candidates.sort(key=lambda item: item["score"], reverse=True)
@@ -757,6 +1220,9 @@ def register_current_capture(
                 for hypothesis in hypotheses
                 for orientation in config["orientations_deg"]
             ]
+            _add_image_consistency_scores(
+                recovery_candidates, reference.gray, target_gray
+            )
             for candidate in recovery_candidates:
                 candidate["registrationPass"] = "recovery"
             candidates.extend(recovery_candidates)
@@ -783,8 +1249,12 @@ def register_current_capture(
     else:
         registration_recovery_pass = None
         primary_failure_reason = None
-    best = valid[0]
-    margin = None if len(valid) == 1 else float(best["score"] - valid[1]["score"])
+    distinct_valid = _distinct_pose_candidates(valid, primary.reference_point, config)
+    best = distinct_valid[0]
+    margin = (
+        None if len(distinct_valid) == 1
+        else float(best["score"] - distinct_valid[1]["score"])
+    )
     if margin is not None and margin < float(config["quality"]["min_candidate_score_margin"]):
         return {
             "registrationValid": False,
@@ -854,6 +1324,65 @@ def _quality_subset(measurements: dict[str, Any], prefix: str) -> dict[str, Any]
     return quality
 
 
+def _point_sequence_available(value: Any) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) >= 2
+        and all(
+            isinstance(point, list)
+            and len(point) == 2
+            and all(isinstance(axis, (int, float)) and math.isfinite(float(axis)) for axis in point)
+            for point in value
+        )
+    )
+
+
+def _d7_evidence_audit(
+    measurement_valid: bool,
+    boundaries: list[dict[str, Any]],
+) -> tuple[bool, str, str | None]:
+    if not measurement_valid:
+        return False, "not_applicable", "measurement_invalid"
+    supported_sides = {
+        str(boundary.get("side"))
+        for boundary in boundaries
+        if isinstance(boundary, dict)
+        and boundary.get("side") in {"A", "B"}
+        and _point_sequence_available(boundary.get("rawPointsPx"))
+        and _point_sequence_available(boundary.get("segmentPointsPx"))
+    }
+    if supported_sides == {"A", "B"}:
+        return True, "complete", None
+    if supported_sides:
+        return False, "partial", "only_one_boundary_evidence_available"
+    return False, "unavailable", "boundary_evidence_unavailable"
+
+
+def _phi_measurement_arc_segments(
+    segments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    # The reference LabelMe annotation calibrates one physical visible arc.
+    # A mirrored/opposite arc may remain in quality diagnostics, but it is not
+    # a second measurement target and must not be delivered as such.
+    return [
+        segment for segment in segments
+        if isinstance(segment, dict)
+        and segment.get("side") == "reference_left"
+        and _point_sequence_available(segment.get("pointsPx"))
+    ]
+
+
+def _phi_evidence_audit(
+    measurement_valid: bool,
+    measurement_segments: list[dict[str, Any]],
+) -> tuple[bool, str, str | None]:
+    if not measurement_valid:
+        return False, "not_applicable", "measurement_invalid"
+    if measurement_segments:
+        return True, "complete", None
+    return False, "unavailable", "calibrated_arc_evidence_unavailable"
+
+
 def build_feature_outputs(
     measurements: dict[str, Any],
     transform: SimilarityTransform,
@@ -877,6 +1406,7 @@ def build_feature_outputs(
     )
     if not isinstance(phi_arc_evidence, list):
         phi_arc_evidence = []
+    phi_measurement_arc_evidence = _phi_measurement_arc_segments(phi_arc_evidence)
 
     d7_keys = ["d7_x1", "d7_y1", "d7_x2", "d7_y2", "d7_length"]
     if _finite_values(measurements, d7_keys):
@@ -885,7 +1415,7 @@ def build_feature_outputs(
             [float(measurements["d7_x2"]), float(measurements["d7_y2"])],
         ]
         target_points = [list(transform.forward(*point)) for point in reference_points]
-        d7_reference = {"coordinateSystem": "reference_px", "pointsPx": reference_points,
+        d7_reference = {"coordinateSystem": "authoritative_reference_px", "pointsPx": reference_points,
                         "lengthPx": float(measurements["d7_length"])}
         d7_target = {"coordinateSystem": "target_px", "pointsPx": target_points,
                      "lengthPx": float(math.dist(target_points[0], target_points[1]))}
@@ -941,7 +1471,7 @@ def build_feature_outputs(
         ]
         support_target = [list(transform.forward(*point)) for point in support_reference]
         phi_reference = {
-            "coordinateSystem": "reference_px", "centerPx": [cx, cy],
+            "coordinateSystem": "authoritative_reference_px", "centerPx": [cx, cy],
             "radiusPx": radius, "diameterPx": 2.0 * radius,
             "supportPointsPx": support_reference,
         }
@@ -952,14 +1482,14 @@ def build_feature_outputs(
             "supportPointsPx": support_target,
         }
         phi_target["rawEdgeEvidence"] = {
-            "semantics": "outer_contour_two_visible_arcs",
-            "evidenceAvailable": bool(phi_arc_evidence),
+            "semantics": "outer_contour_calibrated_visible_arc",
+            "evidenceAvailable": bool(phi_measurement_arc_evidence),
             "arcSegments": [
                 {
                     "side": segment.get("side"),
                     "pointsPx": segment.get("pointsPx", []),
                 }
-                for segment in phi_arc_evidence
+                for segment in phi_measurement_arc_evidence
                 if isinstance(segment, dict)
             ],
         }
@@ -981,6 +1511,12 @@ def build_feature_outputs(
 
     d7_quality = _quality_subset(measurements, "d7")
     phi_quality = _quality_subset(measurements, "Phi12_2")
+    d7_evidence_complete, d7_audit_status, d7_audit_reason = _d7_evidence_audit(
+        d7_valid, d7_boundary_evidence
+    )
+    phi_evidence_complete, phi_audit_status, phi_audit_reason = _phi_evidence_audit(
+        phi_valid, phi_measurement_arc_evidence
+    )
     d7_recovery_pass = (
         d7_quality.get("candidate_fallback_pass")
         or d7_quality.get("candidate_recovery_pass")
@@ -989,6 +1525,9 @@ def build_feature_outputs(
     features = {
         "7": {
             "featureCode": "HOLE2-DIM-7", "measurementValid": d7_valid,
+            "evidenceComplete": d7_evidence_complete,
+            "evidenceAuditStatus": d7_audit_status,
+            "evidenceAuditReason": d7_audit_reason,
             "qualityStatus": "valid" if d7_valid else "invalid",
             "failureReason": d7_reason, "sourceDetector": d7_source_detector,
             "recoveryPass": d7_recovery_pass,
@@ -997,6 +1536,9 @@ def build_feature_outputs(
         },
         "Phi12.2": {
             "featureCode": "HOLE2-DIA-12_2", "measurementValid": phi_valid,
+            "evidenceComplete": phi_evidence_complete,
+            "evidenceAuditStatus": phi_audit_status,
+            "evidenceAuditReason": phi_audit_reason,
             "qualityStatus": "valid" if phi_valid else "invalid",
             "failureReason": phi_reason, "sourceDetector": phi_source_detector,
             "recoveryPass": phi_recovery_pass,
@@ -1011,6 +1553,8 @@ def _invalid_features(reason: str) -> dict[str, Any]:
     return {
         "7": {
             "featureCode": "HOLE2-DIM-7", "measurementValid": False,
+            "evidenceComplete": False, "evidenceAuditStatus": "not_applicable",
+            "evidenceAuditReason": "measurement_invalid",
             "qualityStatus": "invalid",
             "failureReason": reason, "sourceDetector": "hole2-v6-dual-boundary",
             "recoveryPass": None,
@@ -1018,6 +1562,8 @@ def _invalid_features(reason: str) -> dict[str, Any]:
         },
         "Phi12.2": {
             "featureCode": "HOLE2-DIA-12_2", "measurementValid": False,
+            "evidenceComplete": False, "evidenceAuditStatus": "not_applicable",
+            "evidenceAuditReason": "measurement_invalid",
             "qualityStatus": "invalid",
             "failureReason": reason, "sourceDetector": "hole2-v6-current-capture-candidate",
             "recoveryPass": None,
@@ -1043,7 +1589,7 @@ def evaluate_geometry_consistency(
             "evaluated": False, "outlier": False, "rejected": False,
             "failureReason": "reference_geometry_missing",
             "outlierReason": None,
-            "ratioSource": "old_reference_annotation_geometry",
+            "ratioSource": "authoritative_manual_reference_geometry",
             "decision": "not_evaluated",
             "corroboratingEvidence": [],
             "hardRejectionPolicy": "ratio_outlier_requires_independent_risk_evidence",
@@ -1059,7 +1605,7 @@ def evaluate_geometry_consistency(
         "rejected": False,
         "failureReason": None,
         "outlierReason": None,
-        "ratioSource": "old_reference_annotation_geometry",
+        "ratioSource": "authoritative_manual_reference_geometry",
         "referenceRatio": float(reference_ratio),
         "targetRatio": None,
         "absoluteDeviation": None,
@@ -1413,7 +1959,7 @@ def _reference_edge_phase_fraction(
     shape: ShapeModel,
     phi_config: dict[str, Any],
 ) -> tuple[float | None, dict[str, Any]]:
-    """Infer annotation edge phase from the old reference pixels only."""
+    """Infer annotation edge phase from authoritative reference pixels only."""
     if (
         shape.circle is None
         or shape.template_angles is None
@@ -1425,17 +1971,36 @@ def _reference_edge_phase_fraction(
     center_index = half_width
     polarity_sign = 1.0 if float(shape.polarity) > 0.0 else -1.0
     cx, cy, radius = (float(value) for value in shape.circle)
+    annotated_samples = [
+        (
+            math.atan2(float(point[1]) - cy, float(point[0]) - cx),
+            math.hypot(float(point[0]) - cx, float(point[1]) - cy),
+        )
+        for point in shape.points
+        if len(point) == 2
+    ]
+    if not annotated_samples:
+        annotated_samples = [
+            (float(angle), radius) for angle in shape.template_angles
+        ]
     fractions: list[float] = []
     contrasts: list[float] = []
-    for angle in shape.template_angles:
+    for angle, annotated_radius in annotated_samples:
         profile = bilinear_sample(
             reference.gray,
-            cx + (radius + offsets) * math.cos(float(angle)),
-            cy + (radius + offsets) * math.sin(float(angle)),
+            cx + (annotated_radius + offsets) * math.cos(float(angle)),
+            cy + (annotated_radius + offsets) * math.sin(float(angle)),
         )
         if np.isnan(profile).any():
             continue
-        oriented = profile * polarity_sign
+        # Calibrate the phase on the same smoothed signal used by target
+        # detection.  Mixing a raw reference profile with a smoothed target
+        # profile changes the meaning of the phase fraction and shifts the
+        # selected physical boundary even during template self-check.
+        oriented = smooth_1d(
+            profile * polarity_sign,
+            int(phi_config["phase_profile_smooth_window"]),
+        )
         inner = float(np.median(oriented[:5]))
         outer = float(np.median(oriented[-5:]))
         contrast = outer - inner
@@ -1459,6 +2024,7 @@ def _reference_edge_phase_fraction(
         "minimumSupport": minimum,
         "medianContrast": float(np.median(contrasts)),
         "phaseFraction": phase,
+        "calibrationSamples": "manual_annotation_points",
     }
 
 
@@ -1871,6 +2437,8 @@ def _detect_phi12_2(
     reference: ReferenceModel,
     transform: SimilarityTransform,
     config: dict[str, Any],
+    *,
+    exact_template_angle_domain: bool = False,
 ) -> tuple[dict[str, float] | None, dict[str, Any]]:
     shape = next((item for item in reference.shapes if item.sanitized == "Phi12_2"), None)
     if shape is None or shape.circle is None:
@@ -1878,7 +2446,13 @@ def _detect_phi12_2(
     cx, cy, radius = shape.circle
     predicted_center = transform.forward(cx, cy)
     predicted_radius = transform.scale * radius
-    phi_config = config["phi12_2"]
+    phi_config = dict(config["phi12_2"])
+    if exact_template_angle_domain:
+        # The authoritative 80-point manual arc already defines both ends of
+        # the physical evidence domain.  The historical extension existed to
+        # compensate for the old coarse reference and must not enlarge this
+        # new template into the neck connection.
+        phi_config["phase_angle_extension_deg"] = 0.0
     gradient = gradient_magnitude(contrast_stretch(target))
     normalizer = _gradient_normalizer(gradient)
     angles = np.linspace(
@@ -2946,7 +3520,7 @@ def validate_result_contract(result: dict[str, Any]) -> None:
     required = {
         "schemaVersion", "algorithmVersion", "configVersion", "runtimeInputs",
         "registration", "features", "referenceMeasurements", "timingMs", "evidenceScope",
-        "qualityStatus", "geometryConsistency",
+        "qualityStatus", "geometryConsistency", "authoritativeReference",
     }
     missing = sorted(required - result.keys())
     if missing:
@@ -2954,9 +3528,12 @@ def validate_result_contract(result: dict[str, Any]) -> None:
     if result["schemaVersion"] != RESULT_SCHEMA_VERSION:
         raise ValueError("unsupported result schemaVersion")
     roles = [item.get("role") for item in result["runtimeInputs"]]
-    expected_roles = ["reference_annotation", "reference_image", "target_image", "configuration"]
+    expected_roles = [
+        "authoritative_reference_annotation", "authoritative_reference_image",
+        "target_image", "configuration",
+    ]
     if sorted(roles) != sorted(expected_roles) or len(roles) != 4:
-        raise ValueError("runtime input roles must be exactly reference_annotation, reference_image, target_image, configuration")
+        raise ValueError("runtime inputs must contain only the authoritative reference, target, and configuration")
     for item in result["runtimeInputs"]:
         digest = item.get("sha256")
         if (not isinstance(item.get("path"), str) or not isinstance(digest, str)
@@ -2980,11 +3557,34 @@ def validate_result_contract(result: dict[str, Any]) -> None:
             raise ValueError("valid registration requires forward and inverse transforms")
     elif registration["transform"] is not None or registration["inverseTransform"] is not None:
         raise ValueError("invalid registration must not expose final transforms")
+    authoritative_reference = result["authoritativeReference"]
+    reference_required = {
+        "referenceVersion", "templateSelfCheck", "transformDirection", "transform",
+        "annotationShapeSummary", "registrationEvidenceSource",
+    }
+    if not isinstance(authoritative_reference, dict) or not reference_required <= authoritative_reference.keys():
+        raise ValueError("authoritativeReference object is incomplete")
+    if authoritative_reference["referenceVersion"] != AUTHORITATIVE_REFERENCE_VERSION:
+        raise ValueError("authoritativeReference referenceVersion is invalid")
+    if authoritative_reference["transformDirection"] != "authoritative_reference_px_to_target_px":
+        raise ValueError("authoritativeReference transformDirection is invalid")
+    if authoritative_reference["registrationEvidenceSource"] != "authoritative_reference_image_pixels":
+        raise ValueError("registration must use authoritative reference image pixels")
+    if registration["registrationValid"] and not isinstance(authoritative_reference["transform"], dict):
+        raise ValueError("valid registration requires authoritative reference transform")
+    if not registration["registrationValid"] and authoritative_reference["transform"] is not None:
+        raise ValueError("invalid registration cannot expose authoritative reference transform")
+    role_map = {item["role"]: item for item in result["runtimeInputs"]}
+    if role_map["authoritative_reference_annotation"]["sha256"] != AUTHORITATIVE_REFERENCE_ANNOTATION_SHA256:
+        raise ValueError("runtime authoritative annotation SHA-256 is not frozen")
+    if role_map["authoritative_reference_image"]["sha256"] != AUTHORITATIVE_REFERENCE_IMAGE_SHA256:
+        raise ValueError("runtime authoritative image SHA-256 is not frozen")
     if set(result["features"]) != {"7", "Phi12.2"}:
         raise ValueError("features must contain exactly 7 and Phi12.2")
     feature_required = {
         "featureCode", "measurementValid", "qualityStatus", "failureReason", "sourceDetector",
-        "recoveryPass", "reference", "target", "quality",
+        "recoveryPass", "reference", "target", "quality", "evidenceComplete",
+        "evidenceAuditStatus", "evidenceAuditReason",
     }
     for name, feature in result["features"].items():
         if not isinstance(feature, dict) or not feature_required <= feature.keys():
@@ -2992,6 +3592,15 @@ def validate_result_contract(result: dict[str, Any]) -> None:
         expected_status = "valid" if feature["measurementValid"] else "invalid"
         if feature["qualityStatus"] != expected_status:
             raise ValueError(f"feature {name} qualityStatus conflicts with measurementValid")
+        audit_status = feature["evidenceAuditStatus"]
+        if audit_status not in {"complete", "partial", "unavailable", "not_applicable"}:
+            raise ValueError(f"feature {name} evidenceAuditStatus is invalid")
+        if bool(feature["evidenceComplete"]) != (audit_status == "complete"):
+            raise ValueError(f"feature {name} evidenceComplete conflicts with audit status")
+        if not feature["measurementValid"] and audit_status != "not_applicable":
+            raise ValueError(f"feature {name} invalid measurement requires not_applicable evidence")
+        if feature["measurementValid"] and audit_status == "not_applicable":
+            raise ValueError(f"feature {name} valid measurement requires evidence audit")
         if not feature["measurementValid"] and (feature["reference"] is not None or feature["target"] is not None):
             raise ValueError(f"feature {name} invalid result must not contain finite geometry")
     status = result["qualityStatus"]
@@ -3026,17 +3635,36 @@ def validate_result_contract(result: dict[str, Any]) -> None:
 
 
 def run_current_capture(
-    label_path: Path,
-    reference_image_path: Path,
+    authoritative_reference_annotation_path: Path,
+    authoritative_reference_image_path: Path,
     target_image_path: Path,
     config_path: Path,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     config = load_registration_config(config_path)
-    reference = build_reference(label_path, reference_image_path)
+    measurement_reference = load_authoritative_reference(
+        authoritative_reference_annotation_path, authoritative_reference_image_path
+    )
+    registration_reference = _derive_image_registration_reference(
+        measurement_reference, config
+    )
     target = load_gray(target_image_path)
+    reference_image_sha = sha256_file(authoritative_reference_image_path)
+    target_image_sha = sha256_file(target_image_path)
+    template_self_check = target_image_sha == reference_image_sha
     registration_started = time.perf_counter()
-    registration = register_current_capture(reference, target, config)
+    if template_self_check:
+        registration = _identity_self_registration(
+            measurement_reference, target
+        )
+    else:
+        # The current end-face station has a fixed camera/part orientation.
+        # Keep scale/translation/fine-angle estimation, but do not invite
+        # orthogonal false matches from visually repeated circular structures.
+        direct_reference_config = {**config, "orientations_deg": [0]}
+        registration = register_current_capture(
+            registration_reference, target, direct_reference_config
+        )
     registration_ms = (time.perf_counter() - registration_started) * 1000.0
     extraction_ms = 0.0
     errors: list[str] = []
@@ -3048,21 +3676,17 @@ def run_current_capture(
             "evaluated": False, "outlier": False, "rejected": False,
             "failureReason": "registration_invalid",
             "outlierReason": None,
-            "ratioSource": "old_reference_annotation_geometry",
+            "ratioSource": "authoritative_manual_reference_geometry",
             "decision": "not_evaluated",
             "corroboratingEvidence": [],
             "hardRejectionPolicy": "ratio_outlier_requires_independent_risk_evidence",
             "outputAdjustmentApplied": False,
         }
     else:
-        transform_data = registration["transform"]
-        transform = SimilarityTransform(
-            transform_data["dx"], transform_data["dy"],
-            transform_data["scale"], transform_data["thetaDeg"],
-        )
+        transform = _transform_from_registration(registration)
         extraction_started = time.perf_counter()
         extraction: Extraction = extract_image(
-            target_image_path, reference, allow_rotation=True,
+            target_image_path, measurement_reference, allow_rotation=True,
             expand_anchors=False,
             initial_transform=(transform.dx, transform.dy, transform.scale, transform.theta_rad),
             refine_initial_transform=False,
@@ -3070,7 +3694,10 @@ def run_current_capture(
         extraction_ms = (time.perf_counter() - extraction_started) * 1000.0
         raw_measurements = dict(extraction.measurements)
         measurements = dict(raw_measurements)
-        phi_values, phi_quality = _detect_phi12_2(target, reference, transform, config)
+        phi_values, phi_quality = _detect_phi12_2(
+            target, measurement_reference, transform, config,
+            exact_template_angle_domain=True,
+        )
         for key, value in phi_quality.items():
             measurements[f"Phi12_2.quality.{key}"] = value
         phi_source = "hole2-v6-current-capture-candidate"
@@ -3082,7 +3709,7 @@ def run_current_capture(
         if phi_values is not None:
             measurements.update(phi_values)
             d7_values, d7_quality = _detect_d7_tangent(
-                target, reference, transform, phi_values, config
+                target, measurement_reference, transform, phi_values, config
             )
             if (
                 d7_values is not None
@@ -3108,7 +3735,10 @@ def run_current_capture(
             for key in ("d7_x1", "d7_y1", "d7_x2", "d7_y2", "d7_length"):
                 measurements[key] = float("nan")
             measurements["d7.quality.candidate_failure"] = "upstream_phi12_2_candidate_invalid"
-        shape = next((item for item in reference.shapes if item.sanitized == "Phi12_2"), None)
+        shape = next((
+            item for item in measurement_reference.shapes
+            if item.sanitized == "Phi12_2"
+        ), None)
         phi_angles = [] if shape is None or shape.template_angles is None else shape.template_angles
         features, compatible = build_feature_outputs(
             measurements, transform, phi_angles,
@@ -3116,15 +3746,29 @@ def run_current_capture(
             d7_source_detector=d7_source,
         )
         geometry_consistency = evaluate_geometry_consistency(
-            features, reference, config, registration=registration
+            features, measurement_reference, config, registration=registration
         )
 
     runtime_inputs = [
-        {"role": "reference_annotation", "path": str(label_path), "sha256": sha256_file(label_path)},
-        {"role": "reference_image", "path": str(reference_image_path), "sha256": sha256_file(reference_image_path)},
-        {"role": "target_image", "path": str(target_image_path), "sha256": sha256_file(target_image_path)},
+        {"role": "authoritative_reference_annotation", "path": str(authoritative_reference_annotation_path), "sha256": sha256_file(authoritative_reference_annotation_path)},
+        {"role": "authoritative_reference_image", "path": str(authoritative_reference_image_path), "sha256": reference_image_sha},
+        {"role": "target_image", "path": str(target_image_path), "sha256": target_image_sha},
         {"role": "configuration", "path": str(config_path), "sha256": sha256_file(config_path)},
     ]
+    measurement_transform = None
+    if registration["registrationValid"]:
+        measurement_transform = transform.as_dict()
+    authoritative_reference = {
+        "referenceVersion": AUTHORITATIVE_REFERENCE_VERSION,
+        "templateSelfCheck": template_self_check,
+        "transformDirection": "authoritative_reference_px_to_target_px",
+        "transform": measurement_transform,
+        "registrationEvidenceSource": "authoritative_reference_image_pixels",
+        "annotationShapeSummary": {
+            "7": {"shapeType": "line", "pointCount": 2},
+            "Phi12.2": {"shapeType": "linestrip", "pointCount": 80},
+        },
+    }
     quality_failures: list[str] = []
     if not registration["registrationValid"]:
         quality_failures.append("registration:" + str(registration["failureReason"]))
@@ -3151,6 +3795,7 @@ def run_current_capture(
         "algorithmVersion": ALGORITHM_VERSION,
         "configVersion": config["config_version"],
         "runtimeInputs": runtime_inputs,
+        "authoritativeReference": authoritative_reference,
         "registration": registration,
         "features": features,
         "qualityStatus": quality_status,

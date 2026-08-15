@@ -20,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from algorithms.hole_2.current_capture import run_current_capture, sha256_file
 
 
-BATCH_SCHEMA_VERSION = "hole2-current-capture-batch-summary/1"
+BATCH_SCHEMA_VERSION = "hole2-current-capture-batch-summary/2"
 DEFAULT_EXTENSIONS = {".bmp", ".png", ".jpg", ".jpeg", ".tif", ".tiff"}
 
 
@@ -157,6 +157,12 @@ def validate_batch_summary_contract(summary: dict[str, Any]) -> None:
         "not_repeatability_mm_accuracy_or_production_ok_ng"
     ):
         raise ValueError("invalid batch evidenceScope")
+    expected_runtime_inputs = {
+        "authoritativeReferenceAnnotation", "authoritativeReferenceImage",
+        "configuration", "groups",
+    }
+    if set(summary["runtimeInputs"]) != expected_runtime_inputs:
+        raise ValueError("batch runtimeInputs must contain only the authoritative reference")
     for name, stats in {"overall": summary["overall"], **summary["groups"]}.items():
         required_stats = {
             "total", "executionSuccess", "executionErrors", "registrationValid",
@@ -206,10 +212,10 @@ def _discover_images(
 
 
 def _execute(payload: tuple[str, str, str, str, str]) -> dict[str, Any]:
-    group, image, label, reference_image, config = payload
+    group, image, reference_label, reference_image, config = payload
     try:
         result = run_current_capture(
-            Path(label), Path(reference_image), Path(image), Path(config)
+            Path(reference_label), Path(reference_image), Path(image), Path(config)
         )
         return {
             "group": group,
@@ -254,8 +260,10 @@ def _require_external_output(path: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--label", required=True, help="Old reference LabelMe annotation.")
-    parser.add_argument("--reference-image", required=True, help="Old reference image.")
+    parser.add_argument("--reference-annotation", required=True,
+                        help="Frozen authoritative manual 7/Phi12.2 annotation.")
+    parser.add_argument("--reference-image", required=True,
+                        help="New image paired with the authoritative annotation.")
     parser.add_argument("--config", required=True, help="Versioned registration config.")
     parser.add_argument(
         "--group", action="append", required=True, type=_parse_group,
@@ -272,10 +280,12 @@ def main() -> int:
 
     output_dir = _require_external_output(Path(args.output_dir))
     items = _discover_images(args.group, DEFAULT_EXTENSIONS, args.max_images_per_group)
-    label = str(Path(args.label).expanduser().resolve())
+    reference_label = str(Path(args.reference_annotation).expanduser().resolve())
     reference_image = str(Path(args.reference_image).expanduser().resolve())
     config = str(Path(args.config).expanduser().resolve())
-    payloads = [(group, str(image), label, reference_image, config) for group, image in items]
+    payloads = [(
+        group, str(image), reference_label, reference_image, config,
+    ) for group, image in items]
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "current-capture-results.jsonl"
     summary_path = output_dir / "quality-summary.json"
@@ -290,8 +300,8 @@ def main() -> int:
             )
     summary = accumulator.as_dict()
     summary["runtimeInputs"] = {
-        "referenceAnnotation": {"path": label, "sha256": sha256_file(Path(label))},
-        "referenceImage": {"path": reference_image, "sha256": sha256_file(Path(reference_image))},
+        "authoritativeReferenceAnnotation": {"path": reference_label, "sha256": sha256_file(Path(reference_label))},
+        "authoritativeReferenceImage": {"path": reference_image, "sha256": sha256_file(Path(reference_image))},
         "configuration": {"path": config, "sha256": sha256_file(Path(config))},
         "groups": [{"name": name, "path": str(path)} for name, path in args.group],
     }

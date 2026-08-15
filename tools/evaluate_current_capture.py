@@ -23,7 +23,10 @@ from algorithms.hole_2.main import (
     read_labelme,
     robust_fit_circle,
 )
-from algorithms.hole_2.current_capture import validate_result_contract
+from algorithms.hole_2.current_capture import (
+    AUTHORITATIVE_REFERENCE_ANNOTATION_SHA256,
+    validate_result_contract,
+)
 
 
 SCHEMA_VERSION = "hole2-current-capture-acceptance/1"
@@ -159,6 +162,13 @@ def _reject_truth_leakage(result: dict[str, Any], annotation_path: Path) -> None
             raise ValueError("target annotation leaked into runtime input roles")
         raw_path = item.get("path")
         if raw_path and Path(raw_path).resolve() == truth_resolved:
+            allowed_self_check = (
+                item.get("role") == "authoritative_reference_annotation"
+                and item.get("sha256") == AUTHORITATIVE_REFERENCE_ANNOTATION_SHA256
+                and result.get("authoritativeReference", {}).get("templateSelfCheck") is True
+            )
+            if allowed_self_check:
+                continue
             raise ValueError("target annotation leaked into runtime inputs")
 
 
@@ -193,6 +203,7 @@ def _detection_summary(result: dict[str, Any]) -> dict[str, Any]:
         "resultSchemaVersion": result["schemaVersion"],
         "timingMs": result["timingMs"],
         "qualityStatus": result["qualityStatus"],
+        "authoritativeReference": result["authoritativeReference"],
         "registration": {
             "qualityStatus": "valid" if registration["registrationValid"] else "invalid",
             "registrationValid": registration["registrationValid"],

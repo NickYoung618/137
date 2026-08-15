@@ -1,0 +1,19 @@
+# Tasks: 唯一人工参考
+
+- [x] T001 完整读取`hole2-template-correction-2.txt`
+- [x] T002 核对权威新JSON/BMP的SHA和shape语义
+- [x] T003 specify/clarify退役资产不进入任何运行时角色
+- [x] T004 红灯：入口/provenance只允许权威参考、目标和配置
+- [x] T005 红灯：参考缺失、SHA不符、退役资产传入均明确失败
+- [x] T006 红灯：同图self-check必须为单位变换
+- [x] T007 实现权威参考SHA/shape验证
+- [x] T008 实现新BMP分布式像素支撑与图像一致性候选证据
+- [x] T009 实现直接新参考到目标的固定工位注册
+- [x] T010 Phi/D7检测、几何比与016证据分层全部切换到权威参考
+- [x] T011 更新run/batch CLI、batch summary和四角色runtimeInputs
+- [x] T012 更新single/full shell脚本与Mac quickstart
+- [x] T013 更新result/provenance/acceptance Schema和可视报告provenance
+- [x] T014 真实权威参考self-check（明确不是独立泛化验收）
+- [x] T015 服务器9帧外置诊断集运行与逐帧状态报告
+- [x] T016 全套unittest、compileall、Schema、SpecKit analyze、diff/大文件审计
+- [x] T017 更新analysis结论、commit并push `origin/main`

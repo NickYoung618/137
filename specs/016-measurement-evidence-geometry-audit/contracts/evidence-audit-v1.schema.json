@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/evidence-audit-v1.schema.json",
+  "title": "Hole 2 independent measurement and evidence audit states",
+  "type": "object",
+  "required": ["7", "Phi12.2"],
+  "additionalProperties": false,
+  "properties": {
+    "7": {"$ref": "#/$defs/featureAudit"},
+    "Phi12.2": {"$ref": "#/$defs/featureAudit"}
+  },
+  "$defs": {
+    "featureAudit": {
+      "type": "object",
+      "required": [
+        "measurementValid",
+        "evidenceComplete",
+        "evidenceAuditStatus",
+        "evidenceAuditReason"
+      ],
+      "properties": {
+        "measurementValid": {"type": "boolean"},
+        "evidenceComplete": {"type": "boolean"},
+        "evidenceAuditStatus": {
+          "enum": ["complete", "partial", "unavailable", "not_applicable"]
+        },
+        "evidenceAuditReason": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"evidenceComplete": {"const": true}}},
+          "then": {"properties": {"evidenceAuditStatus": {"const": "complete"}}}
+        },
+        {
+          "if": {"properties": {"measurementValid": {"const": false}}},
+          "then": {"properties": {"evidenceAuditStatus": {"const": "not_applicable"}}}
+        }
+      ]
+    }
+  }
+}

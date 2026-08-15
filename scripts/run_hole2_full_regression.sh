@@ -6,9 +6,9 @@ usage() {
 Usage:
   run_hole2_full_regression.sh REFERENCE_ANNOTATION REFERENCE_IMAGE NORMAL_DIRECTORY DEFECTIVE_DIRECTORY OUTPUT_DIRECTORY [WORKERS]
 
-The five paths may instead be supplied with environment variables:
-  REFERENCE_ANNOTATION, REFERENCE_IMAGE, NORMAL_DIRECTORY,
-  DEFECTIVE_DIRECTORY, OUTPUT_DIRECTORY
+The paths may instead be supplied with environment variables:
+  REFERENCE_ANNOTATION, REFERENCE_IMAGE,
+  NORMAL_DIRECTORY, DEFECTIVE_DIRECTORY, OUTPUT_DIRECTORY
 
 Optional environment variables:
   WORKERS (default 4)
@@ -65,7 +65,7 @@ echo "outputDirectory=$output_directory"
 
 set +e
 uv run --project "$repository_root" python "$repository_root/tools/batch_current_capture.py" \
-  --label "$reference_annotation" \
+  --reference-annotation "$reference_annotation" \
   --reference-image "$reference_image" \
   --config "$registration_config" \
   --group "normal=$normal_directory" \

@@ -69,12 +69,63 @@ def _index(records: list[dict[str, Any]], label: str) -> dict[tuple[str, str], d
     return indexed
 
 
-def _feature_state(record: dict[str, Any], name: str) -> tuple[Any, Any]:
+def _usable_points(value: Any) -> bool:
+    return isinstance(value, list) and len(value) >= 2
+
+
+def _evidence_audit(feature: dict[str, Any], name: str) -> dict[str, Any]:
+    if not bool(feature.get("measurementValid", False)):
+        return {"complete": False, "status": "not_applicable", "reason": "measurement_invalid"}
+    status = feature.get("evidenceAuditStatus")
+    if status in {"complete", "partial", "unavailable"}:
+        return {
+            "complete": bool(feature.get("evidenceComplete", status == "complete")),
+            "status": status,
+            "reason": feature.get("evidenceAuditReason"),
+        }
+    target = feature.get("target")
+    if not isinstance(target, dict):
+        return {"complete": False, "status": "unavailable", "reason": "target_geometry_unavailable"}
+    if name == "7":
+        evidence = target.get("rawEdgeEvidence", {})
+        fitted = target.get("fittedGeometry", {})
+        raw = {
+            item.get("side") for item in evidence.get("boundaries", [])
+            if isinstance(item, dict) and _usable_points(item.get("pointsPx"))
+        } if isinstance(evidence, dict) else set()
+        lines = {
+            item.get("side") for item in fitted.get("boundaries", [])
+            if isinstance(item, dict) and _usable_points(item.get("segmentPointsPx"))
+        } if isinstance(fitted, dict) else set()
+        sides = raw & lines
+        if sides == {"A", "B"}:
+            return {"complete": True, "status": "complete", "reason": None}
+        if sides:
+            return {"complete": False, "status": "partial", "reason": "only_one_boundary_evidence_available"}
+        return {"complete": False, "status": "unavailable", "reason": "boundary_evidence_unavailable"}
+    evidence = target.get("rawEdgeEvidence", {})
+    segments = evidence.get("arcSegments", []) if isinstance(evidence, dict) else []
+    complete = any(
+        isinstance(item, dict) and item.get("side") == "reference_left"
+        and _usable_points(item.get("pointsPx")) for item in segments
+    )
+    return (
+        {"complete": True, "status": "complete", "reason": None}
+        if complete else
+        {"complete": False, "status": "unavailable", "reason": "calibrated_arc_evidence_unavailable"}
+    )
+
+
+def _feature_state(record: dict[str, Any], name: str) -> tuple[Any, ...]:
     result = record.get("result")
     if not isinstance(result, dict):
-        return None, None
+        return None, None, None, None
     feature = result.get("features", {}).get(name, {})
-    return bool(feature.get("measurementValid", False)), feature.get("failureReason")
+    audit = _evidence_audit(feature, name)
+    return (
+        bool(feature.get("measurementValid", False)), feature.get("failureReason"),
+        audit["status"], audit["reason"],
+    )
 
 
 def _status_signature(record: dict[str, Any]) -> tuple[Any, ...]:
@@ -137,10 +188,15 @@ def _version_metadata(record: dict[str, Any]) -> dict[str, Any]:
             "failureReason": feature.get("failureReason"),
             "sourceDetector": feature.get("sourceDetector"),
             "recoveryPass": feature.get("recoveryPass"),
+            "evidenceComplete": _evidence_audit(feature, name)["complete"],
+            "evidenceAuditStatus": _evidence_audit(feature, name)["status"],
+            "evidenceAuditReason": _evidence_audit(feature, name)["reason"],
             "quality": _quality_summary(feature),
         }
     return {
         "algorithmVersion": result.get("algorithmVersion"),
+        "authoritativeReference": result.get("authoritativeReference"),
+        "runtimeInputProvenance": result.get("runtimeInputs"),
         "executionError": record.get("executionError"),
         "registration": {
             "registrationValid": bool(registration.get("registrationValid", False)),
@@ -163,10 +219,15 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
         description = json.dumps({
             "version": version,
             "algorithmVersion": result.get("algorithmVersion"),
+            "authoritativeReference": result.get("authoritativeReference"),
+            "runtimeInputProvenance": result.get("runtimeInputs"),
             "measurementValid": True,
             "failureReason": feature.get("failureReason"),
             "sourceDetector": feature.get("sourceDetector"),
             "recoveryPass": feature.get("recoveryPass"),
+            "evidenceComplete": _evidence_audit(feature, name)["complete"],
+            "evidenceAuditStatus": _evidence_audit(feature, name)["status"],
+            "evidenceAuditReason": _evidence_audit(feature, name)["reason"],
             "quality": _quality_summary(feature),
         }, ensure_ascii=False, separators=(",", ":"))
         if name == "7":
@@ -198,6 +259,8 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
             for segment in segments:
                 points = segment.get("pointsPx") if isinstance(segment, dict) else None
                 side = str(segment.get("side", "unknown")) if isinstance(segment, dict) else "unknown"
+                if side != "reference_left":
+                    continue
                 if not isinstance(points, list) or len(points) < 2:
                     continue
                 index = side_counts.get(side, 0)
@@ -311,6 +374,7 @@ def _render_overlay(image_path: Path, old: dict[str, Any], new: dict[str, Any], 
             feature = metadata.get("features", {}).get(name, {})
             lines.append(
                 f"{version} {name} valid={feature.get('measurementValid')} "
+                f"evidence={feature.get('evidenceAuditStatus')} "
                 f"reason={feature.get('failureReason')} "
                 f"{_compact_quality(metadata, name)}"
             )

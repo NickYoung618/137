@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/runtime-input-provenance-v1.schema.json",
+  "title": "Hole 2 authoritative manual reference provenance",
+  "type": "object",
+  "required": ["runtimeInputs", "authoritativeReference"],
+  "properties": {
+    "runtimeInputs": {"$ref": "#/$defs/runtimeInputs"},
+    "authoritativeReference": {"$ref": "#/$defs/authoritativeReference"}
+  },
+  "$defs": {
+    "runtimeInputs": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["role", "path", "sha256"],
+        "properties": {
+          "role": {"enum": ["authoritative_reference_annotation", "authoritative_reference_image", "target_image", "configuration"]},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "authoritativeReference": {
+      "type": "object",
+      "required": ["referenceVersion", "templateSelfCheck", "transformDirection", "transform", "registrationEvidenceSource", "annotationShapeSummary"],
+      "properties": {
+        "referenceVersion": {"const": "hole2-authoritative-manual-reference/1"},
+        "templateSelfCheck": {"type": "boolean"},
+        "transformDirection": {"const": "authoritative_reference_px_to_target_px"},
+        "transform": {"type": ["object", "null"]},
+        "registrationEvidenceSource": {"const": "authoritative_reference_image_pixels"},
+        "annotationShapeSummary": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
