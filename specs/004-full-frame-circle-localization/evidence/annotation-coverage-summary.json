@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "slot-pose-004-annotation-coverage/1",
+  "datasetImageCount": 25,
+  "sameImageReviewedJpegTruthCount": 0,
+  "pendingBlankLabelMeTemplateCount": 25,
+  "sameSourceOriginalBmpDevelopmentReferenceCount": 1,
+  "sameSourceBmpAutomaticallyPromotedToJpegTruth": false,
+  "strictAccuracyEvaluation": {"eligible": 0, "pendingOrRejected": 25, "strictPass": false},
+  "staticRepeatability": {"status": "NOT_EVALUATED", "reason": "GROUPING_NOT_EXPLICIT"},
+  "sameSourceOriginalBmpDevelopmentComparison": {
+    "status": "COMPARED",
+    "humanCirclePointCount": 134,
+    "humanCircleAngularCoverageDeg": 236.4326372977915,
+    "circleCenterDistancePx": 2.4177839083133095,
+    "circleRadiusAbsoluteDifferencePx": 1.396724368526975,
+    "grooveAngleAbsoluteCircularDifferenceDeg": 0.019657409096112133,
+    "productionAccuracyClaimed": false
+  },
+  "externalArtifactSha256": {
+    "annotationIndex": "fedfc243d6f127d382e23047684ee279a775b57af58979ea65fd15ebfc370f65",
+    "comparison": "bba5a78c00a41aac1f218372e6e5504cdbd74ad71fde0e7a80ac669fc0738e3e",
+    "sameSourceOriginalBmpRuntimeResult": "92a73c23d0686aaf55d2523ecc8750d41590bd93fa593a072ee19c1a6a001548",
+    "sameSourceOriginalBmpComparison": "3d91c4f2c43066d22e0bf13d542d425119087a3a13996c449ffb0fda408fc8db"
+  },
+  "blocked": [
+    "A human annotator must mark the physical outer circle and unique real groove opening on every same-image input.",
+    "A different reviewer must approve each case and freeze annotation/image hashes.",
+    "Capture records must explicitly bind sample, position, condition and split before static repeatability is evaluated.",
+    "The one same-source original-BMP development comparison is not a substitute for 25 same-image reviewed truths."
+  ]
+}

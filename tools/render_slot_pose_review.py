@@ -145,6 +145,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
             "errorStage": (result.get("error") or {}).get("stage"),
         },
         "face": diagnostics.get("face"),
+        "circleLocalization": diagnostics.get("circleLocalization"),
         "physicalOuterCircle": diagnostics.get("physicalOuterCircle"),
         "candidateSummary": diagnostics.get("candidateSummary"),
         "candidates": raw_candidates,
@@ -186,11 +187,45 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
         image = source.convert("RGB")
     draw = ImageDraw.Draw(image)
     font = ImageFont.load_default(size=max(18, image.width // 180))
+    localization = record.get("circleLocalization") or {}
+    width = max(5, image.width // 900)
+    selected_circle_candidate = localization.get("selectedCandidateId")
+    for proposal in localization.get("componentProposals") or []:
+        bbox = proposal.get("bboxNormalized")
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            continue
+        bounds = (
+            float(bbox[0]) * image.width, float(bbox[1]) * image.height,
+            float(bbox[2]) * image.width, float(bbox[3]) * image.height,
+        )
+        color = "#ffe14f" if proposal.get("status") == "eligible" else "#ff5d73"
+        draw.rectangle(bounds, outline=color, width=width)
+        draw.text(
+            (bounds[0], bounds[1]),
+            f" {proposal.get('proposalId')} {proposal.get('status')}",
+            fill=color, font=font, stroke_width=2, stroke_fill="black",
+        )
+    for candidate in localization.get("circleCandidates") or []:
+        circle = candidate.get("coarsePhysicalCircle")
+        if not isinstance(circle, dict):
+            continue
+        center_x, center_y, circle_radius = map(float, (
+            circle["centerX"], circle["centerY"], circle["radiusPx"],
+        ))
+        color = "#9b7bff" if candidate.get("candidateId") == selected_circle_candidate else "#ff5d73"
+        draw.ellipse(
+            (center_x - circle_radius, center_y - circle_radius, center_x + circle_radius, center_y + circle_radius),
+            outline=color, width=width,
+        )
+        draw.text(
+            (center_x - circle_radius, center_y),
+            f" {candidate.get('candidateId')} rank={candidate.get('rank')} score={candidate.get('score')}",
+            fill=color, font=font, stroke_width=2, stroke_fill="black",
+        )
     face = record.get("face") or {}
     if all(isinstance(face.get(key), (int, float)) for key in ("centerX", "centerY", "radiusPx")):
         center = float(face["centerX"]), float(face["centerY"])
         radius = float(face["radiusPx"])
-        width = max(5, image.width // 900)
         bounds = (center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius)
         for start in range(0, 360, 12):
             draw.arc(bounds, start=start, end=start + 6, fill="#ff9f43", width=width)
@@ -265,7 +300,7 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
         fill="white", font=font,
     )
     draw.text(
-        (18, 56), "orange dashed=alignment; cyan=gyj circle; green/yellow=subpixel sides; purple=+85 target",
+        (18, 56), "yellow/red boxes=locator proposals; purple=selected sparse; cyan=final gyj; green/yellow=subpixel",
         fill="white", font=font,
     )
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
@@ -341,6 +376,9 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
     physical_circle_accepted_count = sum(
         (record.get("physicalOuterCircle") or {}).get("status") == "accepted" for record in records
     )
+    localization_statuses = Counter(
+        (record.get("circleLocalization") or {}).get("status") or "not_available" for record in records
+    )
     summary = {
         "schemaVersion": "slot-pose-review/1",
         "datasetId": dataset_id,
@@ -355,6 +393,7 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         "targetToleranceStatusCounts": dict(sorted(target_statuses.items())),
         "plcGuidanceBlockedCount": plc_blocked_count,
         "physicalOuterCircleAcceptedCount": physical_circle_accepted_count,
+        "circleLocalizationStatusCounts": dict(sorted(localization_statuses.items())),
         "records": records,
     }
     write_json(output_dir / "review.json", summary)
@@ -389,6 +428,67 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
                     "contour_continuity": assessment.get("contourContinuity"),
                     "threshold_version": assessment.get("thresholdVersion"),
                     "suggested_role": role_by_candidate.get(candidate["candidateId"]), "authoritative": False,
+                })
+    with (output_dir / "circle-candidates.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=[
+            "image_id", "relative_path", "proposal_id", "proposal_status", "bbox_normalized",
+            "proposal_center_x", "proposal_center_y", "proposal_radius_px", "proposal_failed_checks",
+            "candidate_id", "candidate_status", "rank", "score", "edge_point_count", "inlier_ratio",
+            "angular_coverage", "residual_p95_px", "candidate_failed_checks", "selected",
+        ])
+        writer.writeheader()
+        for record in records:
+            localization = record.get("circleLocalization") or {}
+            circle_candidates = localization.get("circleCandidates") or []
+            candidates_by_proposal = {
+                str(candidate.get("proposalId")): candidate
+                for candidate in circle_candidates
+                if candidate.get("proposalId") is not None
+            }
+            selected_id = localization.get("selectedCandidateId")
+            emitted_candidate_ids: set[str] = set()
+            for proposal in localization.get("componentProposals") or []:
+                candidate = candidates_by_proposal.get(str(proposal.get("proposalId"))) or {}
+                if candidate.get("candidateId") is not None:
+                    emitted_candidate_ids.add(str(candidate["candidateId"]))
+                writer.writerow({
+                    "image_id": record["imageId"], "relative_path": record["relativePath"],
+                    "proposal_id": proposal.get("proposalId"), "proposal_status": proposal.get("status"),
+                    "bbox_normalized": json.dumps(proposal.get("bboxNormalized"), separators=(",", ":")),
+                    "proposal_center_x": proposal.get("centerX"), "proposal_center_y": proposal.get("centerY"),
+                    "proposal_radius_px": proposal.get("radiusPx"),
+                    "proposal_failed_checks": "|".join(proposal.get("failedChecks") or []),
+                    "candidate_id": candidate.get("candidateId"), "candidate_status": candidate.get("status"),
+                    "rank": candidate.get("rank"), "score": candidate.get("score"),
+                    "edge_point_count": candidate.get("edgePointCount"), "inlier_ratio": candidate.get("inlierRatio"),
+                    "angular_coverage": candidate.get("angularCoverage"), "residual_p95_px": candidate.get("residualP95Px"),
+                    "candidate_failed_checks": "|".join(candidate.get("failedChecks") or []),
+                    "selected": bool(candidate) and candidate.get("candidateId") == selected_id,
+                })
+            # A malformed or older diagnostic can omit proposalId while still
+            # carrying useful sparse-fit evidence.  Never silently lose such a
+            # circle candidate from the human-review export.
+            for candidate in circle_candidates:
+                if str(candidate.get("candidateId")) in emitted_candidate_ids:
+                    continue
+                coarse = candidate.get("coarsePhysicalCircle") or {}
+                writer.writerow({
+                    "image_id": record["imageId"], "relative_path": record["relativePath"],
+                    "proposal_id": candidate.get("proposalId"), "proposal_status": None,
+                    "bbox_normalized": None,
+                    "proposal_center_x": coarse.get("centerX"),
+                    "proposal_center_y": coarse.get("centerY"),
+                    "proposal_radius_px": coarse.get("radiusPx"),
+                    "proposal_failed_checks": None,
+                    "candidate_id": candidate.get("candidateId"),
+                    "candidate_status": candidate.get("status"),
+                    "rank": candidate.get("rank"), "score": candidate.get("score"),
+                    "edge_point_count": candidate.get("edgePointCount"),
+                    "inlier_ratio": candidate.get("inlierRatio"),
+                    "angular_coverage": candidate.get("angularCoverage"),
+                    "residual_p95_px": candidate.get("residualP95Px"),
+                    "candidate_failed_checks": "|".join(candidate.get("failedChecks") or []),
+                    "selected": candidate.get("candidateId") == selected_id,
                 })
     with (output_dir / "failures.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[

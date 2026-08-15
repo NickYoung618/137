@@ -31,6 +31,17 @@ class SlotPoseReviewTests(unittest.TestCase):
                 "result": {"valid": False, "signedRelativeRotationDeg": None},
                 "error": {"code": "DATUM_DEFINITION_UNCONFIRMED", "stage": "pose_mapping"},
                 "diagnostics": {
+                    "circleLocalization": {
+                        "status": "accepted", "selectedCandidateId": "circle-candidate-001",
+                        "componentProposals": [{
+                            "proposalId": "proposal-001", "status": "eligible",
+                            "bboxNormalized": [0.1, 0.1, 0.9, 0.9],
+                        }],
+                        "circleCandidates": [{
+                            "candidateId": "circle-candidate-001", "rank": 1, "score": 0.9,
+                            "coarsePhysicalCircle": {"centerX": 60.0, "centerY": 50.0, "radiusPx": 34.0},
+                        }],
+                    },
                     "face": {"centerX": 60.0, "centerY": 50.0, "radiusPx": 35.0},
                     "candidateSummary": {"count": 2},
                     "candidates": [
@@ -123,12 +134,17 @@ class SlotPoseReviewTests(unittest.TestCase):
             self.assertEqual(85.0, record["yDownTargetDiagnostic"]["measuredDeg"])
             self.assertEqual("PASS", record["yDownTargetDiagnostic"]["toleranceStatus"])
             self.assertEqual("accepted", record["grooveRefinement"]["status"])
+            self.assertEqual("accepted", record["circleLocalization"]["status"])
+            self.assertEqual({"accepted": 1}, summary["circleLocalizationStatusCounts"])
             self.assertNotIn(str(root), json.dumps(summary))
             self.assertTrue((output / "overlays/0001.jpg").is_file())
             self.assertTrue((output / "contact-sheet.jpg").is_file())
             candidates_csv = (output / "candidates.csv").read_text(encoding="utf-8")
             self.assertIn("candidate-001", candidates_csv)
             self.assertIn("radial_depth_too_small", candidates_csv)
+            circle_candidates_csv = (output / "circle-candidates.csv").read_text(encoding="utf-8")
+            self.assertIn("proposal-001", circle_candidates_csv)
+            self.assertIn("circle-candidate-001", circle_candidates_csv)
             failures = (output / "failures.csv").read_text(encoding="utf-8")
             self.assertIn("nested/frame.jpg", failures)
             self.assertIn("DATUM_DEFINITION_UNCONFIRMED", failures)

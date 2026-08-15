@@ -244,6 +244,19 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
     candidate_extraction_count = sum(1 for record in records if record.get("candidateSummary") is not None)
     role_unique_count = sum(1 for record in records if record.get("roleSuggestion", {}).get("status") == "unique_diagnostic_hypothesis")
     formal_valid_count = sum(1 for record in records if record.get("result", {}).get("valid") is True)
+    localizations = [record.get("circleLocalization") or {} for record in records]
+    localization_status_counts = Counter(item.get("status") or "not_available" for item in localizations)
+    proposal_counts = [len(item.get("componentProposals") or []) for item in localizations]
+    eligible_proposal_counts = [
+        sum(proposal.get("status") == "eligible" for proposal in item.get("componentProposals") or [])
+        for item in localizations
+    ]
+    sparse_circle_counts = [len(item.get("circleCandidates") or []) for item in localizations]
+    localization_elapsed = [
+        float(item["timingMs"]["totalLocalization"])
+        for item in localizations
+        if isinstance((item.get("timingMs") or {}).get("totalLocalization"), (int, float))
+    ]
     return {
         "label": label,
         "imageCount": total,
@@ -253,6 +266,16 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
             "count": physical_circle_count, "rate": physical_circle_count / total if total else 0.0,
         },
         "physicalOuterCircleFailureCounts": dict(sorted(physical_circle_failures.items())),
+        "circleLocalizationStatusCounts": dict(sorted(localization_status_counts.items())),
+        "componentProposalCountDistribution": dict(sorted(Counter(proposal_counts).items())),
+        "eligibleComponentProposalCountDistribution": dict(sorted(Counter(eligible_proposal_counts).items())),
+        "sparseCircleCandidateCountDistribution": dict(sorted(Counter(sparse_circle_counts).items())),
+        "localizationElapsedMs": {
+            "n": len(localization_elapsed),
+            "p50": percentile(localization_elapsed, 0.5),
+            "p95": percentile(localization_elapsed, 0.95),
+            "max": max(localization_elapsed) if localization_elapsed else None,
+        },
         "completeRingAccepted": {"count": complete_ring_count, "rate": complete_ring_count / total if total else 0.0},
         "candidateExtractionCompleted": {"count": candidate_extraction_count, "rate": candidate_extraction_count / total if total else 0.0},
         "candidateCountDistribution": {str(key): value for key, value in sorted(candidate_counts.items())},
@@ -316,6 +339,45 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
     }
 
 
+def paired_circle_comparisons(runs: list[tuple[str, dict[str, Any]]]) -> list[dict[str, Any]]:
+    comparisons: list[dict[str, Any]] = []
+    for left_index in range(len(runs)):
+        for right_index in range(left_index + 1, len(runs)):
+            left_label, left_review = runs[left_index]
+            right_label, right_review = runs[right_index]
+            left_records = {str(item["imageId"]): item for item in left_review.get("records") or []}
+            right_records = {str(item["imageId"]): item for item in right_review.get("records") or []}
+            center_distances: list[float] = []
+            radius_differences: list[float] = []
+            for image_id in sorted(set(left_records) & set(right_records)):
+                circles = []
+                for record in (left_records[image_id], right_records[image_id]):
+                    physical = record.get("physicalOuterCircle") or {}
+                    circle = physical.get("physicalCircle") if physical.get("status") == "accepted" else None
+                    circles.append(circle)
+                if not all(isinstance(circle, dict) for circle in circles):
+                    continue
+                left_circle, right_circle = circles
+                center_distances.append(math.hypot(
+                    float(left_circle["centerX"]) - float(right_circle["centerX"]),
+                    float(left_circle["centerY"]) - float(right_circle["centerY"]),
+                ))
+                radius_differences.append(abs(float(left_circle["radiusPx"]) - float(right_circle["radiusPx"])))
+            comparisons.append({
+                "left": left_label, "right": right_label,
+                "matchedAcceptedCircleCount": len(center_distances),
+                "centerDistancePx": {
+                    "p50": percentile(center_distances, 0.5), "p95": percentile(center_distances, 0.95),
+                    "max": max(center_distances) if center_distances else None,
+                },
+                "radiusAbsoluteDifferencePx": {
+                    "p50": percentile(radius_differences, 0.5), "p95": percentile(radius_differences, 0.95),
+                    "max": max(radius_differences) if radius_differences else None,
+                },
+            })
+    return comparisons
+
+
 def parse_run(value: str) -> tuple[str, Path]:
     label, separator, raw_path = value.partition("=")
     if not separator or not label or not raw_path:
@@ -331,6 +393,7 @@ def build_summary(runs: list[tuple[str, dict[str, Any]]], threshold_deg: float) 
         "candidateClusterThresholdDeg": threshold_deg,
         "roleSuggestionsAreAuthoritative": False,
         "runs": [summarize_run(label, review, threshold_deg) for label, review in runs],
+        "pairedCircleComparisons": paired_circle_comparisons(runs),
         "interpretationLimits": [
             "Cross-frame stability can identify repeatable image features but cannot prove a drawing datum/target role.",
             "A stable image-frame cluster can still be a fixture, occlusion or lighting boundary.",

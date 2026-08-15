@@ -83,7 +83,7 @@ class SlotPoseContractTests(unittest.TestCase):
             "TARGET_SEMANTICS_UNCONFIRMED",
             "ROLE_ASSIGNMENT_FAILED", "ROLE_ASSIGNMENT_AMBIGUOUS",
             "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS",
-            "PHYSICAL_OUTER_CIRCLE_FAILED",
+            "PHYSICAL_OUTER_CIRCLE_FAILED", "HOUSING_CIRCLE_NOT_FOUND", "HOUSING_CIRCLE_AMBIGUOUS",
             "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED",
             "PLC_MAPPING_UNCONFIRMED", "GROOVE_REFINEMENT_FAILED",
         }.issubset(ERROR_CODES))
@@ -105,6 +105,18 @@ class SlotPoseContractTests(unittest.TestCase):
             config["detector"]["diagnostic_mode"] = "automatic_guess"
             path.write_text(json.dumps(config), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "diagnostic_mode"):
+                load_config(path)
+
+    def test_disabled_full_frame_locator_is_strictly_validated_in_legacy_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["detector"]["full_frame_circle_locator"] = {
+                "schema_version": "full-frame-circle-locator/1", "enabled": False,
+                "unexpected_typo": True,
+            }
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unknown fields"):
                 load_config(path)
 
     def test_normalized_face_search_roi_is_optional_and_strictly_validated(self) -> None:
@@ -160,6 +172,37 @@ class SlotPoseContractTests(unittest.TestCase):
             config_path.write_text(json.dumps(config), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "target semantics"):
                 build_result(image, config_path, config, "task", {}, angle_deg=1.0, confidence=0.8)
+
+    def test_full_frame_locator_is_strict_single_mode_and_mutually_exclusive_with_roi(self) -> None:
+        from tools.generate_synthetic_multi_notches import build_dataset
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            try:
+                built = build_dataset(root, 137)
+            except FileNotFoundError as exc:
+                self.skipTest(f"historical source unavailable: {exc}")
+            path = Path(built["config"])
+            config = json.loads(path.read_text(encoding="utf-8"))
+            config["detector"]["diagnostic_mode"] = "single_real_groove"
+            from algorithms.slot_pose.single_groove_pose import DEFAULT_SINGLE_GROOVE_POSE_CONFIG
+            config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG
+            config["detector"]["full_frame_circle_locator"] = {
+                "enabled": True,
+                "schema_version": "full-frame-circle-locator/1",
+            }
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertTrue(loaded["detector"]["full_frame_circle_locator"]["enabled"])
+            config["detector"]["face_search_roi_normalized"] = [0.0, 0.0, 0.8, 1.0]
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+                load_config(path)
+            config["detector"].pop("face_search_roi_normalized")
+            config["detector"]["diagnostic_mode"] = "multi_notch_roles"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "single_real_groove"):
+                load_config(path)
 
 
 if __name__ == "__main__":

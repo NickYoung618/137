@@ -85,7 +85,18 @@ uv run python tools/run_slot_pose_batch.py \
 
 ## Mac A2后续验证
 
-服务器现只有1张A2代表图及一份非datum/target的短线标注；完整正常/坏图集仍在Mac外置存储，不提交Git。
+服务器现有25张5472×3648 A2 JPEG诊断副本和3张同源原始BMP；第4帧有一份同源BMP人工圆弧/开放槽开发参考，
+但25张JPEG尚无逐图同哈希人工truth。图片、LabelMe模板和审阅产物全部留在Git外；完整正常/坏图集仍在Mac外置存储。
+
+## 004全画面找圆与逐图标注验收
+
+新增的全画面策略默认关闭，仅在`single_real_groove`显式启用：低分辨率连通域只提名候选，180条锁定gyj
+射线做筛选，唯一候选再由既有720射线物理圆门精修。无圆、候选溢出或候选不唯一均在槽识别前安全失败。
+`tools/prepare_real_case_annotations.py`为每张真实图生成Git外、无伪truth的LabelMe模板；
+`tools/evaluate_annotated_real_cases.py`只接收同图哈希一致、人工标注并由不同人员复核的外圆和开放槽边界，
+逐图输出人工值、自动值及圆心/半径/环形槽角差。静态重复性按明确的同样品同条件组统计环形残差；当前25张分组
+和同图truth不完整，因此该项明确为`NOT_EVALUATED`，不冒充准确率。完整命令见
+`specs/004-full-frame-circle-localization/quickstart.md`。
 同步本仓库到Mac后：
 
 1. 将配置的`legacy_asset`路径改为Mac同源源码、标注和参考图，并核对内容SHA-256。

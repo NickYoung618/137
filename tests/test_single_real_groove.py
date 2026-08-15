@@ -274,6 +274,28 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
                 self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
                 self.assertFalse(payload["diagnostics"]["singleGroovePose"]["geometryValid"])
 
+    def test_full_frame_locator_failure_stops_all_groove_and_angle_stages(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["config_id"] = "synthetic-full-frame-locator-not-found"
+        config["detector"].pop("face_search_roi_normalized", None)
+        config["detector"]["full_frame_circle_locator"] = {
+            "schema_version": "full-frame-circle-locator/1",
+            "enabled": True,
+            "allowed_center_normalized": [0.0, 0.0, 0.1, 0.1],
+            "min_radius_to_min_image_dim": 0.1,
+            "max_radius_to_min_image_dim": 0.49,
+        }
+        path = self.root / "full-frame-not-found.json"
+        write_json(path, config)
+        payload = run(self.images / "one-real-two-shadows.png", path, "single:locator-not-found")
+        self.assertFalse(payload["result"]["valid"])
+        self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
+        self.assertEqual("HOUSING_CIRCLE_NOT_FOUND", payload["error"]["code"])
+        self.assertEqual("not_found", payload["diagnostics"]["circleLocalization"]["status"])
+        self.assertNotIn("angularProfile", payload["diagnostics"])
+        self.assertNotIn("grooveRecognition", payload["diagnostics"])
+        self.assertNotIn("singleGroovePose", payload["diagnostics"])
+
     def test_config_contract_requires_versioned_exactly_one_policy(self) -> None:
         loaded = load_config(self.config)
         self.assertEqual("single_real_groove", loaded["detector"]["diagnostic_mode"])

@@ -125,6 +125,34 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual(1, run["imageFrameCorrectionAvailable"]["count"])
         self.assertEqual(1, run["plcGuidanceBlocked"]["count"])
 
+    def test_locator_candidates_and_paired_circle_deltas_are_summarized(self) -> None:
+        first = record("a", [10.0])
+        second = record("a", [10.0])
+        first["circleLocalization"] = {
+            "status": "accepted",
+            "componentProposals": [{"status": "eligible"}, {"status": "rejected"}],
+            "circleCandidates": [{"candidateId": "circle-candidate-001"}],
+            "timingMs": {"totalLocalization": 350.0},
+        }
+        first["physicalOuterCircle"] = {
+            "status": "accepted", "physicalCircle": {"centerX": 10.0, "centerY": 10.0, "radiusPx": 8.0},
+            "failedChecks": [],
+        }
+        second["physicalOuterCircle"] = {
+            "status": "accepted", "physicalCircle": {"centerX": 10.3, "centerY": 10.4, "radiusPx": 8.2},
+            "failedChecks": [],
+        }
+        summary = build_summary([("full", {"records": [first]}), ("roi", {"records": [second]})], 5.0)
+        run = summary["runs"][0]
+        self.assertEqual({"accepted": 1}, run["circleLocalizationStatusCounts"])
+        self.assertEqual({2: 1}, run["componentProposalCountDistribution"])
+        self.assertEqual({1: 1}, run["eligibleComponentProposalCountDistribution"])
+        self.assertEqual(350.0, run["localizationElapsedMs"]["p95"])
+        comparison = summary["pairedCircleComparisons"][0]
+        self.assertEqual(1, comparison["matchedAcceptedCircleCount"])
+        self.assertAlmostEqual(0.5, comparison["centerDistancePx"]["max"])
+        self.assertAlmostEqual(0.2, comparison["radiusAbsoluteDifferencePx"]["max"])
+
 
 if __name__ == "__main__":
     unittest.main()

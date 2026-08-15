@@ -12,6 +12,9 @@
 - `detector.face_search_roi_normalized`默认不存在；启用时仅在调用原有圆心/尺度链前，以归一化
   `[x_min,y_min,x_max,y_max]`屏蔽相邻工装，候选剖面仍从未裁切原图采样。ROI需在冻结视野上独立验证，
   不代替datum/target映射确认，也不改变fail-closed门。
+- `detector.full_frame_circle_locator`默认关闭，且首版只允许在`single_real_groove`下与显式ROI互斥启用。
+  它用低分辨率Otsu/连通域产生有限提议，再以180条锁定gyj射线筛选并只让唯一winner进入既有720射线
+  物理外圆质量门；连通域边框本身绝不是测量圆。无候选、候选溢出或最佳/次佳差距不足均在槽阶段前失败。
 - `pose.target_semantics_confirmed`表示当前显式模式的图像目标实体是否已确认；A2单槽配置可依据
   2026-08-15业务决定设为true，legacy/paired/multi-role不得借此自动确认。它与datum、图纸映射、
   输出用途及零位/正方向相互独立，任何机械门未确认都无正式角。
@@ -29,6 +32,8 @@
 - 半径约1646 px时，理想圆周`1 px`弧长约为`0.0348°`；这是分辨率预算，不是生产准确率。
   生产精度必须用原始BMP人工拟合参考、独立复核及冻结validation/acceptance split实测。
 - `mm_per_px`为统一保留字段；纯角度输出不使用。`ANGLE_PENDING.limit=null`表示只统计、不判定。
+- 静态重复性只按Manifest中显式的同一样品、工位和条件分组，以检测角减同图人工真值角的环形残差统计；
+  `groupingExplicit=false`、标注不完整或有效重复不足时不得输出重复性PASS/FAIL。
 
 Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
 并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。

@@ -14,7 +14,7 @@ from tools.dataset_common import inspect_image
 
 SCHEMA_VERSION = "slot-pose-result/2"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.9.0"
+ALGORITHM_VERSION = "0.10.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -30,6 +30,8 @@ ERROR_CODES = {
     "GROOVE_RECOGNITION_AMBIGUOUS",
     "GROOVE_REFINEMENT_FAILED",
     "PHYSICAL_OUTER_CIRCLE_FAILED",
+    "HOUSING_CIRCLE_NOT_FOUND",
+    "HOUSING_CIRCLE_AMBIGUOUS",
     "RING_TRUNCATED",
     "QUALITY_REJECTED",
     "TARGET_SEMANTICS_UNCONFIRMED",
@@ -88,6 +90,17 @@ def load_config(config_path: Path) -> dict[str, Any]:
         x_min, y_min, x_max, y_max = map(float, face_roi)
         if not (0.0 <= x_min < x_max <= 1.0 and 0.0 <= y_min < y_max <= 1.0):
             raise ValueError("detector.face_search_roi_normalized must be ordered within [0,1]")
+    if "full_frame_circle_locator" in detector:
+        from algorithms.slot_pose.full_frame_circle_locator import merged_full_frame_circle_locator_config
+
+        detector["full_frame_circle_locator"] = merged_full_frame_circle_locator_config(
+            detector.get("full_frame_circle_locator")
+        )
+        if detector["full_frame_circle_locator"]["enabled"]:
+            if mode != "single_real_groove":
+                raise ValueError("full-frame circle locator is initially restricted to single_real_groove mode")
+            if face_roi is not None:
+                raise ValueError("full-frame circle locator and face_search_roi_normalized are mutually exclusive")
     if mode == "paired_notches_centerline":
         from algorithms.slot_pose.angular_profile import validate_pairing_config, validate_profile_config
 
@@ -110,6 +123,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["physical_outer_circle"] = merged_physical_outer_circle_config(
             detector.get("physical_outer_circle")
         )
+        if "full_frame_circle_locator" not in detector:
+            from algorithms.slot_pose.full_frame_circle_locator import merged_full_frame_circle_locator_config
+            detector["full_frame_circle_locator"] = merged_full_frame_circle_locator_config(None)
     if mode == "multi_notch_roles":
         from algorithms.slot_pose.role_assignment import validate_role_config
 

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "annotated-real-case-comparison.schema.json",
+  "title": "真实案例人工与自动检测逐图对照",
+  "type": "object",
+  "required": ["schemaVersion", "datasetId", "imageCount", "evaluationEligibleCount", "pendingOrRejectedCount", "strictPass", "accuracyStatistics", "staticRepeatability", "records"],
+  "properties": {
+    "schemaVersion": {"const": "annotated-real-case-comparison/1"},
+    "datasetId": {"type": ["string", "null"]},
+    "imageCount": {"type": "integer", "minimum": 0},
+    "evaluationEligibleCount": {"type": "integer", "minimum": 0},
+    "pendingOrRejectedCount": {"type": "integer", "minimum": 0},
+    "strictPass": {"type": "boolean"},
+    "accuracyStatistics": {"type": ["object", "null"]},
+    "staticRepeatability": {
+      "type": "object",
+      "required": ["schemaVersion", "status", "reason", "metricSource", "groups", "limitStatus"],
+      "properties": {
+        "schemaVersion": {"const": "slot-pose-static-repeatability/1"},
+        "status": {"enum": ["EVALUATED", "NOT_EVALUATED"]},
+        "reason": {"type": ["string", "null"]},
+        "metricSource": {"const": "circular_detection_minus_human_truth_residual"},
+        "groups": {"type": "array"},
+        "limitStatus": {"const": "NOT_EVALUATED"}
+      }
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["imageId", "relativePath", "evaluationEligible", "ineligibleReasons", "human", "automatic", "difference"],
+        "properties": {
+          "imageId": {"type": "string"},
+          "relativePath": {"type": "string"},
+          "evaluationEligible": {"type": "boolean"},
+          "ineligibleReasons": {"type": "array", "items": {"type": "string"}},
+          "human": {"type": ["object", "null"]},
+          "automatic": {"type": ["object", "null"]},
+          "difference": {"type": ["object", "null"]}
+        }
+      }
+    }
+  }
+}

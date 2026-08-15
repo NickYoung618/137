@@ -17,11 +17,13 @@ from algorithms.slot_pose.contract import (
     ALGORITHM_NAME,
     ALGORITHM_VERSION,
     SCHEMA_VERSION,
+    build_result,
     config_sha256,
     load_config,
     validate_result,
 )
-from algorithms.slot_pose.main import run
+from algorithms.slot_pose.legacy_adapter import LegacyAEndFaceAdapter, LegacyAdapterError
+from algorithms.slot_pose.main import run_loaded
 from tools.dataset_common import safe_relative_path
 
 
@@ -80,16 +82,34 @@ def _manifest_input_failure(item: dict, image_path: Path, config_path: Path, con
 def run_batch(manifest: dict, data_root: Path, config_path: Path) -> list[dict]:
     config_path = config_path.resolve()
     config = load_config(config_path)
+    adapter = None
+    adapter_error = None
+    try:
+        adapter = LegacyAEndFaceAdapter(config)
+        adapter.verify_assets()
+    except LegacyAdapterError as exc:
+        adapter_error = exc
     payloads: list[dict] = []
     for item in manifest.get("images", []):
         relative = safe_relative_path(str(item["relativePath"]))
         image_path = data_root.resolve() / relative
         task_id = f"{manifest.get('datasetId', 'dataset')}:{item['imageId']}"
         try:
-            payload = run(image_path, config_path, task_id)
+            if not image_path.is_file():
+                raise ValueError(f"input image does not exist: {image_path}")
+            if adapter_error is not None:
+                payload = build_result(
+                    image_path, config_path, config, task_id, adapter_error.diagnostics,
+                    error_code=adapter_error.code, error_message=str(adapter_error), error_stage=adapter_error.stage,
+                )
+            else:
+                assert adapter is not None
+                payload = run_loaded(image_path, config_path, config, adapter, task_id)
         except (OSError, ValueError, KeyError) as exc:
             payload = _manifest_input_failure(item, image_path, config_path, config, task_id, exc)
         payloads.append(payload)
+    if adapter is not None:
+        adapter.verify_assets()
     return payloads
 
 

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "slot-pose-004-compatibility/1",
+  "legacy72": {
+    "total": 72,
+    "valid": 72,
+    "maeDeg": 0.16265719864518224,
+    "p95AbsErrorDeg": 0.3179196120577558,
+    "maxAbsErrorDeg": 0.40780849496366045,
+    "regressionStatus": "passed"
+  },
+  "pairedCompatibility": {
+    "total": 8,
+    "positiveTotal": 5,
+    "positiveValid": 5,
+    "negativeTotal": 3,
+    "negativeFailClosed": 3,
+    "negativeErrorCodes": {"SLOT_PAIR_AMBIGUOUS": 1, "RING_TRUNCATED": 1, "SLOT_PAIR_NOT_FOUND": 1},
+    "regressionStatus": "passed"
+  },
+  "locatorScope": "disabled by default and restricted to explicit single_real_groove mode",
+  "topLevelSchema": "slot-pose-result/2"
+}

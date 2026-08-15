@@ -193,6 +193,53 @@
             "max_radius_ratio": {"type": "number", "exclusiveMinimum": 0}
           }
         },
+        "full_frame_circle_locator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "enabled"],
+          "properties": {
+            "schema_version": {"const": "full-frame-circle-locator/1"},
+            "enabled": {"type": "boolean"},
+            "strategy_version": {"type": "string", "minLength": 1},
+            "downsample_factor": {"type": "integer", "minimum": 2},
+            "threshold_offsets": {
+              "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true,
+              "items": {"type": "integer", "minimum": -64, "maximum": 64}
+            },
+            "allowed_center_normalized": {
+              "type": "array", "minItems": 4, "maxItems": 4,
+              "items": {"type": "number", "minimum": 0, "maximum": 1}
+            },
+            "min_radius_to_min_image_dim": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.75},
+            "max_radius_to_min_image_dim": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.75},
+            "min_component_area_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_bbox_aspect_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_fill_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_fill_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "allow_border_contact": {"type": "boolean"},
+            "min_border_clearance_ratio": {"type": "number", "minimum": 0},
+            "max_coarse_candidates": {"type": "integer", "minimum": 1},
+            "proposal_dedup_center_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "proposal_dedup_radius_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "physical_dedup_center_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "physical_dedup_radius_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "sparse_n_angles": {"type": "integer", "minimum": 36},
+            "sparse_min_edge_point_count": {"type": "integer", "minimum": 8},
+            "sparse_angular_bin_count": {"type": "integer", "minimum": 4},
+            "selection_min_score_margin": {"type": "number", "minimum": 0, "maximum": 1},
+            "score_weights": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["inlier", "coverage", "residual", "prior"],
+              "properties": {
+                "inlier": {"type": "number", "minimum": 0, "maximum": 1},
+                "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+                "residual": {"type": "number", "minimum": 0, "maximum": 1},
+                "prior": {"type": "number", "minimum": 0, "maximum": 1}
+              }
+            }
+          }
+        },
         "pairing": {
           "type": "object",
           "required": ["min_candidates", "max_candidates", "min_separation_deg", "max_separation_deg", "expected_separation_deg", "min_width_ratio", "min_prominence_ratio", "min_pair_score", "min_score_margin"],
@@ -246,6 +293,31 @@
     {
       "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "single_real_groove"}}}}},
       "then": {"properties": {"detector": {"required": ["profile", "physical_outer_circle", "groove_recognition", "single_groove_pose"]}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "detector": {
+            "required": ["full_frame_circle_locator"],
+            "properties": {
+              "full_frame_circle_locator": {
+                "required": ["enabled"],
+                "properties": {"enabled": {"const": true}}
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "detector": {
+            "properties": {
+              "diagnostic_mode": {"const": "single_real_groove"},
+              "face_search_roi_normalized": {"type": "null"}
+            }
+          }
+        }
+      }
     }
   ]
 }

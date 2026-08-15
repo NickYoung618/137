@@ -1,22 +1,86 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "slot-pose-annotation.schema.json",
-  "title": "A端面槽姿态真值标注",
-  "type": "object",
-  "required": ["schemaVersion", "imagePath", "imageSha256", "sampleId", "position", "repeatIndex", "face", "slotPolygon", "slotCenterline", "truthAngleDeg", "truthSource", "calibrationId", "split"],
-  "properties": {
-    "schemaVersion": {"const": "slot-pose-annotation/1"},
-    "imagePath": {"type": "string", "minLength": 1},
-    "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "sampleId": {"type": "string", "minLength": 1},
-    "position": {"type": "string", "minLength": 1},
-    "repeatIndex": {"type": "integer", "minimum": 0},
-    "face": {"type": ["object", "null"]},
-    "slotPolygon": {"type": ["array", "null"]},
-    "slotCenterline": {"type": ["array", "null"]},
-    "truthAngleDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
-    "truthSource": {"type": ["string", "null"]},
-    "calibrationId": {"type": ["string", "null"]},
-    "split": {"enum": ["development", "tuning", "validation", "acceptance"]}
+  "title": "A端面槽姿态标注（历史角度truth或同图LabelMe几何truth）",
+  "oneOf": [
+    {"$ref": "#/$defs/legacyAngleAnnotation"},
+    {"$ref": "#/$defs/reviewedLabelMeGeometry"}
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "point": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [{"type": "number"}, {"type": "number"}]
+    },
+    "legacyAngleAnnotation": {
+      "type": "object",
+      "required": ["schemaVersion", "imagePath", "imageSha256", "sampleId", "position", "repeatIndex", "face", "slotPolygon", "slotCenterline", "truthAngleDeg", "truthSource", "calibrationId", "split"],
+      "properties": {
+        "schemaVersion": {"const": "slot-pose-annotation/1"},
+        "imagePath": {"type": "string", "minLength": 1},
+        "imageSha256": {"$ref": "#/$defs/sha256"},
+        "sampleId": {"type": "string", "minLength": 1},
+        "position": {"type": "string", "minLength": 1},
+        "repeatIndex": {"type": "integer", "minimum": 0},
+        "face": {"type": ["object", "null"]},
+        "slotPolygon": {"type": ["array", "null"]},
+        "slotCenterline": {"type": ["array", "null"]},
+        "truthAngleDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "truthSource": {"type": ["string", "null"]},
+        "calibrationId": {"type": ["string", "null"]},
+        "split": {"enum": ["development", "tuning", "validation", "acceptance"]}
+      }
+    },
+    "reviewedLabelMeGeometry": {
+      "type": "object",
+      "required": ["version", "flags", "shapes", "imagePath", "imageData", "imageHeight", "imageWidth"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "imagePath": {"type": "string", "minLength": 1},
+        "imageData": {"type": ["string", "null"]},
+        "imageHeight": {"type": "integer", "minimum": 1},
+        "imageWidth": {"type": "integer", "minimum": 1},
+        "flags": {
+          "type": "object",
+          "required": ["human_verified", "independent_from_algorithm", "formal_truth", "runtime_input_allowed", "annotation_version", "annotator", "reviewer"],
+          "properties": {
+            "human_verified": {"const": true},
+            "independent_from_algorithm": {"const": true},
+            "formal_truth": {"const": true},
+            "runtime_input_allowed": {"const": false},
+            "annotation_version": {"type": "string", "minLength": 1},
+            "annotator": {"type": "string", "minLength": 1},
+            "reviewer": {"type": "string", "minLength": 1}
+          }
+        },
+        "shapes": {
+          "type": "array", "minItems": 2,
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["label", "shape_type", "points"],
+                "properties": {
+                  "label": {"const": "target_groove_open_boundary_manual"},
+                  "shape_type": {"const": "linestrip"},
+                  "points": {"type": "array", "minItems": 6, "items": {"$ref": "#/$defs/point"}}
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["label", "shape_type", "points"],
+                "properties": {
+                  "label": {"enum": ["physical_outer_circle_truth", "physical_outer_circle_visible_arc_manual"]},
+                  "shape_type": {"enum": ["circle", "linestrip"]},
+                  "points": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/point"}}
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
   }
 }

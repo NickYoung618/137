@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "slot-pose-004-performance/1",
+  "method": {
+    "execution": "single-process serial 25-image batch with one reused adapter/reference model",
+    "clock": "time.perf_counter_ns for localization stages; /usr/bin/time -v for batch wall and peak RSS",
+    "cpuCount": 2,
+    "memoryGiB": 7.5,
+    "input": "25 external 5472x3648 JPEG diagnostics"
+  },
+  "fullFrame": {
+    "batchWallSeconds": 34.34,
+    "throughputImagesPerSecond": 0.727,
+    "peakRssKiB": 1188708,
+    "peakRssGiB": 1.1346,
+    "coldFirstInternalElapsedMs": 1183.2786169834435,
+    "steadyInternalElapsedMs": {"p50": 1173.7493219552562, "p95": 1218.4062182554044, "max": 1219.8371191043407},
+    "allInternalElapsedMs": {"p50": 1173.815440852195, "p95": 1217.975501716137, "max": 1219.8371191043407},
+    "localizationTotalMs": {"p50": 376.914771, "p95": 383.6586178, "max": 409.067371},
+    "proposalExtractionMs": {"p50": 138.774254, "p95": 142.1857156, "max": 143.893104},
+    "sparseAssessmentMs": {"p50": 47.574793, "p95": 51.1995174, "max": 52.82007},
+    "finalRefinementMs": {"p50": 187.494839, "p95": 198.5747464, "max": 224.094027}
+  },
+  "frozenRoiComparison": {"batchWallSeconds": 50.70, "throughputImagesPerSecond": 0.493, "peakRssKiB": 1188144},
+  "developmentGate": {"p95Ms": 2500, "maxMs": 4000, "minimumThroughputImagesPerSecond": 0.3, "maximumPeakRssGiB": 1.5, "passed": true},
+  "caveat": "Internal elapsed excludes adapter construction and final result image inspection; throughput therefore uses batch wall time. These are development gates, not production cycle-time commitments."
+}

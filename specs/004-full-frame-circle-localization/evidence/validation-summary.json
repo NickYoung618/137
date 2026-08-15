@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "slot-pose-004-validation/1",
+  "recordedAt": "2026-08-15",
+  "unitTests": {
+    "discovered": 114,
+    "passed": 110,
+    "skippedOptionalJsonschema": 4,
+    "failed": 0,
+    "elapsedSeconds": 48.698
+  },
+  "explicitJsonschemaGate": {
+    "tests": 35,
+    "passed": 35,
+    "failed": 0
+  },
+  "schemaValidation": {
+    "schemaDefinitions": 9,
+    "externalResultRecords": 50,
+    "annotationArtifacts": 2,
+    "failed": 0
+  },
+  "otherGates": {
+    "compileall": "passed",
+    "cliHelp": "passed",
+    "gitDiffCheck": "passed",
+    "pendingMediaOrArchiveFiles": 0,
+    "newExternalDataAbsolutePaths": 0,
+    "maximumPendingFileBytes": 37324
+  },
+  "specKitAnalysis": {
+    "functionalRequirements": 26,
+    "successCriteria": 11,
+    "tasks": 36,
+    "requirementTaskCoveragePercent": 100,
+    "criticalFindings": 0,
+    "highFindings": 0
+  }
+}

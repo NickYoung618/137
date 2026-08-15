@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "slot-pose-004-baseline/1",
+  "recordedAt": "2026-08-15",
+  "branch": "003-a2-paired-notch-stability",
+  "baselineCommit": "17e932c",
+  "worktreeBefore004Code": "only untracked 004 Spec Kit artifacts",
+  "unitTests": {"discovered": 98, "passed": 95, "skippedOptionalJsonschema": 3, "failed": 0},
+  "external25Before004": {
+    "fullFramePhysicalCircleAccepted": 0,
+    "developmentRoiPhysicalCircleAccepted": 25,
+    "singleRealGrooveAccepted": 25,
+    "subpixelGrooveOpeningAccepted": 21
+  },
+  "interpretation": "The 25 JPEG files are external development diagnostics, not angle-accuracy truth."
+}

@@ -15,6 +15,7 @@ import numpy as np
 
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
+from algorithms.slot_pose.full_frame_circle_locator import locate_full_frame_circle
 from algorithms.slot_pose.groove_recognition import recognize_grooves
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
@@ -109,6 +110,10 @@ class LegacyAEndFaceAdapter:
                     "ASSET_MISMATCH", "asset_verification",
                     f"SHA-256 mismatch for {path}: expected {expected}, actual {actual}",
                 )
+
+    def verify_assets(self) -> None:
+        """Recheck locked assets for long-lived batch adapters."""
+        self._verify_assets()
 
     def _load_module(self) -> ModuleType:
         module_name = f"slot_pose_legacy_a_end_face_{self.expected_hashes[self.paths.source][:16]}"
@@ -229,22 +234,68 @@ class LegacyAEndFaceAdapter:
             target_gray = self.module.load_detection_gray(image_path)
         except Exception as exc:
             raise LegacyAdapterError("INPUT_INVALID", "image_loading", str(exc)) from exc
-        face_search_roi = self.config["detector"].get("face_search_roi_normalized")
-        try:
-            alignment_gray = (
-                apply_normalized_face_search_roi(target_gray, face_search_roi)
-                if isinstance(face_search_roi, list)
-                else target_gray
-            )
-            transform = self.module.estimate_global_transform(self.reference_model, alignment_gray)
-        except Exception as exc:
-            raise LegacyAdapterError("FACE_NOT_FOUND", "face_detection", str(exc)) from exc
-
-        center = (float(transform.target_center[0]), float(transform.target_center[1]))
-        scale = float(transform.scale)
-        outer_radius = float(self.reference_model.alignment_outer_radius * scale)
         detector = self.config["detector"]
         mode = str(detector.get("diagnostic_mode", "legacy_single_notch"))
+        face_search_roi = detector.get("face_search_roi_normalized")
+        locator_config = detector.get("full_frame_circle_locator") or {}
+        locator_enabled = mode == "single_real_groove" and bool(locator_config.get("enabled", False))
+        transform = None
+        prelocated_physical: dict[str, Any] | None = None
+        circle_localization: dict[str, Any] | None = None
+        if locator_enabled:
+            outer_model = next(
+                (
+                    model for model in self.reference_model.shapes
+                    if model.label == self.reference_model.outer_label and model.circle is not None
+                ),
+                None,
+            )
+            if outer_model is None:
+                raise LegacyAdapterError(
+                    "PHYSICAL_OUTER_CIRCLE_FAILED", "physical_outer_circle",
+                    "locked reference model has no physical outer-circle anchor",
+                )
+            circle_localization = locate_full_frame_circle(
+                target_gray,
+                (float(outer_model.circle[0]), float(outer_model.circle[1]), float(outer_model.circle[2])),
+                self.module.outer_boundary_edge_point,
+                self.module.robust_fit_circle,
+                locator_config,
+                final_physical_config=detector.get("physical_outer_circle"),
+                source_sha256=self.expected_hashes[self.paths.source],
+            )
+            if circle_localization["status"] != "accepted":
+                if circle_localization["status"] in {"ambiguous", "overflow"}:
+                    code = "HOUSING_CIRCLE_AMBIGUOUS"
+                elif circle_localization["status"] == "refinement_failed":
+                    code = "PHYSICAL_OUTER_CIRCLE_FAILED"
+                else:
+                    code = "HOUSING_CIRCLE_NOT_FOUND"
+                raise LegacyAdapterError(
+                    code,
+                    "circle_localization",
+                    f"full-frame housing circle localization failed: {circle_localization['failedChecks']}",
+                    {"diagnosticMode": mode, "circleLocalization": circle_localization},
+                )
+            physical_circle = circle_localization["finalPhysicalCircle"]
+            assert physical_circle is not None
+            center = (float(physical_circle["centerX"]), float(physical_circle["centerY"]))
+            scale = float(physical_circle["radiusPx"]) / float(outer_model.circle[2])
+            outer_radius = float(self.reference_model.alignment_outer_radius * scale)
+            prelocated_physical = circle_localization["finalPhysicalCircleDiagnostics"]
+        else:
+            try:
+                alignment_gray = (
+                    apply_normalized_face_search_roi(target_gray, face_search_roi)
+                    if isinstance(face_search_roi, list)
+                    else target_gray
+                )
+                transform = self.module.estimate_global_transform(self.reference_model, alignment_gray)
+            except Exception as exc:
+                raise LegacyAdapterError("FACE_NOT_FOUND", "face_detection", str(exc)) from exc
+            center = (float(transform.target_center[0]), float(transform.target_center[1]))
+            scale = float(transform.scale)
+            outer_radius = float(self.reference_model.alignment_outer_radius * scale)
 
         # The historical single-notch detector is a legacy-mode baseline, not a
         # prerequisite for profile-based paired or generic multi-role modes.
@@ -310,7 +361,8 @@ class LegacyAEndFaceAdapter:
             },
             "face": {
                 "centerX": center[0], "centerY": center[1], "radiusPx": outer_radius,
-                "scale": scale, "method": "legacy_estimate_global_transform",
+                "scale": scale,
+                "method": "full_frame_circle_locator" if locator_enabled else "legacy_estimate_global_transform",
                 "searchRoiNormalized": face_search_roi,
             },
             "slot": {
@@ -326,10 +378,12 @@ class LegacyAEndFaceAdapter:
                 "thresholds": detector,
                 "failedChecks": failures,
             },
-            "legacyMethod": str(transform.method),
+            "legacyMethod": "full_frame_circle_locator" if locator_enabled else str(transform.method),
             "elapsedMs": (time.perf_counter() - started) * 1000.0,
             "functionInventory": list(REQUIRED_FUNCTIONS),
         }
+        if circle_localization is not None:
+            diagnostics["circleLocalization"] = circle_localization
         if mode == "legacy_single_notch":
             assert notch_prominence is not None
             if float(notch_prominence) < float(detector["min_notch_prominence"]):
@@ -405,20 +459,24 @@ class LegacyAEndFaceAdapter:
                     "PHYSICAL_OUTER_CIRCLE_FAILED", "physical_outer_circle",
                     "locked reference model has no physical outer-circle anchor", diagnostics,
                 )
-            search_center = transform.apply_point((outer_model.circle[0], outer_model.circle[1]))
-            search_radius = transform.apply_radius(outer_model.circle[2])
-            physical_outer = locate_physical_outer_circle(
-                target_gray,
-                center,
-                outer_radius,
-                (float(search_center[0]), float(search_center[1])),
-                float(search_radius),
-                self.module.outer_boundary_edge_point,
-                self.module.robust_fit_circle,
-                detector.get("physical_outer_circle"),
-                source_sha256=self.expected_hashes[self.paths.source],
-                pixel_scale=scale,
-            )
+            if prelocated_physical is not None:
+                physical_outer = prelocated_physical
+            else:
+                assert transform is not None
+                search_center = transform.apply_point((outer_model.circle[0], outer_model.circle[1]))
+                search_radius = transform.apply_radius(outer_model.circle[2])
+                physical_outer = locate_physical_outer_circle(
+                    target_gray,
+                    center,
+                    outer_radius,
+                    (float(search_center[0]), float(search_center[1])),
+                    float(search_radius),
+                    self.module.outer_boundary_edge_point,
+                    self.module.robust_fit_circle,
+                    detector.get("physical_outer_circle"),
+                    source_sha256=self.expected_hashes[self.paths.source],
+                    pixel_scale=scale,
+                )
             diagnostics["physicalOuterCircle"] = physical_outer
             if physical_outer["status"] != "accepted":
                 raise LegacyAdapterError(

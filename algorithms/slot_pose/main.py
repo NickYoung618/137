@@ -30,9 +30,26 @@ def run(image_path: Path, config_path: Path, task_id: str | None = None) -> dict
     if not image_path.is_file():
         raise ValueError(f"input image does not exist: {image_path}")
     config = load_config(config_path)
-    diagnostics: dict = {}
     try:
         adapter = LegacyAEndFaceAdapter(config)
+    except LegacyAdapterError as exc:
+        return build_result(
+            image_path, config_path, config, task_id, exc.diagnostics,
+            error_code=exc.code, error_message=str(exc), error_stage=exc.stage,
+        )
+    return run_loaded(image_path, config_path, config, adapter, task_id)
+
+
+def run_loaded(
+    image_path: Path,
+    config_path: Path,
+    config: dict,
+    adapter: LegacyAEndFaceAdapter,
+    task_id: str | None = None,
+) -> dict:
+    """Run one image with a pre-verified adapter/reference model."""
+    diagnostics: dict = {}
+    try:
         estimate = adapter.estimate(image_path.resolve())
         diagnostics = estimate["diagnostics"]
         angle = adapter.mechanical_angle(estimate["candidate_image_deg"])
@@ -41,6 +58,10 @@ def run(image_path: Path, config_path: Path, task_id: str | None = None) -> dict
             angle_deg=angle, confidence=float(estimate["confidence"]),
         )
     except LegacyAdapterError as exc:
+        try:
+            adapter.verify_assets()
+        except LegacyAdapterError as asset_exc:
+            exc = asset_exc
         diagnostics = exc.diagnostics or diagnostics
         return build_result(
             image_path, config_path, config, task_id, diagnostics,

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "slot-pose-004-real-diagnostic/1",
+  "dataset": {
+    "id": "a2-first-25-jpeg-diagnostic",
+    "imageCount": 25,
+    "imageSize": [5472, 3648],
+    "directoryContentSummarySha256": "9f57337c9cd6babb96db23c45123c72d2b64b7dff75bdfc2b0d3c916fb018c2d",
+    "manifestFingerprint": "fe7864df6557c9348e39bcc518c818f370e664faff8d7ec1d7f127e6998711fc",
+    "mediaCommitted": false
+  },
+  "fullFrameLocalization": {
+    "statusCounts": {"accepted": 25},
+    "componentProposalCountDistribution": {"3": 25},
+    "eligibleComponentCountDistribution": {"1": 25},
+    "sparseCandidateCountDistribution": {"1": 25},
+    "bestScoreRange": [0.7351779308771094, 0.842545069212424],
+    "rightFixtureSelectedCountAfterHumanContactSheetReview": 0,
+    "physicalOuterCircleAccepted": 25
+  },
+  "pairedAgainstFrozenDevelopmentRoi": {
+    "centerDistancePx": {"p50": 0.11349439171487839, "p95": 0.17011984477789652, "max": 0.17903470099278368},
+    "radiusAbsoluteDifferencePx": {"p50": 0.026368546013372907, "p95": 0.07777747903505768, "max": 0.10897770443193622}
+  },
+  "downstream": {
+    "rawDarkCandidatePattern": "25/25 have 3 raw dark regions",
+    "acceptedRealGroovePattern": "25/25 retain exactly 1 groove candidate",
+    "rejectedShadowCount": 50,
+    "shadowRejectionReasonCounts": {"width_variation_too_high": 50},
+    "subpixelOpeningAccepted": 22,
+    "subpixelOpeningFailed": 3,
+    "targetToleranceStatusCounts": {"PASS": 2, "FAIL": 20, "NOT_EVALUATED": 3},
+    "topLevelValidCount": 0,
+    "errorCodeCounts": {"PLC_MAPPING_UNCONFIRMED": 22, "GROOVE_REFINEMENT_FAILED": 3}
+  },
+  "limits": [
+    "Candidate selection and downstream stability are development evidence, not production accuracy.",
+    "The 25 JPEGs lack same-image reviewed truth and explicit capture grouping.",
+    "Formal mechanical output remains null and valid=false."
+  ],
+  "externalArtifactSha256": {
+    "fullFrameResults": "1122e8ea2e010e81d8b42cf86be49f73ee1970edaaede0477ab89e6bffa54341",
+    "roiResults": "ba877f5d8963e8a3ced27060e89e508623bb4adbb7ce0b740b14c318576bb936",
+    "diagnosticSummary": "557d1b9a7ab874e6d62a4172cd477c7a1ab43a590b3cd43b136574f40951e6b4",
+    "fullFrameReview": "152623c548518726fffa0d20f1aaefc048d78b2d963ba876663c633ad25deccc",
+    "contactSheet": "be274e70ac5ad52feb870ca3fab0caab4dd2b9b5fc741db8bcc1910f861ad7cb",
+    "circleCandidateCsv": "10859c14fb41d04ee78d425de7845f74f6ee6869d1e31b58a319177c79eff0bb"
+  }
+}
