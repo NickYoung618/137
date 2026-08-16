@@ -89,3 +89,5 @@ SC-012端到端P95环境证据；唯一未关闭的业务门是Mac原始BMP人�
 
 结论：020是默认关闭、可审计、fail-closed的实验框架；具备推送功能分支供Mac验证的工程条件，但不具备合入main、
 默认启用、生产精度或准确率声明条件。
+
+实现提交269b35c已推送到origin/020-fixture-shadow-groove-consistency；main与origin/main保持04d1796，未合并。

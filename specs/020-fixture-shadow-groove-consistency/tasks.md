@@ -77,7 +77,7 @@
 - [x] T040 Measure default and experimental latency/RSS with method and environment recorded in specs/020-fixture-shadow-groove-consistency/evidence.md
 - [x] T041 Run git diff --check, JSON parsing, media/archive/JSONL, absolute-path and added-large-file pollution audits
 - [x] T042 Mark completed tasks, re-run SpecKit consistency analysis and record residual BLOCKED items in specs/020-fixture-shadow-groove-consistency/evidence.md
-- [ ] T043 Commit locally, push branch 020-fixture-shadow-groove-consistency without merging main, and report exact Mac commands
+- [x] T043 Commit locally, push branch 020-fixture-shadow-groove-consistency without merging main, and report exact Mac commands
 
 ## Dependencies and Execution Order
 
