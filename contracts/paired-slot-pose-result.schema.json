@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "paired-slot-pose-result.schema.json",
+  "title": "双拍槽姿态结果",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "sampleId", "pairId", "status", "valid", "error", "captures",
+    "hypotheses", "selectedMatch", "matchMarginDeg", "partRelativeGrooveAngleDeg",
+    "currentImageProfileAngleDeg", "currentAngleDeg", "targetAngleDeg", "toleranceDeg",
+    "correctionRawDeg", "correctionDeg", "rotationDirection", "withinTolerance",
+    "measurementSource", "plcExecution"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "paired-slot-pose-result/1"},
+    "sampleId": {"type": "string", "minLength": 1},
+    "pairId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["EXPERIMENT_DISABLED", "DIAGNOSTIC_ONLY", "DETECTED", "FAILED"]},
+    "valid": {"type": "boolean"},
+    "error": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["code", "stage", "message"],
+          "properties": {
+            "code": {"type": "string", "minLength": 1},
+            "stage": {"type": "string", "minLength": 1},
+            "message": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "captures": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/capture"}},
+    "hypotheses": {"type": "array", "items": {"$ref": "#/$defs/hypothesis"}},
+    "selectedMatch": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/hypothesis"}]},
+    "matchMarginDeg": {"type": ["number", "null"]},
+    "partRelativeGrooveAngleDeg": {"type": ["number", "null"], "minimum": 0, "exclusiveMaximum": 360},
+    "currentImageProfileAngleDeg": {"type": ["number", "null"], "minimum": 0, "exclusiveMaximum": 360},
+    "currentAngleDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+    "targetAngleDeg": {"const": 85.0},
+    "toleranceDeg": {"const": 5.0},
+    "correctionRawDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+    "correctionDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+    "rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE", "NONE", null]},
+    "withinTolerance": {"type": ["boolean", "null"]},
+    "measurementSource": {"enum": ["CAPTURE_1_PROPAGATED", "CAPTURE_2_DIRECT", null]},
+    "plcExecution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "authoritative", "mechanicalCorrectionDeg", "plcCommand", "blockers"],
+      "properties": {
+        "status": {"const": "NOT_AUTHORIZED"},
+        "authoritative": {"const": false},
+        "mechanicalCorrectionDeg": {"type": "null"},
+        "plcCommand": {"type": "null"},
+        "blockers": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "candidate": {"type": "object"},
+    "capture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["captureIndex", "relativePath", "imageSha256", "singleFrameSchemaVersion", "singleFrameValid", "singleFrameErrorCode", "candidates"],
+      "properties": {
+        "captureIndex": {"enum": [1, 2]},
+        "relativePath": {"type": "string"},
+        "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "singleFrameSchemaVersion": {"type": ["string", "null"]},
+        "singleFrameValid": {"type": "boolean"},
+        "singleFrameErrorCode": {"type": ["string", "null"]},
+        "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}}
+      }
+    },
+    "hypothesis": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "hypothesisId", "firstCandidateId", "secondCandidateId", "secondAngleInFirstPartFrameDeg",
+        "rotationSignedDeg", "angularResidualDeg", "halfWidthNormalizedDifference",
+        "prominenceNormalizedDifference", "deficitAreaNormalizedDifference", "profileNormalizedMae", "score",
+        "firstUsable", "secondUsable", "passed", "failedChecks", "authoritative"
+      ],
+      "properties": {
+        "hypothesisId": {"type": "string"}, "firstCandidateId": {"type": "string"},
+        "secondCandidateId": {"type": "string"},
+        "secondAngleInFirstPartFrameDeg": {"type": "number"},
+        "rotationSignedDeg": {"type": "number"}, "angularResidualDeg": {"type": "number"},
+        "halfWidthNormalizedDifference": {"type": ["number", "null"]},
+        "prominenceNormalizedDifference": {"type": ["number", "null"]},
+        "deficitAreaNormalizedDifference": {"type": ["number", "null"]},
+        "profileNormalizedMae": {"type": ["number", "null"]},
+        "score": {"type": "number"}, "firstUsable": {"type": "boolean"},
+        "secondUsable": {"type": "boolean"}, "passed": {"type": "boolean"},
+        "failedChecks": {"type": "array", "items": {"type": "string"}},
+        "authoritative": {"type": "boolean"}
+      }
+    }
+  }
+}

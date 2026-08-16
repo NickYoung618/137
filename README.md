@@ -99,6 +99,18 @@ uv run python tools/run_slot_pose_batch.py \
 因此单槽v2可输出测量、PASS/FAIL和图像纠偏诊断，但顶层正式机械角仍为空。完整规格和Mac命令见
 `specs/003-a2-paired-notch-stability/`。
 
+## 021双拍配对槽姿态实验
+
+现场已确定同一物理零件拍摄两次并在中间旋转，用跨帧运动规律区分随件真槽和相机坐标近似固定的夹具阴影。
+旋转角、方向和重复误差尚未确认，因此021只在独立功能分支提供默认关闭框架：每帧继续复用现有外圆、暗区、
+真槽几何、亚像素侧壁和同源性诊断；第二帧候选按配置的有符号旋转量映回第一帧零件坐标，只有唯一匹配且
+至少一帧无遮挡才输出第二拍后的图像引导。参数`UNCONFIRMED`、缺帧、错配、0/多解或两帧均遮挡全部
+fail-closed，PLC字段始终为空。约31°/328°不形成ignore mask。
+
+`tools/prepare_slot_pose_prefill_review.py`在Git外为part-019 374/369生成raw、019/020叠加、三栏联系表和
+`AUTO_` LabelMe预填；自动shape明确`human_verified=false`，人工只需确认真槽、两处阴影和左右壁是否同源，
+无需从空白图重画外圆。完整契约和Mac命令见`specs/021-paired-capture-slot-pose/quickstart.md`。
+
 ## 007单真槽闭环图像引导
 
 `single-real-groove-pose-config/3`修正了旧v2把“当前不在85°附近”和“PLC映射未确认”混入失败状态的问题。

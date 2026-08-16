@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-pose-prefill-review.schema.json",
+  "title": "槽姿态AUTO预标注审阅索引",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "datasetId", "counts", "entries", "truthPolicy"],
+  "properties": {
+    "schemaVersion": {"const": "slot-pose-prefill-review/1"},
+    "datasetId": {"type": ["string", "null"]},
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["images", "humanVerified", "pending"],
+      "properties": {
+        "images": {"type": "integer", "minimum": 0},
+        "humanVerified": {"const": 0},
+        "pending": {"type": "integer", "minimum": 0}
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": [
+          "imageId", "relativeImagePath", "imageSha256", "rawRelativePath",
+          "overlay019RelativePath", "overlay020RelativePath", "autoLabelmeRelativePath",
+          "autoLabelmeSha256", "humanVerified", "reviewQuestions"
+        ],
+        "properties": {
+          "imageId": {"type": "string", "minLength": 1},
+          "relativeImagePath": {"type": "string", "minLength": 1},
+          "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "rawRelativePath": {"type": "string", "minLength": 1},
+          "overlay019RelativePath": {"type": "string", "minLength": 1},
+          "overlay020RelativePath": {"type": "string", "minLength": 1},
+          "autoLabelmeRelativePath": {"type": "string", "minLength": 1},
+          "autoLabelmeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "humanVerified": {"const": false},
+          "reviewQuestions": {"type": "array", "minItems": 4, "items": {"type": "string"}}
+        }
+      }
+    },
+    "truthPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["autoShapesAreTruth", "runtimeInputAllowed", "humanMustReview"],
+      "properties": {
+        "autoShapesAreTruth": {"const": false},
+        "runtimeInputAllowed": {"const": false},
+        "humanMustReview": {"const": true}
+      }
+    }
+  }
+}

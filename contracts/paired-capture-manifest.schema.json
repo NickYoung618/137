@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "paired-capture-manifest.schema.json",
+  "title": "双拍槽姿态采集清单",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "datasetId", "pairs"],
+  "properties": {
+    "schemaVersion": {"const": "paired-capture-manifest/1"},
+    "datasetId": {"type": "string", "minLength": 1},
+    "pairs": {
+      "type": "array", "minItems": 1,
+      "items": {"$ref": "#/$defs/pair"}
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "capture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["captureIndex", "relativePath", "imageSha256"],
+      "properties": {
+        "captureIndex": {"enum": [1, 2]},
+        "relativePath": {"type": "string", "minLength": 1},
+        "imageSha256": {"$ref": "#/$defs/sha"},
+        "captureTimestamp": {"type": ["string", "null"]}
+      }
+    },
+    "rotation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["parameterStatus", "nominalRotationDeg", "rotationDirection", "rotationToleranceDeg", "conventionId"],
+      "properties": {
+        "parameterStatus": {"enum": ["CONFIRMED", "UNCONFIRMED"]},
+        "nominalRotationDeg": {"type": ["number", "null"], "minimum": 0, "exclusiveMaximum": 360},
+        "rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE", null]},
+        "rotationToleranceDeg": {"type": ["number", "null"], "minimum": 0, "maximum": 30},
+        "conventionId": {"const": "image-x-right-y-down-clockwise/1"}
+      }
+    },
+    "pair": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sampleId", "pairId", "rotation", "captures"],
+      "properties": {
+        "sampleId": {"type": "string", "minLength": 1},
+        "pairId": {"type": "string", "minLength": 1},
+        "rotation": {"$ref": "#/$defs/rotation"},
+        "captures": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"$ref": "#/$defs/capture"}
+        }
+      }
+    }
+  }
+}

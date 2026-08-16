@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "paired-slot-pose-config.schema.json",
+  "title": "双拍槽姿态实验配置",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "enabled", "thresholdVersion", "maxCandidatesPerFrame",
+    "maxMatchResidualDeg", "minMatchMarginDeg", "minDiscriminatingRotationDeg",
+    "maxHalfWidthNormalizedDifference", "maxProminenceNormalizedDifference",
+    "maxDeficitAreaNormalizedDifference", "maxProfileNormalizedMae", "target"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "paired-slot-pose-config/1"},
+    "enabled": {"type": "boolean", "default": false},
+    "thresholdVersion": {"type": "string", "minLength": 1},
+    "maxCandidatesPerFrame": {"type": "integer", "minimum": 1, "maximum": 64},
+    "maxMatchResidualDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "minMatchMarginDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "minDiscriminatingRotationDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "maxHalfWidthNormalizedDifference": {"type": "number", "minimum": 0, "maximum": 1},
+    "maxProminenceNormalizedDifference": {"type": "number", "minimum": 0, "maximum": 1},
+    "maxDeficitAreaNormalizedDifference": {"type": "number", "minimum": 0, "maximum": 1},
+    "maxProfileNormalizedMae": {"type": "number", "minimum": 0, "maximum": 1},
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["targetAngleDeg", "toleranceDeg", "acceptedMinDeg", "acceptedMaxDeg", "datumRay", "positiveDirection"],
+      "properties": {
+        "targetAngleDeg": {"const": 85.0},
+        "toleranceDeg": {"const": 5.0},
+        "acceptedMinDeg": {"const": 80.0},
+        "acceptedMaxDeg": {"const": 90.0},
+        "datumRay": {"const": "positive_y_down"},
+        "positiveDirection": {"const": "clockwise"}
+      }
+    }
+  }
+}

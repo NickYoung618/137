@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "paired-slot-pose-config/1",
+  "enabled": false,
+  "thresholdVersion": "paired-capture-match-v1",
+  "maxCandidatesPerFrame": 16,
+  "maxMatchResidualDeg": 2.0,
+  "minMatchMarginDeg": 1.0,
+  "minDiscriminatingRotationDeg": 5.0,
+  "maxHalfWidthNormalizedDifference": 0.6,
+  "maxProminenceNormalizedDifference": 0.6,
+  "maxDeficitAreaNormalizedDifference": 0.6,
+  "maxProfileNormalizedMae": 0.4,
+  "target": {
+    "targetAngleDeg": 85.0,
+    "toleranceDeg": 5.0,
+    "acceptedMinDeg": 80.0,
+    "acceptedMaxDeg": 90.0,
+    "datumRay": "positive_y_down",
+    "positiveDirection": "clockwise"
+  }
+}
