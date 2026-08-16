@@ -10,6 +10,65 @@ from typing import Any, Iterable
 import numpy as np
 
 
+DEFAULT_DARK_CANDIDATE_ROBUSTNESS_CONFIG: dict[str, Any] = {
+    "schema_version": "angular-dark-candidate-robustness/1",
+    "enabled": False,
+    "quantile_levels": [0.05, 0.10],
+    "max_hypotheses": 3,
+    "dedup_center_deg": 2.0,
+    "min_interval_overlap_ratio": 0.5,
+}
+
+
+def merged_dark_candidate_robustness_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    supplied = config or {}
+    if not isinstance(supplied, dict):
+        raise ValueError("detector.dark_candidate_robustness must be an object")
+    unknown = sorted(set(supplied) - set(DEFAULT_DARK_CANDIDATE_ROBUSTNESS_CONFIG))
+    if unknown:
+        raise ValueError(f"detector.dark_candidate_robustness has unknown fields: {unknown}")
+    merged = {**DEFAULT_DARK_CANDIDATE_ROBUSTNESS_CONFIG, **supplied}
+    if merged["schema_version"] != "angular-dark-candidate-robustness/1":
+        raise ValueError("detector.dark_candidate_robustness.schema_version is unsupported")
+    if not isinstance(merged["enabled"], bool):
+        raise ValueError("detector.dark_candidate_robustness.enabled must be boolean")
+    levels = merged["quantile_levels"]
+    if (
+        not isinstance(levels, list)
+        or len(levels) > 3
+        or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in levels)
+    ):
+        raise ValueError("detector.dark_candidate_robustness.quantile_levels is invalid")
+    levels = [float(value) for value in levels]
+    if (
+        any(not math.isfinite(value) or not 0.0 < value < 0.5 for value in levels)
+        or levels != sorted(set(levels))
+    ):
+        raise ValueError(
+            "detector.dark_candidate_robustness.quantile_levels must be unique increasing values in (0,0.5)"
+        )
+    merged["quantile_levels"] = levels
+    maximum = merged["max_hypotheses"]
+    if isinstance(maximum, bool) or not isinstance(maximum, int) or not 1 <= maximum <= 4:
+        raise ValueError("detector.dark_candidate_robustness.max_hypotheses must be in [1,4]")
+    if maximum < 1 + len(levels):
+        raise ValueError(
+            "detector.dark_candidate_robustness.max_hypotheses is smaller than configured hypotheses"
+        )
+    for key in ("dedup_center_deg", "min_interval_overlap_ratio"):
+        value = merged[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ValueError(f"detector.dark_candidate_robustness.{key} must be finite")
+        merged[key] = float(value)
+    if not 0.0 < merged["dedup_center_deg"] <= 30.0:
+        raise ValueError("detector.dark_candidate_robustness.dedup_center_deg must be in (0,30]")
+    if not 0.0 <= merged["min_interval_overlap_ratio"] <= 1.0:
+        raise ValueError(
+            "detector.dark_candidate_robustness.min_interval_overlap_ratio must be in [0,1]"
+        )
+    return merged
+
+
 def wrap_360_deg(value: float) -> float:
     return float(value) % 360.0
 
@@ -144,43 +203,164 @@ def _circular_runs(mask: np.ndarray) -> list[list[int]]:
     return runs
 
 
-def extract_dark_candidates(profile: np.ndarray, config: dict[str, Any]) -> tuple[list[NotchCandidate], dict[str, Any]]:
-    """Extract every qualifying circular dark run from a one-dimensional profile."""
+def _runs_at_threshold(
+    smoothed: np.ndarray,
+    *,
+    threshold: float,
+    median: float,
+    config: dict[str, Any],
+    origin: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    step = 360.0 / float(smoothed.size)
+    accepted: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    for run in _circular_runs(smoothed < threshold):
+        width = len(run) * step
+        half_width = width / 2.0
+        prominence = float(median - np.min(smoothed[run]))
+        weights = np.maximum(0.0, threshold - smoothed[run])
+        reasons: list[str] = []
+        if weights.sum() <= 1e-9: reasons.append("zero_deficit")
+        if prominence < float(config["min_prominence"]): reasons.append("prominence")
+        if half_width < float(config["min_half_width_deg"]): reasons.append("half_width_too_small")
+        if half_width > float(config["max_half_width_deg"]): reasons.append("half_width_too_large")
+        base = float(run[0]) * step
+        offsets = np.arange(len(run), dtype=np.float64) * step
+        center = (
+            wrap_360_deg(base + float(np.sum(offsets * weights) / np.sum(weights)))
+            if weights.sum() > 1e-9 else wrap_360_deg(base + width / 2.0)
+        )
+        record = {
+            "center_deg": center,
+            "half_width_deg": half_width,
+            "start_deg": wrap_360_deg((float(run[0]) - 0.5) * step),
+            "end_deg": wrap_360_deg((float(run[-1]) + 0.5) * step),
+            "wraps_boundary": run[0] > run[-1],
+            "prominence": prominence,
+            "deficit_area": float(np.sum(weights) * step),
+            "_indices": frozenset(run),
+            "_origin": origin,
+        }
+        if reasons:
+            rejected.append({
+                "origin": origin,
+                "centerDeg": center,
+                "halfWidthDeg": half_width,
+                "startDeg": record["start_deg"],
+                "endDeg": record["end_deg"],
+                "wrapsBoundary": record["wraps_boundary"],
+                "prominence": prominence,
+                "reasons": reasons,
+            })
+        else:
+            accepted.append(record)
+    return accepted, rejected
+
+
+def _same_dark_run(first: dict[str, Any], second: dict[str, Any], robustness: dict[str, Any]) -> bool:
+    if circular_distance_deg(float(first["center_deg"]), float(second["center_deg"])) > float(
+        robustness["dedup_center_deg"]
+    ):
+        return False
+    overlap = len(first["_indices"] & second["_indices"])
+    denominator = min(len(first["_indices"]), len(second["_indices"]))
+    return denominator > 0 and overlap / denominator >= float(robustness["min_interval_overlap_ratio"])
+
+
+def extract_dark_candidates(
+    profile: np.ndarray,
+    config: dict[str, Any],
+    robustness_config: dict[str, Any] | None = None,
+) -> tuple[list[NotchCandidate], dict[str, Any]]:
+    """Extract qualifying dark runs; optional hypotheses share one smoothed profile."""
     validate_profile_config(config)
+    robustness = merged_dark_candidate_robustness_config(robustness_config)
     values = np.asarray(profile, dtype=np.float64)
     smoothed = circular_smooth(values, int(config["smoothing_window"]))
     median = float(np.median(smoothed))
     mad = float(np.median(np.abs(smoothed - median)))
     robust_sigma = max(1e-6, 1.4826 * mad)
     threshold = median - float(config["mad_multiplier"]) * robust_sigma
-    step = 360.0 / float(values.size)
-    provisional: list[dict[str, float | bool]] = []
-    for run in _circular_runs(smoothed < threshold):
-        width = len(run) * step
-        half_width = width / 2.0
-        prominence = float(median - np.min(smoothed[run]))
-        weights = np.maximum(0.0, threshold - smoothed[run])
-        if (
-            weights.sum() <= 1e-9
-            or prominence < float(config["min_prominence"])
-            or half_width < float(config["min_half_width_deg"])
-            or half_width > float(config["max_half_width_deg"])
-        ):
-            continue
-        base = float(run[0]) * step
-        offsets = np.arange(len(run), dtype=np.float64) * step
-        center = wrap_360_deg(base + float(np.sum(offsets * weights) / np.sum(weights)))
-        start = wrap_360_deg((float(run[0]) - 0.5) * step)
-        end = wrap_360_deg((float(run[-1]) + 0.5) * step)
-        provisional.append({
-            "center_deg": center,
-            "half_width_deg": half_width,
-            "start_deg": start,
-            "end_deg": end,
-            "wraps_boundary": start > end,
-            "prominence": prominence,
-            "deficit_area": float(np.sum(weights) * step),
+    observed_min = float(np.min(smoothed))
+    observed_max = float(np.max(smoothed))
+    raw_usable = observed_min < threshold < observed_max
+    hypotheses: list[tuple[str, float, bool]] = [("mad", threshold, raw_usable)]
+    if robustness["enabled"]:
+        hypotheses.extend(
+            (f"quantile:{level:g}", float(np.quantile(smoothed, level)), True)
+            for level in robustness["quantile_levels"]
+        )
+    accepted_by_hypothesis: list[dict[str, Any]] = []
+    rejected_runs: list[dict[str, Any]] = []
+    hypothesis_records: list[dict[str, Any]] = []
+    threshold_by_origin: dict[str, float] = {}
+    for hypothesis_index, (origin, candidate_threshold, usable) in enumerate(
+        hypotheses[: int(robustness["max_hypotheses"])], start=1,
+    ):
+        evaluate = usable or not robustness["enabled"]
+        accepted, rejected = (
+            _runs_at_threshold(
+                smoothed, threshold=candidate_threshold, median=median, config=config, origin=origin,
+            ) if evaluate else ([], [])
+        )
+        accepted_by_hypothesis.extend(accepted)
+        rejected_runs.extend(rejected)
+        threshold_by_origin[origin] = candidate_threshold
+        accepted_public = [{
+            "origin": origin,
+            "centerDeg": item["center_deg"],
+            "halfWidthDeg": item["half_width_deg"],
+            "startDeg": item["start_deg"],
+            "endDeg": item["end_deg"],
+            "wrapsBoundary": item["wraps_boundary"],
+            "prominence": item["prominence"],
+            "reasons": [],
+        } for item in accepted]
+        source_value = None if origin == "mad" else float(origin.split(":", 1)[1])
+        hypothesis_records.append({
+            "hypothesisId": f"hypothesis-{hypothesis_index:03d}",
+            "origin": origin,
+            "source": "mad" if origin == "mad" else "quantile",
+            "sourceValue": source_value,
+            "threshold": candidate_threshold,
+            "rawThreshold": candidate_threshold,
+            "boundedThreshold": min(observed_max, max(observed_min, candidate_threshold)),
+            "usable": usable,
+            "evaluated": evaluate,
+            "status": "evaluated" if evaluate else "unusable",
+            "rawRuns": accepted_public + rejected,
+            "acceptedRuns": accepted_public,
+            "rejectedRuns": rejected,
+            "acceptedRunCount": len(accepted),
+            "rejectedRunCount": len(rejected),
         })
+
+    if robustness["enabled"]:
+        clusters: list[dict[str, Any]] = []
+        for item in sorted(
+            accepted_by_hypothesis,
+            key=lambda value: (float(value["center_deg"]), -float(value["prominence"]), value["_origin"]),
+        ):
+            cluster = next(
+                (current for current in clusters if _same_dark_run(item, current["representative"], robustness)),
+                None,
+            )
+            if cluster is None:
+                clusters.append({"representative": item, "origins": {item["_origin"]}})
+            else:
+                cluster["origins"].add(item["_origin"])
+                representative = cluster["representative"]
+                if (
+                    float(item["prominence"]), float(item["deficit_area"])
+                ) > (
+                    float(representative["prominence"]), float(representative["deficit_area"])
+                ):
+                    cluster["representative"] = item
+        provisional = [cluster["representative"] for cluster in clusters]
+        origins_by_center = {id(cluster["representative"]): sorted(cluster["origins"]) for cluster in clusters}
+    else:
+        provisional = accepted_by_hypothesis
+        origins_by_center = {id(item): [item["_origin"]] for item in provisional}
 
     by_center = sorted(provisional, key=lambda item: float(item["center_deg"]))
     quality_order = sorted(
@@ -192,10 +372,13 @@ def extract_dark_candidates(profile: np.ndarray, config: dict[str, Any]) -> tupl
         ),
     )
     rank_by_index = {index: rank for rank, index in enumerate(quality_order, start=1)}
-    candidates = [
-        NotchCandidate(candidate_id=f"candidate-{index + 1:03d}", rank=rank_by_index[index], **item)
-        for index, item in enumerate(by_center)
-    ]
+    candidates = []
+    candidate_origins: dict[str, list[str]] = {}
+    for index, item in enumerate(by_center):
+        identifier = f"candidate-{index + 1:03d}"
+        candidate_origins[identifier] = origins_by_center[id(item)]
+        payload = {key: value for key, value in item.items() if not key.startswith("_")}
+        candidates.append(NotchCandidate(candidate_id=identifier, rank=rank_by_index[index], **payload))
     ranked = sorted(candidates, key=lambda item: item.rank)
     summary = {
         "count": len(candidates),
@@ -208,6 +391,19 @@ def extract_dark_candidates(profile: np.ndarray, config: dict[str, Any]) -> tupl
         "medianIntensity": median,
         "madIntensity": mad,
         "darkThreshold": threshold,
+        "rawDarkThreshold": threshold,
+        "thresholdUsable": raw_usable,
+        "thresholdMode": "multi_threshold" if robustness["enabled"] else "mad",
+        "thresholdHypotheses": hypothesis_records,
+        "hypothesisCandidateCount": len(accepted_by_hypothesis),
+        "deduplicatedCount": len(candidates),
+        "candidateHypothesisOrigins": candidate_origins,
+        "candidateOrigins": candidate_origins,
+        "candidateSourceThresholds": {
+            identifier: [threshold_by_origin[origin] for origin in origins]
+            for identifier, origins in candidate_origins.items()
+        },
+        "rejectedRuns": rejected_runs,
     }
     return candidates, summary
 

@@ -34,6 +34,22 @@ class GyjEdgeProbe:
         return self.truth[0] + radius * math.cos(angle), self.truth[1] + radius * math.sin(angle)
 
 
+class LocalResidualProbe:
+    def __init__(self, truth, sectors, offset=7.0):
+        self.truth = truth
+        self.sectors = sectors
+        self.offset = offset
+
+    def __call__(self, gray, center, angle, predicted_radius):
+        degrees = math.degrees(angle) % 360.0
+        affected = any(
+            (start <= degrees <= end if start <= end else degrees >= start or degrees <= end)
+            for start, end in self.sectors
+        )
+        radius = self.truth[2] + (self.offset if affected else 0.0)
+        return self.truth[0] + radius * math.cos(angle), self.truth[1] + radius * math.sin(angle)
+
+
 class FitProbe:
     def __init__(self):
         self.calls = []
@@ -74,6 +90,9 @@ class PhysicalOuterCircleTests(unittest.TestCase):
         self.assertAlmostEqual(truth[0], circle["centerX"], delta=1e-6)
         self.assertAlmostEqual(truth[1], circle["centerY"], delta=1e-6)
         self.assertAlmostEqual(truth[2], circle["radiusPx"], delta=1e-6)
+        empty = [item for item in result["sectorEvidence"]["sectors"] if item["pointCount"] == 0]
+        self.assertTrue(empty)
+        self.assertTrue(all(item["residualP95Px"] is None for item in empty))
 
     def test_insufficient_gyj_edge_points_fails_without_fitting_or_fallback_circle(self):
         calls = []
@@ -93,6 +112,109 @@ class PhysicalOuterCircleTests(unittest.TestCase):
         self.assertIsNone(result["physicalCircle"])
         self.assertEqual([], calls)
         self.assertIn("insufficient_edge_points", result["failedChecks"])
+
+    def test_sector_evidence_is_emitted_while_recovery_is_default_off(self):
+        truth = (200.0, 210.0, 100.0)
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2],
+            LocalResidualProbe(truth, [(30.0, 50.0)]),
+            lambda points, fallback: truth,
+            {}, source_sha256="c" * 64,
+        )
+        self.assertEqual("failed", result["status"])
+        self.assertEqual(["residual_p95"], result["failedChecks"])
+        self.assertEqual(36, result["sectorEvidence"]["binCount"])
+        self.assertGreater(result["sectorEvidence"]["suspectSectorCount"], 0)
+        self.assertEqual("disabled", result["robustRefit"]["status"])
+        self.assertAlmostEqual(5.0, result["residualThresholdPx"])
+        self.assertLess(result["residualMarginPx"], 0.0)
+
+    def test_bounded_local_sector_exclusion_can_recover_residual_only_failure(self):
+        truth = (200.0, 210.0, 100.0)
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2],
+            LocalResidualProbe(truth, [(30.0, 50.0)]),
+            lambda points, fallback: truth,
+            {"sector_robustness": {"enabled": True}}, source_sha256="d" * 64,
+        )
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual([], result["failedChecks"])
+        self.assertEqual("accepted", result["robustRefit"]["status"])
+        self.assertGreater(result["robustRefit"]["excludedPointCount"], 0)
+        self.assertLessEqual(result["residualP95Px"], 5.0)
+
+    def test_distributed_bad_sectors_remain_fail_closed(self):
+        truth = (200.0, 210.0, 100.0)
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2],
+            LocalResidualProbe(truth, [(0.0, 10.0), (60.0, 70.0), (120.0, 130.0),
+                                       (180.0, 190.0), (240.0, 250.0)]),
+            lambda points, fallback: truth,
+            {"sector_robustness": {"enabled": True}}, source_sha256="e" * 64,
+        )
+        self.assertEqual("failed", result["status"])
+        self.assertIn("residual_p95", result["failedChecks"])
+        self.assertEqual("rejected", result["robustRefit"]["status"])
+        self.assertIn("too_many_suspect_sectors", result["robustRefit"]["reasons"])
+
+    def test_sector_runs_merge_across_zero_degrees(self):
+        truth = (200.0, 210.0, 100.0)
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2],
+            LocalResidualProbe(truth, [(350.0, 10.0)]),
+            lambda points, fallback: truth,
+            {}, source_sha256="f" * 64,
+        )
+        runs = result["sectorEvidence"]["suspectRuns"]
+        self.assertEqual(1, len(runs), runs)
+        self.assertTrue(runs[0]["wrapsBoundary"])
+
+    def test_wraparound_local_pollution_can_be_recovered_once(self):
+        truth = (200.0, 210.0, 100.0)
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2],
+            LocalResidualProbe(truth, [(350.0, 10.0)]),
+            lambda points, fallback: truth,
+            {"sector_robustness": {"enabled": True}}, source_sha256="1" * 64,
+        )
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual("accepted", result["robustRefit"]["status"])
+
+    def test_recovery_rejects_insufficient_retained_coverage(self):
+        truth = (200.0, 210.0, 100.0)
+
+        def edge(gray, center, angle, predicted_radius):
+            degrees = math.degrees(angle) % 360.0
+            if 100.0 <= degrees <= 195.0:
+                return None
+            radius = truth[2] + (7.0 if 30.0 <= degrees <= 50.0 else 0.0)
+            return truth[0] + radius * math.cos(angle), truth[1] + radius * math.sin(angle)
+
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2], edge,
+            lambda points, fallback: truth,
+            {"sector_robustness": {"enabled": True}}, source_sha256="2" * 64,
+        )
+        self.assertEqual("failed", result["status"])
+        self.assertEqual("rejected", result["robustRefit"]["status"])
+        self.assertIn("retained_coverage", result["robustRefit"]["reasons"])
+
+    def test_recovery_rejects_refit_circle_drift(self):
+        truth = (200.0, 210.0, 100.0)
+        calls = []
+
+        def drifting_fit(points, fallback):
+            calls.append(len(points))
+            return truth if len(calls) == 1 else (truth[0] + 4.0, truth[1], truth[2])
+
+        result = locate_physical_outer_circle(
+            np.zeros((500, 500)), truth[:2], truth[2], truth[:2], truth[2],
+            LocalResidualProbe(truth, [(30.0, 50.0)]), drifting_fit,
+            {"sector_robustness": {"enabled": True}}, source_sha256="3" * 64,
+        )
+        self.assertEqual("failed", result["status"])
+        self.assertEqual(2, len(calls))
+        self.assertIn("refit_center_delta", result["robustRefit"]["reasons"])
 
 
 if __name__ == "__main__":

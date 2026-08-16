@@ -141,6 +141,10 @@ class FullFrameSelectionTests(unittest.TestCase):
         self.assertEqual(1, result["circleCandidates"][0]["rank"])
         self.assertEqual(72 + 144, len(calls))
         self.assertEqual("circle-candidate-001", result["selectedCandidateId"])
+        sparse = result["circleCandidates"][0]
+        self.assertEqual(36, sparse["sectorEvidence"]["binCount"])
+        self.assertIn("residualMarginPx", sparse)
+        self.assertEqual(36, result["finalPhysicalCircleDiagnostics"]["sectorEvidence"]["binCount"])
 
     def test_none_overflow_and_equal_double_fail_closed(self) -> None:
         no_circle = locate_full_frame_circle(

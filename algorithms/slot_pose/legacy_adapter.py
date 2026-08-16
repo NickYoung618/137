@@ -180,13 +180,21 @@ class LegacyAEndFaceAdapter:
             int(profile_config["n_radii"]),
             int(profile_config["n_angles"]),
         )
-        candidates, summary = extract_dark_candidates(polar.mean(axis=0), profile_config)
+        candidates, summary = extract_dark_candidates(
+            polar.mean(axis=0),
+            profile_config,
+            self.config["detector"].get("dark_candidate_robustness"),
+        )
         pairing_config = self.config["detector"].get("pairing")
         pairing = assess_pairs(candidates, pairing_config) if isinstance(pairing_config, dict) else None
         profile_diagnostics.update({
             "medianIntensity": summary["medianIntensity"],
             "madIntensity": summary["madIntensity"],
             "darkThreshold": summary["darkThreshold"],
+            "rawDarkThreshold": summary["rawDarkThreshold"],
+            "thresholdUsable": summary["thresholdUsable"],
+            "thresholdMode": summary["thresholdMode"],
+            "thresholdHypotheses": summary["thresholdHypotheses"],
         })
         return {
             "angularProfile": profile_diagnostics,

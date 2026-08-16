@@ -1,5 +1,27 @@
 {
   "diagnostic_mode": "single_real_groove",
+  "dark_candidate_robustness": {
+    "schema_version": "angular-dark-candidate-robustness/1",
+    "enabled": false,
+    "quantile_levels": [0.05, 0.1],
+    "max_hypotheses": 3,
+    "dedup_center_deg": 2.0,
+    "min_interval_overlap_ratio": 0.5
+  },
+  "physical_outer_circle": {
+    "sector_robustness": {
+      "schema_version": "physical-circle-sector-robustness/1",
+      "enabled": false,
+      "sector_bin_count": 36,
+      "min_points_per_sector": 3,
+      "suspect_residual_p95_multiplier": 1.0,
+      "max_excluded_sector_count": 4,
+      "max_contiguous_excluded_deg": 40.0,
+      "min_retained_angular_coverage": 0.72,
+      "max_refit_center_delta_px": 3.0,
+      "max_refit_radius_delta_px": 3.0
+    }
+  },
   "single_groove_pose": {
     "schema_version": "single-real-groove-pose-config/3",
     "output_schema_version": "slot-single-real-groove-pose/3",

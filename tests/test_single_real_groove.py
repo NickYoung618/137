@@ -276,6 +276,21 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
                 self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
                 self.assertFalse(payload["diagnostics"]["singleGroovePose"]["geometryValid"])
 
+    def test_multi_threshold_mode_does_not_turn_zero_or_multiple_grooves_into_guidance(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["config_id"] = "synthetic-multi-threshold-fail-closed"
+        config["detector"]["dark_candidate_robustness"] = {"enabled": True}
+        path = self.root / "multi-threshold-fail-closed.json"
+        write_json(path, config)
+        for name in ("zero-real-two-shadows.png", "two-real-one-shadow.png"):
+            with self.subTest(name=name):
+                payload = run(self.images / name, path, f"single:robust:{name}")
+                self.assertFalse(payload["result"]["valid"])
+                self.assertIn(payload["error"]["code"], {
+                    "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS",
+                })
+                self.assertIsNone(payload["result"]["signedRelativeRotationDeg"])
+
     def test_full_frame_locator_failure_stops_all_groove_and_angle_stages(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["config_id"] = "synthetic-full-frame-locator-not-found"

@@ -7,6 +7,11 @@ from pathlib import Path
 
 from PIL import Image
 
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None
+
 from algorithms.slot_pose.contract import (
     ERROR_CODES, build_result, effective_config_identity, effective_config_sha256,
     load_config, signed_relative_angle, validate_result,
@@ -34,6 +39,25 @@ def minimal_config() -> dict:
         },
         "detector": {},
     }
+
+
+def minimal_single_groove_config() -> dict:
+    config = minimal_config()
+    config["detector"] = {
+        "diagnostic_mode": "single_real_groove",
+        "min_notch_prominence": 1.0,
+        "min_polar_score": 1.0,
+        "max_rotation_disagreement_deg": 5.0,
+        "min_scale": 0.8,
+        "max_scale": 1.2,
+        "profile": {
+            "n_angles": 360, "n_radii": 10, "shell_width_px": 30.0,
+            "smoothing_window": 7, "mad_multiplier": 3.0, "min_prominence": 12.0,
+            "min_half_width_deg": 1.0, "max_half_width_deg": 30.0,
+        },
+        "single_groove_pose": DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3,
+    }
+    return config
 
 
 class SlotPoseContractTests(unittest.TestCase):
@@ -339,6 +363,115 @@ class SlotPoseContractTests(unittest.TestCase):
                 path.write_text(json.dumps(config), encoding="utf-8")
                 with self.subTest(key=key), self.assertRaisesRegex(ValueError, "groove_refinement"):
                     load_config(path)
+
+    def test_robustness_extensions_default_off_and_are_path_independent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_single_groove_config()
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            dark = loaded["detector"]["dark_candidate_robustness"]
+            sectors = loaded["detector"]["physical_outer_circle"]["sector_robustness"]
+            self.assertEqual("angular-dark-candidate-robustness/1", dark["schema_version"])
+            self.assertFalse(dark["enabled"])
+            self.assertEqual([0.05, 0.1], dark["quantile_levels"])
+            self.assertEqual("physical-circle-sector-robustness/1", sectors["schema_version"])
+            self.assertFalse(sectors["enabled"])
+            identity = effective_config_identity(loaded)
+            self.assertFalse(identity["detector"]["dark_candidate_robustness"]["enabled"])
+            self.assertNotIn("/read-only", json.dumps(identity))
+
+    def test_robustness_extensions_reject_invalid_or_unsafe_combinations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            invalid_dark = [
+                {"schema_version": "unknown", "enabled": False},
+                {"enabled": True, "quantile_levels": [0.1, 0.1]},
+                {"enabled": True, "quantile_levels": [0.0]},
+                {"enabled": True, "quantile_levels": [0.1, 0.2], "max_hypotheses": 2},
+                {"enabled": True, "dedup_center_deg": float("nan")},
+            ]
+            for extension in invalid_dark:
+                config = minimal_single_groove_config()
+                config["detector"]["dark_candidate_robustness"] = extension
+                path.write_text(json.dumps(config), encoding="utf-8")
+                with self.subTest(dark=extension), self.assertRaisesRegex(
+                    ValueError, "dark_candidate_robustness",
+                ):
+                    load_config(path)
+
+            invalid_sectors = [
+                {"schema_version": "unknown", "enabled": False},
+                {"enabled": True, "sector_bin_count": 4, "max_excluded_sector_count": 4},
+                {"enabled": True, "sector_bin_count": 36, "max_excluded_sector_count": 4,
+                 "min_retained_angular_coverage": 0.95},
+                {"enabled": True, "max_refit_center_delta_px": float("inf")},
+                {"enabled": 1},
+            ]
+            for extension in invalid_sectors:
+                config = minimal_single_groove_config()
+                config["detector"]["physical_outer_circle"] = {"sector_robustness": extension}
+                path.write_text(json.dumps(config), encoding="utf-8")
+                with self.subTest(sector=extension), self.assertRaisesRegex(
+                    ValueError, "sector_robustness",
+                ):
+                    load_config(path)
+
+    def test_robustness_cannot_be_enabled_outside_single_real_groove(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["detector"]["dark_candidate_robustness"] = {"enabled": True}
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "single_real_groove"):
+                load_config(path)
+            config = minimal_config()
+            config["detector"].update({
+                "diagnostic_mode": "multi_notch_roles",
+                "profile": minimal_single_groove_config()["detector"]["profile"],
+                "role_assignment": {
+                    "datum_definition": "single_candidate_ray",
+                    "assignments": {
+                        "datum_primary": {"expected_reference_azimuth_deg": 0.0, "max_deviation_deg": 20.0},
+                        "target_left": {"expected_reference_azimuth_deg": 90.0, "max_deviation_deg": 20.0},
+                    },
+                    "min_score_margin": 0.1,
+                    "max_opposition_error_deg": 20.0,
+                },
+                "physical_outer_circle": {"sector_robustness": {"enabled": True}},
+            })
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "single_real_groove"):
+                load_config(path)
+
+    @unittest.skipIf(jsonschema is None, "jsonschema is installed by the explicit Schema gate")
+    def test_robustness_extensions_match_config_schema(self) -> None:
+        schema = json.loads(
+            (Path(__file__).resolve().parents[1] / "contracts/slot-pose-config.schema.json")
+            .read_text(encoding="utf-8")
+        )
+        jsonschema.Draft202012Validator.check_schema(schema)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text(json.dumps(minimal_single_groove_config()), encoding="utf-8")
+            loaded = load_config(path)
+        jsonschema.validate(loaded, schema)
+
+    def test_experimental_config_materializer_never_mutates_base_or_legacy_mode(self) -> None:
+        from tools.prepare_slot_pose_robustness_config import prepare
+
+        base = minimal_single_groove_config()
+        original = json.loads(json.dumps(base))
+        experimental = prepare(base)
+        self.assertEqual(original, base)
+        self.assertTrue(experimental["detector"]["dark_candidate_robustness"]["enabled"])
+        self.assertTrue(
+            experimental["detector"]["physical_outer_circle"]["sector_robustness"]["enabled"]
+        )
+        self.assertTrue(experimental["config_id"].endswith("-019-experimental"))
+        legacy = minimal_config()
+        with self.assertRaisesRegex(ValueError, "single_real_groove"):
+            prepare(legacy)
 
 
 if __name__ == "__main__":

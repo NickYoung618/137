@@ -31,3 +31,16 @@
 角/置信度为空，这不等于槽识别失败或目标未评定。
 
 下游必须先检查`taskId`和`result.valid`，失败或超时立即清除上一任务角度并走现场确认的安全动作。
+
+## 019可选鲁棒诊断（不升顶层Schema）
+
+`slot-pose-result/3.diagnostics`是开放扩展点，019保留顶层契约版本不变：
+
+- `physicalOuterCircle.sectorEvidence`按圆周扇区给出点数、内点数和径向残差；空扇区残差为`null`。
+- `physicalOuterCircle.robustRefit`明确记录是否启用、是否实际重拟合、排除扇区、保留覆盖、拟合漂移及拒绝原因。
+- 全画面定位时，相同字段同时出现在稀疏`circleCandidates`和最终`finalPhysicalCircleDiagnostics`。
+- `angularProfile.rawDarkThreshold/thresholdUsable`保留原MAD阈值；`candidateSummary.thresholdHypotheses`、
+  `candidateHypothesisOrigins`和`rejectedRuns`解释分位数假设、跨假设去重和拒绝原因。
+
+这些字段只解释检测证据，不是人工真值。增强开关关闭时，既有有效/失败判定不变；增强开启后，0个或多个
+真槽、分布式圆污染、覆盖不足或重拟合漂移仍必须fail-closed并清空所有姿态角。

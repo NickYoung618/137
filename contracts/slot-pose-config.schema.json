@@ -74,6 +74,22 @@
             "max_half_width_deg": {"type": "number", "exclusiveMinimum": 0}
           }
         },
+        "dark_candidate_robustness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "enabled", "quantile_levels", "max_hypotheses", "dedup_center_deg", "min_interval_overlap_ratio"],
+          "properties": {
+            "schema_version": {"const": "angular-dark-candidate-robustness/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "quantile_levels": {
+              "type": "array", "maxItems": 3, "uniqueItems": true,
+              "items": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 0.5}
+            },
+            "max_hypotheses": {"type": "integer", "minimum": 1, "maximum": 4},
+            "dedup_center_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 30},
+            "min_interval_overlap_ratio": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
         "groove_recognition": {
           "type": "object",
           "properties": {
@@ -219,6 +235,7 @@
         },
         "physical_outer_circle": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "threshold_version": {"type": "string", "minLength": 1},
             "n_angles": {"type": "integer", "minimum": 36},
@@ -230,7 +247,24 @@
             "max_residual_p95_px": {"type": "number", "exclusiveMinimum": 0},
             "max_center_shift_px": {"type": "number", "exclusiveMinimum": 0},
             "min_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
-            "max_radius_ratio": {"type": "number", "exclusiveMinimum": 0}
+            "max_radius_ratio": {"type": "number", "exclusiveMinimum": 0},
+            "sector_robustness": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "enabled", "sector_bin_count", "min_points_per_sector", "suspect_residual_p95_multiplier", "max_excluded_sector_count", "max_contiguous_excluded_deg", "min_retained_angular_coverage", "max_refit_center_delta_px", "max_refit_radius_delta_px"],
+              "properties": {
+                "schema_version": {"const": "physical-circle-sector-robustness/1"},
+                "enabled": {"type": "boolean", "default": false},
+                "sector_bin_count": {"type": "integer", "minimum": 4, "maximum": 72},
+                "min_points_per_sector": {"type": "integer", "minimum": 1},
+                "suspect_residual_p95_multiplier": {"type": "number", "minimum": 1},
+                "max_excluded_sector_count": {"type": "integer", "minimum": 0, "maximum": 71},
+                "max_contiguous_excluded_deg": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 180},
+                "min_retained_angular_coverage": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "max_refit_center_delta_px": {"type": "number", "exclusiveMinimum": 0},
+                "max_refit_radius_delta_px": {"type": "number", "exclusiveMinimum": 0}
+              }
+            }
           }
         },
         "full_frame_circle_locator": {

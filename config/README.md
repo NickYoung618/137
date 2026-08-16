@@ -39,6 +39,11 @@
 - `detector.ambiguity_resolution`是默认关闭的有界恢复门。开启后，仅对最多3个已通过粗真槽门的候选逐个运行
   同一套现有亚像素槽壁/外圆交点精修；恰好1个幸存才允许进入姿态，0个、多个或超限均fail-closed。
   它禁止使用候选编号、85°目标、目录类别或验收集得分选槽；独立槽/阴影validation标签完成前不得在生产配置启用。
+- `detector.physical_outer_circle.sector_robustness`和`detector.dark_candidate_robustness`也是默认关闭的
+  019实验门，且只允许`single_real_groove`启用。前者把既有gyj射线残差按圆周扇区输出；仅当整圆唯一失败项
+  是局部残差、异常扇区数量/连续角宽/剩余覆盖均过门时，才复用同一批射线和原`robust_fit_circle`重拟合一次。
+  后者在同一条已平滑角剖面上增加有限分位数阈值，并按环形区间去重；最终仍由真槽几何门和“恰好一个”规则决定。
+  两者均不得按85°、候选编号、目录或当前数据得分选结果；缺少独立外圆/槽真值前不得改成生产默认。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，
@@ -67,6 +72,9 @@
 - 过渡盲测锁只消费Manifest/资格表，不接受results参数；冻结后未来开发必须使用导出的development Manifest，
   发布候选只通过`run_transitional_blind_once.py`执行一次。工具在调检测前独占写入execution claim，中断也不允许重跑。
   当前700张的锁永远是非严格过渡证据。
+- 019的跨零件鲁棒性验证使用`a2-robustness-parts.template.csv`列出的七个已暴露问题零件，按完整sample生成
+  2或3折开发/验证Manifest。工具在打开图片或历史results前以part-006的sample和SHA双重拒绝泄漏；历史审计
+  只解析目标SHA行并固定`accuracyEvaluated=false`。这些折用于防止针对单一零件调参，不是严格未见test。
 
 Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
 并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。

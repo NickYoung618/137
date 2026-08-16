@@ -106,6 +106,17 @@ def load_config(config_path: Path) -> dict[str, Any]:
         "legacy_single_notch", "paired_notches_centerline", "multi_notch_roles", "single_real_groove",
     }:
         raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
+    if "dark_candidate_robustness" in detector and mode != "single_real_groove":
+        from algorithms.slot_pose.angular_profile import merged_dark_candidate_robustness_config
+
+        extension = merged_dark_candidate_robustness_config(
+            detector.get("dark_candidate_robustness")
+        )
+        if extension["enabled"]:
+            raise ValueError(
+                "detector.dark_candidate_robustness can only be enabled in single_real_groove mode"
+            )
+        detector["dark_candidate_robustness"] = extension
     face_roi = detector.get("face_search_roi_normalized")
     if face_roi is not None:
         if (
@@ -151,9 +162,23 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["physical_outer_circle"] = merged_physical_outer_circle_config(
             detector.get("physical_outer_circle")
         )
+        if (
+            mode != "single_real_groove"
+            and detector["physical_outer_circle"]["sector_robustness"]["enabled"]
+        ):
+            raise ValueError(
+                "detector.physical_outer_circle.sector_robustness can only be enabled "
+                "in single_real_groove mode"
+            )
         if "full_frame_circle_locator" not in detector:
             from algorithms.slot_pose.full_frame_circle_locator import merged_full_frame_circle_locator_config
             detector["full_frame_circle_locator"] = merged_full_frame_circle_locator_config(None)
+        if mode == "single_real_groove":
+            from algorithms.slot_pose.angular_profile import merged_dark_candidate_robustness_config
+
+            detector["dark_candidate_robustness"] = merged_dark_candidate_robustness_config(
+                detector.get("dark_candidate_robustness")
+            )
     if mode == "multi_notch_roles":
         from algorithms.slot_pose.role_assignment import validate_role_config
 

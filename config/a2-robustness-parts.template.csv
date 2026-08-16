@@ -1,0 +1,8 @@
+sample_id,failure_family,selection_authority,selection_provenance
+normal:part-008,sparse-circle-boundary,algorithm-owner,readonly-diagnosis-YYYYMMDD
+normal:part-009,sparse-circle-systematic,algorithm-owner,readonly-diagnosis-YYYYMMDD
+normal:part-014,groove-ambiguous,algorithm-owner,readonly-diagnosis-YYYYMMDD
+normal:part-015,groove-filter-no-survivor,algorithm-owner,readonly-diagnosis-YYYYMMDD
+normal:part-019,dark-candidate-zero,algorithm-owner,readonly-diagnosis-YYYYMMDD
+normal:part-021,groove-filter-no-survivor,algorithm-owner,readonly-diagnosis-YYYYMMDD
+normal:part-023,final-circle-residual,algorithm-owner,readonly-diagnosis-YYYYMMDD

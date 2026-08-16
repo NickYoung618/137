@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2-robustness-fold-plan/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "planStatus", "priorExposure", "strictBlind", "selectionStrategy", "foldCount", "sampleCount", "imageCount", "groupingRowsSha256", "rootCauseRowsSha256", "sealLockPayloadSha256", "sealedSampleId", "sealedImageCount", "families", "folds", "limitations"],
+  "properties": {
+    "schemaVersion": {"const": "a2-robustness-fold-plan/1"},
+    "planStatus": {"enum": ["READY", "INSUFFICIENT_PARTS", "BLOCKED_SEALED_LEAKAGE"]},
+    "priorExposure": {"const": true},
+    "strictBlind": {"const": false},
+    "selectionStrategy": {"const": "sha256(sample_id)-ordered-round-robin/1"},
+    "foldCount": {"type": "integer", "minimum": 2, "maximum": 7},
+    "sampleCount": {"type": "integer", "minimum": 1},
+    "imageCount": {"type": "integer", "minimum": 1},
+    "groupingRowsSha256": {"$ref": "#/$defs/sha256"},
+    "rootCauseRowsSha256": {"$ref": "#/$defs/sha256"},
+    "sealLockPayloadSha256": {"$ref": "#/$defs/sha256"},
+    "sealedSampleId": {"type": "string", "minLength": 1},
+    "sealedImageCount": {"type": "integer", "minimum": 1},
+    "families": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["failureFamily", "sampleIds"], "properties": {"failureFamily": {"type": "string", "minLength": 1}, "sampleIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}}},
+    "folds": {"type": "array", "items": {"$ref": "#/$defs/fold"}},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fold": {"type": "object", "additionalProperties": false, "required": ["foldId", "developmentSampleIds", "validationSampleIds", "developmentImageCount", "validationImageCount", "developmentSha256SetHash", "validationSha256SetHash", "sampleIntersectionCount", "sha256IntersectionCount"], "properties": {
+      "foldId": {"type": "string", "pattern": "^fold-[0-9]{2}$"},
+      "developmentSampleIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+      "validationSampleIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+      "developmentImageCount": {"type": "integer", "minimum": 1},
+      "validationImageCount": {"type": "integer", "minimum": 1},
+      "developmentSha256SetHash": {"$ref": "#/$defs/sha256"},
+      "validationSha256SetHash": {"$ref": "#/$defs/sha256"},
+      "sampleIntersectionCount": {"const": 0},
+      "sha256IntersectionCount": {"const": 0}
+    }}
+  }
+}
