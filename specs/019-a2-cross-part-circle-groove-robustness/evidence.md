@@ -35,9 +35,9 @@ incompatible project-scope correction in its Sync Impact Report.
 
 ## Validation evidence
 
-- Full gate: `uv run --with jsonschema python -m unittest discover -s tests -v` passed 345 tests in
-  459.509 s. `/usr/bin/time -v` measured peak RSS 1,225,044 KiB and zero swaps. A concurrent unrelated
-  vision process consumed substantial CPU, so wall time is not a production throughput measurement.
+- Post-commit full gate: `uv run --with jsonschema python -m unittest discover -s tests` passed 346 tests in
+  170.771 s. `/usr/bin/time -v` measured peak RSS 1,235,368 KiB and zero swaps. This whole-repository wall time
+  includes unrelated A-end-face/hole-2 tests and is not a production slot-pose throughput measurement.
 - Final focused Schema/integration gate passed 52 tests in 27.484 s; compileall, JSON parsing and
   `git diff --check` passed. Synthetic tests cover local/wrap circle pollution, distributed pollution,
   retained coverage, refit drift, negative MAD threshold recovery, cross-hypothesis dedup and 0/multiple
