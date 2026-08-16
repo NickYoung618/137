@@ -62,3 +62,11 @@
 ## Implementation Strategy
 
 MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍引导，再增加人工审阅。所有测试先于对应实现，默认关闭贯穿每一阶段。
+
+## Phase 8: Convergence - 简化人工复核图
+
+- [x] T023 先在 tests/test_slot_pose_prefill_review.py 增加RAW/SIMPLIFIED两栏、稳定颜色/标题/图例、原分辨率输出及禁止圆/矩形/raw射线的聚焦测试 per FR-021/FR-026/FR-027/SC-007 (partial)
+- [x] T024 在 tools/prepare_slot_pose_prefill_review.py 实现独立简化渲染层，仅画019最终左右壁/端点和020 fixture候选区域或方向，不调用完整调试overlay per FR-021/FR-022/FR-026/FR-027 (contradicts)
+- [x] T025 收紧LabelMe预填与review索引，只保留最终两侧壁/端点/fixture候选，所有shape保持AUTO_且human_verified=false并拒绝覆盖人工内容 per FR-022/FR-028 (contradicts)
+- [x] T026 更新 contracts/slot-pose-prefill-review.schema.json、specs/021-paired-capture-slot-pose/quickstart.md和README.md，明确020候选不等于valid及374/369准确命令 per FR-021/FR-027/Constitution IV (partial)
+- [x] T027 运行聚焦/全量/Schema/CLI/diff/媒体与路径污染门，更新evidence，本地提交并推送021功能分支且不合并main per SC-006/SC-008/SC-009 (partial)

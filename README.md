@@ -107,9 +107,11 @@ uv run python tools/run_slot_pose_batch.py \
 至少一帧无遮挡才输出第二拍后的图像引导。参数`UNCONFIRMED`、缺帧、错配、0/多解或两帧均遮挡全部
 fail-closed，PLC字段始终为空。约31°/328°不形成ignore mask。
 
-`tools/prepare_slot_pose_prefill_review.py`在Git外为part-019 374/369生成raw、019/020叠加、三栏联系表和
-`AUTO_` LabelMe预填；自动shape明确`human_verified=false`，人工只需确认真槽、两处阴影和左右壁是否同源，
-无需从空白图重画外圆。完整契约和Mac命令见`specs/021-paired-capture-slot-pose/quickstart.md`。
+`tools/prepare_slot_pose_prefill_review.py`在Git外为part-019 374/369生成原分辨率raw/simplified、
+RAW/SIMPLIFIED两栏联系表和精简`AUTO_` LabelMe预填。simplified只显示019最终左右槽壁/端点及020
+fixture候选，不画外圆、定位框或其他raw射线；图上明确“020候选不等于valid”和“真实凹槽待人工确认”。
+自动shape保持`human_verified=false`，无需从空白图重画外圆。完整契约和Mac命令见
+`specs/021-paired-capture-slot-pose/quickstart.md`。
 
 ## 007单真槽闭环图像引导
 

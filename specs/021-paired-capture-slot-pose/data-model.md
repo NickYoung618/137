@@ -51,8 +51,10 @@
 ## ReviewBundle
 
 - image identity and SHA
-- rawImage、overlay019、overlay020、contactSheet paths（索引中为输出根相对路径）
-- prefilledLabelme：AUTO_ shapes、human_verified=false、runtime_input_allowed=false
+- rawImage、simplifiedImage、contactSheet paths（索引中为输出根相对路径）
+- simplifiedImage：只含019最终左右壁/端点、020 fixture候选、短标题/图例和人工确认提示
+- prefilledLabelme：仅最终壁/端点/fixture的AUTO_ shapes、human_verified=false、runtime_input_allowed=false
+- displaySummary：019Valid、020ErrorCode；020候选展示不改变020 valid状态
 - questions：真实凹槽、fixture A/B、左右壁同源性
 
 ## State Transitions

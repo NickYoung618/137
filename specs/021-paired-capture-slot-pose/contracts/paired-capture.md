@@ -28,3 +28,12 @@ For the second-capture final posture, `currentProfile = wrap360(partRelative + s
 - FAILED: stable code and null guidance.
 
 Even DETECTED never emits plcCommand or mechanicalCorrectionDeg in v1.
+
+## Simplified manual review
+
+`slot-pose-prefill-review/2` is a Git-external review index. Each entry references one raw image,
+one full-resolution simplified image and one minimal AUTO_ LabelMe JSON. The simplified image may
+show only the 019 final left/right walls and mouth endpoints plus 020 fixture candidates. It does
+not show fitted circles, localization rectangles, non-final raw rays or any generated truth box.
+The title carries 019 valid and 020 error code; displaying a 020 fixture candidate never changes
+the 020 validity state. All LabelMe shapes remain `human_verified=false` and runtime-forbidden.

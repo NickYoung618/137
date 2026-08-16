@@ -14,7 +14,8 @@
 
 - Q: 双拍是否只是未来设想？ → A: 不是；双拍旋转是正式开发方向，只有旋转参数和时序字段未确认。
 - Q: 未确认参数时能否输出引导？ → A: 只能输出逐帧候选与非权威匹配诊断，机械/PLC指令必须为空。
-- Q: 人工如何复核混合边？ → A: 工具生成AUTO_预标注、019/020叠加及raw/019/020联系表，人工不重画已稳定拟合的外圆。
+- Q: 人工如何复核混合边？ → A: 工具生成精简AUTO_预标注和RAW/SIMPLIFIED联系表，人工不重画已稳定拟合的外圆。
+- Q: 调试叠加线过多时如何复核？ → A: part-019 374/369只生成RAW/SIMPLIFIED对照；SIMPLIFIED仅显示019最终两侧壁/端点和020 fixture A/B候选，不显示圆、定位框、非最终raw射线或长诊断文字。
 
 ## User Scenarios & Testing
 
@@ -69,7 +70,7 @@
 
 ### User Story 4 - 人工复核算法选边 (Priority: P2)
 
-质量人员针对part-019的374/369查看原图、019叠加、020叠加和并排联系表，并在预填LabelMe中确认或修正真槽、两处夹具阴影和算法左右槽壁是否同源；无需从空白图重画外圆。
+质量人员针对part-019的374/369查看原图与简化叠加并排联系表，并在预填LabelMe中确认或修正真槽、两处夹具阴影和算法左右槽壁是否同源；无需从空白图重画外圆。简化图不把算法候选包装成真值或valid结论。
 
 **Why this priority**: 当前缺少结构化真值，肉眼指出的混合边必须转成可审计标签后才能裁决单帧门和双拍候选。
 
@@ -77,9 +78,10 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** 原图及019/020结果，**When** 生成审阅包，**Then** 每图包含raw、两版叠加、联系表及LabelMe可打开的预填JSON。
-2. **Given** 自动候选，**When** 写入LabelMe，**Then** 标签以AUTO_开头或human_verified=false，人工真值标签保持空白且外圆可由算法叠加展示。
+1. **Given** 原图及019/020结果，**When** 生成审阅包，**Then** 每图包含原始分辨率的raw和simplified图、RAW/SIMPLIFIED联系表及LabelMe可打开的精简预填JSON。
+2. **Given** 自动候选，**When** 写入LabelMe，**Then** 只保留最终左右槽壁、两槽口端点和fixture A/B候选，标签以AUTO_开头且human_verified=false，不写入外圆、定位框、raw暗区射线或人工真值。
 3. **Given** 已有132112_4人工真值，**When** 做评估，**Then** 只作为Git外参考，不能进入生产运行时或成为待复核图的伪造标签。
+4. **Given** 020只提供fixture方向而没有可靠区域，**When** 画简化图，**Then** 只画候选方向并明确标记为candidate，不画伪造的实心区域或红色真值框。
 
 ### Edge Cases
 
@@ -116,11 +118,14 @@
 - **FR-018**: 合成测试 MUST 覆盖正负旋转、环绕、31°/328°、单帧无遮挡、双帧歧义、错配和旋转误差。
 - **FR-019**: part-006 MUST 继续封存，不得读取、重跑或用于参数选择。
 - **FR-020**: 实验功能 MUST 默认关闭；默认单帧行为和legacy/paired/multi-role/single_real_groove契约 MUST 不变。
-- **FR-021**: 审阅工具 MUST 在Git外生成原图、019/020叠加、raw/019/020联系表、预填LabelMe JSON和review索引。
-- **FR-022**: 预填shape MUST 使用AUTO_前缀或human_verified=false，并区分detected_groove_wall_left/right、detected_mouth_endpoint_left/right、raw_dark_candidates、fixture_shadow_candidate_a/b和fitted_outer_circle。
+- **FR-021**: 审阅工具 MUST 在Git外为part-019 374/369生成原始分辨率raw、simplified、RAW/SIMPLIFIED两栏联系表、精简预填LabelMe JSON和review索引。
+- **FR-022**: simplified和预填shape MUST 只保留AUTO_detected_groove_wall_left/right、AUTO_detected_mouth_endpoint_left/right和AUTO_fixture_shadow_candidate_a/b；MUST NOT 包含外圆、圆定位矩形框、非最终raw候选射线或自动人工真值框。
 - **FR-023**: 审阅工具 MUST 核对原图SHA与两版结果SHA；不匹配时拒绝生成，媒体和绝对现场路径不得进入Git。
 - **FR-024**: Pic_2026_08_13_132354_292.bmp MUST 暂时跳过；当前优先part-019的374与369。
 - **FR-025**: 132112_4的人工圆弧和真槽开放边界 MAY 用作评估参考，MUST NOT 作为生产运行时输入或复制成其他图片真值。
+- **FR-026**: simplified图 MUST 用稳定颜色和粗线显示019最终wall-left（绿）、wall-right（亮粉）及两个明显槽口端点；020 fixture A/B只能以橙色候选区域或方向显示。
+- **FR-027**: 每张simplified图 MUST 显示简短图例和“人工真实凹槽待确认”提示，并在标题列出019 valid状态和020 error code；图例 MUST 声明020所画候选不等于valid。
+- **FR-028**: LabelMe预填 MUST 对所有shape使用AUTO_前缀并设置human_verified=false；人工标签保持空白，工具 MUST 拒绝覆盖已有非AUTO_或human_verified内容。
 
 ### Key Entities
 
@@ -142,7 +147,7 @@
 - **SC-004**: 0、多个匹配、两帧均遮挡、参数未确认和错配场景100%输出valid=false且无机械/PLC指令。
 - **SC-005**: 至少一帧无遮挡且唯一匹配时，第二拍当前角和85°最短修正的数值测试覆盖顺/逆时针及80°/90°边界。
 - **SC-006**: 默认配置下新增配对代码不执行，现有全量测试无回退。
-- **SC-007**: part-019 374/369每图可生成4类可打开材料（raw、019 overlay、020 overlay、AUTO_LabelMe），联系表并排展示且标签不冒充人工真值。
+- **SC-007**: part-019 374/369每图100%生成raw、simplified和精简AUTO_LabelMe；两行RAW/SIMPLIFIED联系表可直接对照，自动检查证明不含外圆/定位框/raw射线/伪真值框，且标签不冒充人工真值。
 - **SC-008**: 功能分支通过全量单元测试、Schema、CLI、diff、JSON和媒体/绝对路径污染检查。
 - **SC-009**: 未获得真实双拍BMP和确认旋转参数前，不宣称生产准确率、7组修复或可合入main。
 

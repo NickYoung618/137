@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Create Git-external AUTO_ LabelMe and raw/019/020 visual review bundles."""
+"""Create Git-external minimal AUTO_ LabelMe and RAW/SIMPLIFIED review bundles."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import sys
 from pathlib import Path
@@ -17,13 +18,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools.dataset_common import inspect_image, safe_relative_path, sha256_file
-from tools.render_slot_pose_review import build_review_record, load_results, render_overlay
+from tools.render_slot_pose_review import load_results
 
 
 COLORS = {
-    "circle": "#35c7ff", "raw": "#ffe14f", "fixture_a": "#ff9f43",
-    "fixture_b": "#9b7bff", "wall_left": "#38d66b", "wall_right": "#ff5dce",
-    "endpoint_left": "#ffffff", "endpoint_right": "#ff5d73",
+    "wall_left": "#00E676",
+    "wall_right": "#FF2DAA",
+    "endpoint_left": "#FFFFFF",
+    "endpoint_right": "#FF3B30",
+    "fixture": "#FF9800",
 }
 
 
@@ -76,16 +79,21 @@ def manifest_from_image_names(data_root: Path, image_names: list[str]) -> dict[s
     return {"datasetId": "explicit-prefill-review", "images": images}
 
 
-def _shape(label: str, points: list[list[float]], shape_type: str, color: str, source: str) -> dict[str, Any]:
+def _shape(
+    label: str, points: list[list[float]], shape_type: str, color: str, source: str,
+    *, extra_flags: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    flags = {
+        "auto_generated": True, "human_verified": False,
+        "runtime_input_allowed": False, "display_color": color,
+        "source_algorithm": source,
+    }
+    flags.update(extra_flags or {})
     return {
         "label": label, "points": points, "group_id": None,
         "description": "AUTO suggestion; verify/correct before creating human truth",
         "shape_type": shape_type,
-        "flags": {
-            "auto_generated": True, "human_verified": False,
-            "runtime_input_allowed": False, "display_color": color,
-            "source_algorithm": source,
-        },
+        "flags": flags,
         "mask": None,
     }
 
@@ -102,15 +110,27 @@ def _circle(diagnostics: dict[str, Any]) -> tuple[float, float, float] | None:
     return tuple(float(physical[key]) for key in keys)  # type: ignore[return-value]
 
 
-def _radial_point(circle: tuple[float, float, float], angle_deg: float) -> list[float]:
-    import math
-    angle = math.radians(float(angle_deg))
-    return [circle[0] + circle[2] * math.cos(angle), circle[1] + circle[2] * math.sin(angle)]
+def _finite_number(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+    )
 
 
-def _fixture_labels(diagnostics: dict[str, Any]) -> dict[str, str]:
-    matches = (diagnostics.get("fixtureShadowEvidence") or {}).get("matches") or []
-    output: dict[str, str] = {}
+def _fixture_selections(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence = diagnostics.get("fixtureShadowEvidence") or {}
+    matches = evidence.get("candidateMatches")
+    if not isinstance(matches, list):
+        matches = evidence.get("matches") if isinstance(evidence.get("matches"), list) else []
+    raw = diagnostics.get("rawCandidates")
+    if not isinstance(raw, list):
+        raw = diagnostics.get("candidates") if isinstance(diagnostics.get("candidates"), list) else []
+    by_id = {
+        str(item.get("candidateId")): item
+        for item in raw if isinstance(item, dict) and item.get("candidateId") is not None
+    }
+    output: list[dict[str, Any]] = []
     for suffix in ("a", "b"):
         choices = [
             item for item in matches
@@ -124,7 +144,29 @@ def _fixture_labels(diagnostics: dict[str, Any]) -> dict[str, str]:
             pool,
             key=lambda item: (float(item.get("centerDistanceDeg", 999.0)), str(item.get("candidateId"))),
         )
-        output[str(selected.get("candidateId"))] = suffix
+        candidate_id = str(selected.get("candidateId"))
+        candidate = by_id.get(candidate_id)
+        if candidate is None or not _finite_number(candidate.get("centerDeg")):
+            continue
+        start, end = candidate.get("startDeg"), candidate.get("endDeg")
+        if not (_finite_number(start) and _finite_number(end)):
+            half = candidate.get("halfWidthDeg")
+            if _finite_number(half):
+                start = (float(candidate["centerDeg"]) - float(half)) % 360.0
+                end = (float(candidate["centerDeg"]) + float(half)) % 360.0
+        region_supported = (
+            selected.get("status") == "matched"
+            and _finite_number(start) and _finite_number(end)
+        )
+        output.append({
+            "suffix": suffix,
+            "candidateId": candidate_id,
+            "matchStatus": str(selected.get("status") or "unknown"),
+            "centerDeg": float(candidate["centerDeg"]),
+            "startDeg": float(start) if _finite_number(start) else None,
+            "endDeg": float(end) if _finite_number(end) else None,
+            "regionSupported": region_supported,
+        })
     return output
 
 
@@ -156,61 +198,204 @@ def _wall_shapes(diagnostics: dict[str, Any], source: str) -> list[dict[str, Any
     return shapes
 
 
+def _sector_points(
+    circle: tuple[float, float, float], start_deg: float, end_deg: float,
+) -> list[list[float]]:
+    span = (float(end_deg) - float(start_deg)) % 360.0
+    if not 0.0 < span <= 90.0:
+        return []
+    count = max(4, int(math.ceil(span / 3.0)) + 1)
+    angles = [float(start_deg) + span * index / (count - 1) for index in range(count)]
+    outer = [
+        [
+            circle[0] + circle[2] * 1.02 * math.cos(math.radians(angle)),
+            circle[1] + circle[2] * 1.02 * math.sin(math.radians(angle)),
+        ]
+        for angle in angles
+    ]
+    inner = [
+        [
+            circle[0] + circle[2] * 0.86 * math.cos(math.radians(angle)),
+            circle[1] + circle[2] * 0.86 * math.sin(math.radians(angle)),
+        ]
+        for angle in reversed(angles)
+    ]
+    return outer + inner
+
+
+def _fixture_shapes(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    circle = _circle(diagnostics)
+    if circle is None:
+        return []
+    shapes: list[dict[str, Any]] = []
+    for selection in _fixture_selections(diagnostics):
+        points = (
+            _sector_points(circle, selection["startDeg"], selection["endDeg"])
+            if selection["regionSupported"] else []
+        )
+        shape_type = "polygon"
+        if not points:
+            shape_type = "line"
+            angle = math.radians(selection["centerDeg"])
+            points = [
+                [
+                    circle[0] + circle[2] * ratio * math.cos(angle),
+                    circle[1] + circle[2] * ratio * math.sin(angle),
+                ]
+                for ratio in (0.86, 1.02)
+            ]
+        shapes.append(_shape(
+            f"AUTO_fixture_shadow_candidate_{selection['suffix']}",
+            points, shape_type, COLORS["fixture"], "020",
+            extra_flags={
+                "candidate_only": True,
+                "region_supported": bool(selection["regionSupported"]),
+                "fixture_match_status": selection["matchStatus"],
+            },
+        ))
+    return shapes
+
+
+def _review_shapes(
+    payload_019: dict[str, Any], payload_020: dict[str, Any],
+) -> list[dict[str, Any]]:
+    diagnostics_019 = payload_019.get("diagnostics") or {}
+    diagnostics_020 = payload_020.get("diagnostics") or {}
+    return _wall_shapes(diagnostics_019, "019") + _fixture_shapes(diagnostics_020)
+
+
+def _error_code(payload: dict[str, Any]) -> str:
+    error = payload.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str):
+        return error["code"]
+    return "NONE"
+
+
+def _review_text_lines(
+    payload_019: dict[str, Any], payload_020: dict[str, Any],
+) -> list[str]:
+    valid_019 = bool((payload_019.get("result") or {}).get("valid", False))
+    return [
+        f"019 valid={valid_019} | 020 error={_error_code(payload_020)}",
+        "GREEN=019 wall-left | PINK=019 wall-right | DOTS=mouth endpoints",
+        "020 fixture candidate != valid",
+        "HUMAN CONFIRMATION REQUIRED: real groove",
+    ]
+
+
+def _font(size: int) -> ImageFont.ImageFont:
+    for name in ("DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(name, size=size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _draw_arrow(
+    draw: ImageDraw.ImageDraw, points: list[tuple[float, float]], color: str, width: int,
+) -> None:
+    draw.line(points, fill=color, width=width)
+    if len(points) < 2:
+        return
+    start, end = points[-2], points[-1]
+    angle = math.atan2(end[1] - start[1], end[0] - start[0])
+    size = width * 2.4
+    head = [
+        end,
+        (
+            end[0] - size * math.cos(angle - math.pi / 6.0),
+            end[1] - size * math.sin(angle - math.pi / 6.0),
+        ),
+        (
+            end[0] - size * math.cos(angle + math.pi / 6.0),
+            end[1] - size * math.sin(angle + math.pi / 6.0),
+        ),
+    ]
+    draw.polygon(head, fill=color)
+
+
+def render_simplified(
+    image_path: Path, payload_019: dict[str, Any], payload_020: dict[str, Any],
+    output_path: Path,
+) -> None:
+    with Image.open(image_path) as source:
+        image = source.convert("RGB")
+    width, height = image.size
+    annotation = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(annotation)
+    font_size = max(16, min(42, round(min(width, height) / 50)))
+    font = _font(font_size)
+    line_height = font_size + max(4, font_size // 5)
+    lines = _review_text_lines(payload_019, payload_020)
+    banner_height = min(height, line_height * len(lines) + 14)
+    draw.rectangle((0, 0, width, banner_height), fill=(0, 0, 0, 172))
+    for index, line in enumerate(lines):
+        color = (
+            "white" if index < 2
+            else (COLORS["fixture"] if index == 2 else "#FFF176")
+        )
+        draw.text((12, 7 + index * line_height), line, fill=color, font=font)
+
+    stroke = max(6, round(min(width, height) / 250))
+    endpoint_radius = max(8, round(stroke * 1.6))
+    for shape in _review_shapes(payload_019, payload_020):
+        points = [tuple(float(value) for value in point) for point in shape["points"]]
+        label, color = str(shape["label"]), str(shape["flags"]["display_color"])
+        if label.startswith("AUTO_detected_groove_wall_"):
+            draw.line(points, fill=color, width=stroke, joint="curve")
+        elif label.startswith("AUTO_detected_mouth_endpoint_") and points:
+            x, y = points[0]
+            draw.ellipse(
+                (x - endpoint_radius, y - endpoint_radius, x + endpoint_radius, y + endpoint_radius),
+                fill=color, outline="black", width=max(2, stroke // 3),
+            )
+        elif label.startswith("AUTO_fixture_shadow_candidate_"):
+            if shape["shape_type"] == "polygon":
+                draw.polygon(points, fill=(255, 152, 0, 48), outline=color)
+                draw.line(points + [points[0]], fill=color, width=stroke)
+            else:
+                _draw_arrow(draw, points, color, stroke)
+            if points:
+                suffix = label.rsplit("_", 1)[-1].upper()
+                anchor = points[len(points) // 2]
+                draw.text(
+                    (anchor[0] + stroke, anchor[1] + stroke),
+                    f"Fixture {suffix} candidate", fill=color, font=font,
+                    stroke_width=2, stroke_fill="black",
+                )
+    image = Image.alpha_composite(image.convert("RGBA"), annotation).convert("RGB")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output_path, format="PNG")
+
+
 def _auto_labelme(
     item: dict[str, Any], image_name: str, payload_019: dict[str, Any], payload_020: dict[str, Any],
 ) -> dict[str, Any]:
-    diagnostic_019 = payload_019.get("diagnostics") or {}
-    diagnostic_020 = payload_020.get("diagnostics") or {}
-    circle = _circle(diagnostic_020) or _circle(diagnostic_019)
-    shapes: list[dict[str, Any]] = []
-    if circle is not None:
-        shapes.append(_shape(
-            "AUTO_fitted_outer_circle",
-            [[circle[0], circle[1]], [circle[0] + circle[2], circle[1]]],
-            "circle", COLORS["circle"], "020" if _circle(diagnostic_020) else "019",
-        ))
-        fixtures = _fixture_labels(diagnostic_020) or _fixture_labels(diagnostic_019)
-        for candidate in diagnostic_019.get("rawCandidates") or diagnostic_019.get("candidates") or []:
-            candidate_id = str(candidate.get("candidateId") or "unknown")
-            endpoint = _radial_point(circle, float(candidate["centerDeg"]))
-            shapes.append(_shape(
-                f"AUTO_raw_dark_candidate_{candidate_id}",
-                [[circle[0], circle[1]], endpoint], "line", COLORS["raw"], "019",
-            ))
-            fixture_name = fixtures.get(candidate_id)
-            if fixture_name is not None:
-                shapes.append(_shape(
-                    f"AUTO_fixture_shadow_candidate_{fixture_name}",
-                    [[circle[0], circle[1]], endpoint], "line",
-                    COLORS[f"fixture_{fixture_name}"], "020",
-                ))
-    wall_source = "019" if diagnostic_019.get("grooveRefinement") else "020"
-    wall_diagnostics = diagnostic_019 if wall_source == "019" else diagnostic_020
-    shapes.extend(_wall_shapes(wall_diagnostics, wall_source))
     return {
         "version": "5.0.1",
         "flags": {
             "human_verified": False, "formal_truth": False,
             "independent_from_algorithm": False, "runtime_input_allowed": False,
-            "annotation_version": "AUTO-prefill-review-v1",
+            "annotation_version": "AUTO-prefill-review-v2-simplified",
             "review_real_groove_required": True,
             "review_fixture_shadow_a_required": True,
             "review_fixture_shadow_b_required": True,
             "review_sidewalls_same_source_required": True,
         },
-        "shapes": shapes,
+        "shapes": _review_shapes(payload_019, payload_020),
         "imagePath": f"../raw/{image_name}", "imageData": None,
         "imageHeight": int(item["height"]), "imageWidth": int(item["width"]),
     }
 
 
-def _contact_sheet(rows: list[tuple[str, Path, Path, Path]], output: Path) -> None:
+def _contact_sheet(rows: list[tuple[str, Path, Path]], output: Path) -> None:
     tile_w, tile_h, header = 560, 380, 32
-    sheet = Image.new("RGB", (tile_w * 3, (tile_h + header) * len(rows)), "#181818")
+    sheet = Image.new("RGB", (tile_w * 2, (tile_h + header) * len(rows)), "#181818")
     draw = ImageDraw.Draw(sheet); font = ImageFont.load_default(size=20)
-    for row_index, (image_id, raw, overlay_019, overlay_020) in enumerate(rows):
+    for row_index, (image_id, raw, simplified) in enumerate(rows):
         y = row_index * (tile_h + header)
-        for column, (title, path) in enumerate((("RAW", raw), ("019", overlay_019), ("020", overlay_020))):
+        for column, (title, path) in enumerate((("RAW", raw), ("SIMPLIFIED", simplified))):
             with Image.open(path) as source:
                 tile = source.convert("RGB")
             tile.thumbnail((tile_w, tile_h), Image.Resampling.LANCZOS)
@@ -248,12 +433,12 @@ def prepare_prefill_review(
             raise ValueError(f"existing raw review image SHA mismatch: {raw_name}")
         if not raw_path.exists():
             shutil.copy2(image_path, raw_path)
-        overlay_019 = output_dir / "overlay-019" / f"{safe_id}.jpg"
-        overlay_020 = output_dir / "overlay-020" / f"{safe_id}.jpg"
-        for payload, path in ((by_019[actual_sha], overlay_019), (by_020[actual_sha], overlay_020)):
+        payload_019, payload_020 = by_019[actual_sha], by_020[actual_sha]
+        for payload in (payload_019, payload_020):
             if (payload.get("image") or {}).get("sha256") != actual_sha:
                 raise ValueError(f"result SHA mismatch: {relative.as_posix()}")
-            render_overlay(image_path, build_review_record(item, payload), path)
+        simplified_path = output_dir / "simplified" / f"{safe_id}.png"
+        render_simplified(image_path, payload_019, payload_020, simplified_path)
         labelme_path = output_dir / "labelme-auto" / f"{safe_id}.json"
         if labelme_path.exists():
             prior = json.loads(labelme_path.read_text(encoding="utf-8"))
@@ -266,17 +451,21 @@ def prepare_prefill_review(
             )
             if has_human_content:
                 raise ValueError(f"refusing to overwrite human review: {labelme_path.name}")
-        _write_json(labelme_path, _auto_labelme(item, raw_name, by_019[actual_sha], by_020[actual_sha]))
-        contact_rows.append((image_id, raw_path, overlay_019, overlay_020))
+        _write_json(labelme_path, _auto_labelme(item, raw_name, payload_019, payload_020))
+        contact_rows.append((image_id, raw_path, simplified_path))
         entries.append({
             "imageId": image_id, "relativeImagePath": relative.as_posix(),
             "imageSha256": actual_sha,
             "rawRelativePath": raw_path.relative_to(output_dir).as_posix(),
-            "overlay019RelativePath": overlay_019.relative_to(output_dir).as_posix(),
-            "overlay020RelativePath": overlay_020.relative_to(output_dir).as_posix(),
+            "simplifiedRelativePath": simplified_path.relative_to(output_dir).as_posix(),
+            "simplifiedSha256": sha256_file(simplified_path),
             "autoLabelmeRelativePath": labelme_path.relative_to(output_dir).as_posix(),
             "autoLabelmeSha256": sha256_file(labelme_path),
             "humanVerified": False,
+            "displaySummary": {
+                "019Valid": bool((payload_019.get("result") or {}).get("valid", False)),
+                "020ErrorCode": _error_code(payload_020),
+            },
             "reviewQuestions": [
                 "mark_or_confirm_real_groove", "mark_or_confirm_fixture_shadow_a",
                 "mark_or_confirm_fixture_shadow_b", "confirm_detected_sidewalls_same_physical_source",
@@ -284,7 +473,7 @@ def prepare_prefill_review(
         })
     _contact_sheet(contact_rows, output_dir / "contact-sheet.jpg")
     index = {
-        "schemaVersion": "slot-pose-prefill-review/1",
+        "schemaVersion": "slot-pose-prefill-review/2",
         "datasetId": manifest.get("datasetId"),
         "counts": {"images": len(entries), "humanVerified": 0, "pending": len(entries)},
         "entries": entries,

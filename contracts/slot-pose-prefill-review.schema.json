@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "datasetId", "counts", "entries", "truthPolicy"],
   "properties": {
-    "schemaVersion": {"const": "slot-pose-prefill-review/1"},
+    "schemaVersion": {"const": "slot-pose-prefill-review/2"},
     "datasetId": {"type": ["string", "null"]},
     "counts": {
       "type": "object", "additionalProperties": false,
@@ -23,19 +23,27 @@
         "type": "object", "additionalProperties": false,
         "required": [
           "imageId", "relativeImagePath", "imageSha256", "rawRelativePath",
-          "overlay019RelativePath", "overlay020RelativePath", "autoLabelmeRelativePath",
-          "autoLabelmeSha256", "humanVerified", "reviewQuestions"
+          "simplifiedRelativePath", "simplifiedSha256", "autoLabelmeRelativePath",
+          "autoLabelmeSha256", "humanVerified", "displaySummary", "reviewQuestions"
         ],
         "properties": {
           "imageId": {"type": "string", "minLength": 1},
           "relativeImagePath": {"type": "string", "minLength": 1},
           "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "rawRelativePath": {"type": "string", "minLength": 1},
-          "overlay019RelativePath": {"type": "string", "minLength": 1},
-          "overlay020RelativePath": {"type": "string", "minLength": 1},
+          "simplifiedRelativePath": {"type": "string", "minLength": 1},
+          "simplifiedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "autoLabelmeRelativePath": {"type": "string", "minLength": 1},
           "autoLabelmeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "humanVerified": {"const": false},
+          "displaySummary": {
+            "type": "object", "additionalProperties": false,
+            "required": ["019Valid", "020ErrorCode"],
+            "properties": {
+              "019Valid": {"type": "boolean"},
+              "020ErrorCode": {"type": "string", "minLength": 1}
+            }
+          },
           "reviewQuestions": {"type": "array", "minItems": 4, "items": {"type": "string"}}
         }
       }

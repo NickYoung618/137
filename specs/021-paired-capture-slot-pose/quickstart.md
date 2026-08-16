@@ -46,7 +46,14 @@
       --results-020 "$A2_WORK/fixture-shadow-020/results.jsonl" \
       --output-dir "$A2_WORK/manual-review-part-019-374-369"
 
-输出目录包含`raw/`、`overlay-019/`、`overlay-020/`、`labelme-auto/`、`contact-sheet.jpg`和`review-index.json`。LabelMe打开`labelme-auto/*.json`；AUTO_ shape不是人工真值。人工只需确认/修正真实凹槽、fixture shadow A/B和左右壁是否同源。Pic_2026_08_13_132354_292.bmp不加入manifest。
+输出目录包含`raw/`、`simplified/`、`labelme-auto/`、`contact-sheet.jpg`和
+`review-index.json`。联系表按374/369各一行，只有RAW与SIMPLIFIED两列；`simplified/*.png`保持
+原图分辨率，可单独放大。简化图只画019最终左右槽壁/端点与020 fixture候选，不画外圆、圆定位框或
+其他raw候选射线；标题列出019 valid和020 error code，并明确“020 fixture candidate != valid”。
+
+LabelMe打开`labelme-auto/*.json`；JSON只含最终侧壁、端点和fixture候选，全部使用`AUTO_`且
+`human_verified=false`。人工只需确认/修正真实凹槽、fixture shadow A/B和左右壁是否同源。
+Pic_2026_08_13_132354_292.bmp不加入manifest。
 
 ## 判读
 
