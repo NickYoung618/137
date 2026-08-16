@@ -21,8 +21,15 @@
 - Q: 能否在该负例上直接放宽020门限？ → A: 不能。新增独立、默认关闭的局部第二侧壁诊断；它枚举同一局部开口内的侧壁假设并保持原020失败状态，只有人工标签和分件验证后才讨论生产选择。
 - Q: 双拍和单帧当前哪个优先？ → A: 双拍保留为最终架构，但不等待现场旋转参数；当前开发主线是单帧真实槽区域、第二侧壁和槽口端点定位。审阅表达只完成证据语义修正，不继续扩展可视化。
 - Q: Mac 140张回放后能否把0.12放宽到0.14？ → A: 绝对不能。33个运行局部诊断的记录全部仍为SOURCE_INCONSISTENT；part-019的唯一假设复现已知混合边。稳定和接近阈值不证明正确，应先查粗区间、anchor、逐seed吸附、生成拒绝阶段和merge cluster。
-- Q: 服务器140张diagnostic/2 trace证明了什么？ → A: part-019的另一真槽壁在side candidate生成前就缺失，不是0.5° merge丢失。原286.125°‒309.125°大暗区只向区间内部搜索，会稳定复现真槽一侧与fixture阴影一侧。
+- Q: 服务器140张diagnostic/2 trace证明了什么？ → A: part-019在side candidate生成阶段没有产生额外的可见墙cluster，不是0.5° merge丢失；它证明旧搜索域会稳定复现真槽一侧与fixture阴影一侧，但不能证明相对真槽壁在该帧一定可见。
 - Q: 新搜索能否越过原raw candidate端点？ → A: 必须。每个候选anchor同时向原区间内侧和外侧搜索，start可向更小角度、end可向更大角度扩展；原区间只作证据，不得作不可越过边界。
+
+### Session 2026-08-17
+
+- Q: `HUMAN_true_groove_wall_missing`能否按标签字面作为“缺失的另一侧壁”真值？ → A: 不能。人工两点线`[[3266.0,258.5],[3226.0,331.0]]`与已有`AUTO_detected_groove_wall_left`/285.953°墙cluster近乎重合，语义应更正为`human-confirmed-visible-real-groove-wall`；原LabelMe文件和其SHA必须原样保留。
+- Q: 这条人工线证明了什么？ → A: 它确认算法已找到的一条可见边确属真实凹槽；它没有提供另一侧壁、完整槽口、槽中点或角度真值。309.48°边仍是fixture shadow edge，不得与已确认真槽壁配对。
+- Q: 单帧是否应继续“恢复”不可见的另一侧壁？ → A: 不应。另一侧壁的可观测性尚未确认且可能被遮挡；局部Cartesian搜索只能枚举图像中实际存在的可审计证据，不能推断或合成不可见像素。当前运行时继续fail-closed；如未来增加`PARTIALLY_OBSERVED`，只能是版本化诊断状态，不能使姿态valid或产生引导/PLC命令。
+- Q: 这是否改变双拍方向？ → A: 不改变。双拍的核心价值正是保证至少一拍无遮挡；只有无遮挡帧提供完整同源两壁和槽口几何时，才可形成权威单帧测量并参与跨帧互证。
 
 ## User Scenarios & Testing
 
@@ -109,7 +116,7 @@
 
 ### User Story 6 - 双向局部开口侧壁实验诊断 (Priority: P1)
 
-算法工程师在020同源性拒绝后启用独立实验开关。系统把粗暗区两端仅视为待验证的anchor证据，对每个anchor向原区间内侧和外侧都枚举独立壁候选。候选不得被原start/end截断，但必须受可配置的物理槽宽与最大扩展约束。系统使用无序墙对判定同一局部方形开口，零解、多解或跨到fixture的组合继续安全失败。
+算法工程师在020同源性拒绝后启用独立实验开关。系统把粗暗区两端仅视为待验证的anchor证据，对每个anchor向原区间内侧和外侧都枚举图像中可观测的独立壁候选。候选不得被原start/end截断，但必须受可配置的物理槽宽与最大扩展约束。系统使用无序墙对判定同一局部方形开口，零解、多解、跨到fixture或只有一条可见真壁的情况继续安全失败；本诊断不得承担“补造被遮挡侧壁”的职责。
 
 **Independent Test**: 使用受控方形槽、邻近fixture、双解、缺边及31°/328°附近真槽合成证据验证枚举和fail-closed。
 
@@ -121,6 +128,7 @@
 4. **Given** 原错误大暗区内有fixture强边，**When** 外侧真壁和内侧fixture都被枚举，**Then** 跨越另一暗区或不符合同一方形开口的组合必须拒绝。
 5. **Given** 零个或多个墙对通过，**When** 汇总，**Then** 状态分别为NOT_FOUND或AMBIGUOUS，valid=false且无权威角或PLC命令。
 6. **Given** 真槽位于31°或328°附近，**When** 双向局部搜索，**Then** 不得因角度本身被屏蔽。
+7. **Given** 人工只确认一条可见真槽壁且相对侧没有可靠像素证据，**When** 局部诊断运行，**Then** 保留该可见壁及观测性说明，但不得生成另一侧壁真值、完整槽中点、有效姿态或PLC命令。
 
 ### Edge Cases
 
@@ -135,6 +143,8 @@
 - 原start/end本身就是混合真壁与fixture边；两者均不得因“已精修”而先验成为真壁。
 - outward搜索跨0°/360°，或同时在两个方向找到几何可行强边。
 - 候选位于物理槽宽上限外，或墙对之间穿过与当前开口不连通的第二暗区。
+- 人工shape的label名称与实际几何语义冲突；必须保留原件并通过派生审核副本更正语义，不能按名称自动纳入真值。
+- 单帧只看得到一条真实槽壁；不得把最邻近强边或fixture阴影补成第二壁。
 
 ## Requirements
 
@@ -195,6 +205,12 @@
 - **FR-053**: 140张回放 MUST 分别报告part-019是否形成新的外侧wall cluster、旧混合对是否仍拒绝、part-008的fail-closed结果及其他上游失败分布；无像素真值时不得称准确率或自动修复。
 - **FR-054**: 374/369简化图 MUST 展示双向搜索得到的最终墙候选、搜索方向与不权威声明；用户未确认像素壁前，不得写入人工真值或提升pose。
 - **FR-055**: 新路径 MUST 保持诊断默认关闭、`authoritative=false`、`posePromotionAllowed=false`、顶层原失败与PLC阻断；020的0.12门、默认配置及legacy/旧paired路径 MUST 不变。
+- **FR-056**: Git外原始人工LabelMe及其SHA-256 MUST 原样保留；语义修正只能生成新的派生审核副本，MUST NOT 覆盖或静默改写原件。
+- **FR-057**: 原label `HUMAN_true_groove_wall_missing` MUST 按审核语义解释为`human-confirmed-visible-real-groove-wall`，且 MUST 明确记录`opposite_wall_truth=false`；不得把其两点线用作另一侧壁训练、门限选择或端点精度真值。
+- **FR-058**: part-019 374当前证据 MUST 区分：285.953°cluster为人工确认的可见真实槽壁，309.48°边为fixture shadow edge且禁止配对；该确认不得外推为完整槽、槽中点或姿态准确率。
+- **FR-059**: 单帧只有一条可见真壁或另一壁可观测性不明时，当前运行时 MUST 保持fail-closed、`valid=false`、无权威角和无PLC命令；系统 MUST NOT 从不可见像素合成第二壁。未来若增加`PARTIALLY_OBSERVED`，必须升版并保持其为非权威诊断状态。
+- **FR-060**: 局部Cartesian/双向侧壁搜索 MAY 发现原区间外实际可见的墙证据，但 MUST NOT 把“搜索不到”解释为真实壁坐标缺失或要求人工猜线；只有两侧均有可审计像素证据时才可评估完整开口。
+- **FR-061**: 双拍配对在生产提升姿态前 MUST 至少有一帧完整、无遮挡、同源两壁可观测；若两帧都只有部分观测或完整帧不唯一，MUST fail-closed。
 
 ### Key Entities
 
@@ -210,6 +226,7 @@
 - **BidirectionalSearchDomain**: anchor身份、inward/outward方向、wrap360区间、seed上限和物理扩展约束。
 - **PhysicalWallCandidate**: 独立seed拟合出的墙角、有限线段、径向证据、外圆交点、cluster归属与拒绝阶段。
 - **CanonicalWallPair**: 按稳定wall cluster ID排序的无序墙对、同一开口几何/灰度/连通性证据又failedChecks。
+- **HumanVisibleWallReview**: 原人工shape身份与SHA、派生语义标签、两点几何、`oppositeWallTruth=false`和观测性限制；只证明一条可见真实槽壁。
 
 ## Success Criteria
 
@@ -233,13 +250,15 @@
 - **SC-016**: 每个拟合墙要么归属恰好一个physical wall cluster，要么保留明确拒绝阶段；每个无序墙对只出现一个canonical ID，端点顺序反转不改变ID或数量。
 - **SC-017**: 140张回放100%产出可解析diagnostic/3 trace；part-019的外侧cluster数、旧混合对拒绝数、part-008安全状态及全部上游错误可分组汇总，但顶层姿态仍不因实验诊断提升。
 - **SC-018**: 双向搜索的实际seed数和候选数不超过配置上限；默认关闭时不执行新路径，全量回归和原历史耗时门通过。
+- **SC-019**: 语义派生审核副本100%保留原人工shape两点，记录原文件SHA且不覆盖原件；误命名label不会进入另一侧壁真值或运行时输入。
+- **SC-020**: 一条人工确认真壁加一条fixture边的回归场景100%保持`valid=false`且不产生完整槽中点、姿态或PLC命令；0.12门限和默认配置不变。
 
 ## Assumptions
 
 - 双拍旋转方案已由现场确定为正式方向，但nominalRotationDeg、rotationDirection、rotationToleranceDeg和采集时序字段尚未确认。
 - 两次拍摄间相机和夹具不动；固定阴影在相机坐标近似固定，真槽随零件旋转。该物理假设仍需真实配对数据验证。
 - 当前开发只建立离线实验框架；不改PLC、上位机或默认单帧算法。
-- 现有020单帧输出是每帧候选底座；part-019 374/369人工复核用于候选真实性，不是双拍精度真值。
+- 现有020单帧输出是每帧候选底座；part-019 374的人工线只确认一条可见真实槽壁，不是另一壁、完整槽或双拍精度真值。
 
 ## Out of Scope and Blocked
 
@@ -249,5 +268,6 @@
 - **BLOCKED-B01**: 现场需确认两拍旋转角、方向、重复误差/容差以及实际执行后零件是否停留在第二拍姿态。
 - **BLOCKED-B02**: 真实配对BMP及其sampleId/pairId/captureIndex尚未提供，当前只能做合成和契约验证。
 - **BLOCKED-B03**: PLC方向、缩放、地址和字节序仍未授权，paired image guidance不得升级为PLC命令。
-- **BLOCKED-B04**: part-019 374/369尚需AUTO_预标注辅助下的人工确认；part-015 292明确跳过。
-- **BLOCKED-B05**: 374/369现只有区域/混合来源语义确认，尚无像素级真实第二壁、槽口端点和两处fixture边界标签；局部实验结果不得作为准确率证据。
+- **BLOCKED-B04**: part-019 374的一条可见真槽壁已获得人工语义确认；369仍未形成同等级像素确认，part-015 292明确跳过。
+- **BLOCKED-B05**: 374的相对侧真实壁是否可见仍未确认，且尚无完整槽口端点、槽中点和两处fixture二维边界标签；不得要求人工猜不可见线，局部实验结果也不得作为准确率证据。
+- **RESOLVED-R01**: 服务器已在Git外复核原始人工LabelMe、安全派生副本和压缩包SHA-256；三者不得提交Git，派生副本仍禁止作为运行时或完整槽姿态真值。

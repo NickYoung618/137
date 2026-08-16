@@ -114,3 +114,15 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - T045 → T046-T047 → T048-T049。
 - T050-T052可在核心结构稳定后按不同文件并行；T053必须在实现和契约同步后执行。
 - T054仅使用冻结三折清单且不含part-006；T055依赖所有前置门完成。
+
+## Phase 11: Evidence Correction - 单壁可观测性
+
+**Goal**: 纠正374人工shape的错误label语义，停止把可能被遮挡的相对壁作为单帧必可恢复前提；不改运行时、门限、默认配置、main或PLC。
+
+- [x] T056 [US4] 只读比较人工两点与AUTO 285.953°墙cluster，记录重合指标和“可见真壁”语义，不把shape用作相对壁真值 per FR-057/FR-058
+- [x] T057 [US6] 更新spec/plan/research/data-model/evidence，规定单壁观测继续fail-closed、局部Cartesian不得补造隐藏壁、双拍至少一帧无遮挡 per FR-059-FR-061/SC-020
+- [x] T058 [US4] 在Mac锁定原人工JSON SHA并生成不覆盖原件的语义派生副本；服务器Git外复核原件、派生副本与压缩包SHA，媒体/JSON不得入Git per FR-056/SC-019
+
+### Phase 11 Dependencies
+
+- T056 → T057；T058由持有原始人工JSON的Mac执行，不依赖算法修改。

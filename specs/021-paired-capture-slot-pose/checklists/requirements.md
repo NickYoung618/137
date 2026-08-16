@@ -34,3 +34,5 @@
 - Spec clarification required no interactive question: the parameter values are intentionally modeled as UNCONFIRMED rather than guessed.
 - Experimental default-off and no-main-merge constraints are normative.
 - 2026-08-16 bidirectional/outward increment revalidated through FR-055 and SC-018: the coarse raw interval is evidence rather than a hard boundary; search bounds remain configured and fail-closed, with no unresolved clarification marker.
+- 2026-08-17 human-review correction revalidated through FR-061 and SC-020: the mislabeled line confirms one visible real-groove wall, never the opposite wall; hidden-wall synthesis is prohibited and a single visible wall remains fail-closed.
+- Original Mac LabelMe, derived semantic copy and archive SHA values were independently verified on the server outside Git; none is runtime or complete-groove truth.

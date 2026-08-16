@@ -4,7 +4,7 @@
 
 ## Summary
 
-在020单帧圆定位、暗区、真槽几何、亚像素侧壁和同源性诊断之上增加独立、默认关闭的双帧编排层。当前增量聚焦单帧局部墙候选：已有140张真实BMP trace证明原粗暗区只向内搜索会漏掉真实另一壁。新版对每个待验证anchor同时建立inward/outward wrap360搜索域，独立拟合物理墙，然后以无序canonical wall pair检查同一方形开口。该路径仍只产生不可提升的实验诊断，不改变020权威状态或姿态。
+在020单帧圆定位、暗区、真槽几何、亚像素侧壁和同源性诊断之上增加独立、默认关闭的双帧编排层。140张真实BMP trace曾证明原粗暗区只向内搜索会漏掉区间外墙证据；随后part-019 374人工线确认285.953°既有cluster是一条可见真实槽壁，但并未证明相对侧壁在该帧可见。双向搜索因此只负责枚举实际可观测墙，不负责恢复被遮挡像素；只有完整同源两壁可见时才评估无序canonical wall pair，单壁观测继续fail-closed。双拍仍负责保证至少一拍无遮挡。该路径不改变020权威状态或姿态。
 
 ## Technical Context
 
@@ -20,7 +20,7 @@
 
 ## Constitution Check
 
-- 规格先行：PASS。55项FR和18项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对和逐seed可追溯性。
+- 规格先行：PASS。61项FR和20项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性及单壁观测边界。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -44,6 +44,8 @@
 13. 唯一实验解只写入`diagnostics.localSecondWallDiagnostic`，标记不可提升；顶层失败码、valid、姿态和PLC字段完全不变。
 14. diagnostic/3保留search domain、每个seed的生成/拒绝、physical wall cluster、canonical pair和分层failedChecks；Git外提取工具只读JSONL，不读取原图。
 15. 审阅工具只画cluster代表与最终canonical pair，标注`AUTO_experimental_`、`human_verified=false`和不权威声明，不画每个raw seed。
+16. 人工审核shape先核对几何而非相信label字面；原件和SHA不变，派生副本只把374的已确认线语义规范为可见真实槽壁，并显式声明它不是相对侧壁真值。
+17. 若仅一条真槽壁可观测，局部诊断保留墙证据和失败原因但不计算完整槽中点；当前顶层继续fail-closed。双拍中必须由至少一张无遮挡帧提供完整开口。
 
 ## Project Structure
 
@@ -87,7 +89,7 @@
 
 ## Post-Design Constitution Re-check
 
-PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed，但只有口头区域确认而无多张像素壁真值；真实双拍BMP、确认旋转参数和人工标注仍是生产验收阻塞。
+PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed；374人工线只确认一条可见真壁，不能证明相对壁可见或提供完整槽真值。人工原件与派生副本SHA已在Git外复核；真实双拍BMP、确认旋转参数及至少一拍完整开口真值仍是生产验收阻塞。
 
 ## Complexity Tracking
 

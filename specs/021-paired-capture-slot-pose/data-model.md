@@ -66,6 +66,19 @@
 - pixelBoundaryKnown：恒false
 - LabelMe shape：AUTO_observed_dark_angular_interval_* linestrip；圆周弧线只表达角区间，不是二维阴影区域
 
+## HumanVisibleWallReview
+
+- sourceAnnotationRelativePath、sourceAnnotationSha256、sourceShapeLabel、sourcePoints
+- reviewedSemanticLabel：`human-confirmed-visible-real-groove-wall`
+- humanVerified：true
+- visibleWallOnly：true
+- oppositeWallTruth：false
+- completeOpeningTruth：false
+- oppositeWallObservability：UNKNOWN或POSSIBLY_OCCLUDED
+- runtimeInputAllowed：false
+
+规则：原LabelMe及SHA不可覆盖；派生审核副本必须逐点保留原两点几何并记录来源SHA。该实体只证明一条可见真实槽壁，不提供另一壁、槽口中点或姿态真值。
+
 ## LocalSecondWallDiagnostic v3
 
 - schemaVersion、thresholdVersion、enabled、status、authoritative=false、posePromotionAllowed=false
@@ -94,3 +107,5 @@ enabled + confirmed + 0 match → PAIR_MATCH_NOT_FOUND
 enabled + confirmed + multiple/low margin → PAIR_MATCH_AMBIGUOUS
 enabled + confirmed + unique + no usable frame → PAIR_NO_UNOBSTRUCTED_MEASUREMENT
 enabled + confirmed + unique + usable → DETECTED, image guidance available, PLC blocked
+
+当前单帧只有`HumanVisibleWallReview`而无完整两壁时保持原失败状态。`PARTIALLY_OBSERVED`仅保留为未来可升版的诊断状态候选，不属于当前权威结果状态，且不得使valid或guidance可用。

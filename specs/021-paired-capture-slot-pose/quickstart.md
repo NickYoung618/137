@@ -59,6 +59,39 @@ failed_checks、fixture_identity_confirmed=false和boundary_semantics=angular_pr
 人工只需确认/修正真实凹槽、fixture shadow A/B和左右壁是否同源。
 Pic_2026_08_13_132354_292.bmp不加入manifest。
 
+### 374人工线的安全语义更名
+
+当前人工文件中`HUMAN_true_groove_wall_missing`是误命名；它实际确认已有285.953°墙cluster是一条可见真实槽壁，不能作为相对侧壁真值。先在Mac计算原件SHA，再生成不覆盖原件的派生副本：
+
+    HUMAN_SOURCE="$A2_WORK/manual-review-part-019-374-369/raw/review-01-Pic_2026_08_13_132433_374.json"
+    HUMAN_DERIVED="${HUMAN_SOURCE%.json}.semantic-reviewed-v2.json"
+    test -f "$HUMAN_SOURCE"
+    test ! -e "$HUMAN_DERIVED"
+    HUMAN_SOURCE_SHA="$(shasum -a 256 "$HUMAN_SOURCE" | awk '{print $1}')"
+    jq --arg source_sha "$HUMAN_SOURCE_SHA" '
+      .flags = ((.flags // {}) + {
+        source_annotation_sha256: $source_sha,
+        source_preserved: true,
+        runtime_input_allowed: false
+      })
+      | .shapes |= map(
+          if .label == "HUMAN_true_groove_wall_missing" then
+            .label = "HUMAN_confirmed_visible_real_groove_wall"
+            | .description = "Confirms one visible real-groove wall; not opposite-wall or complete-opening truth"
+            | .flags = ((.flags // {}) + {
+                human_verified: true,
+                semantic_role: "visible_real_groove_wall",
+                opposite_wall_truth: false,
+                complete_opening_truth: false,
+                opposite_wall_observability: "UNKNOWN_OR_POSSIBLY_OCCLUDED"
+              })
+          else . end
+        )
+    ' "$HUMAN_SOURCE" > "$HUMAN_DERIVED"
+    shasum -a 256 "$HUMAN_SOURCE" "$HUMAN_DERIVED"
+
+必须保留`HUMAN_SOURCE`不变。派生副本仍只用于人工审核，不能作为生产运行时输入；不要添加或猜测另一侧壁线。
+
 ## 默认关闭的局部第二壁诊断
 
 不要修改已有020配置。先在Git外复制并插入实验块；`$CONFIG_020`应是Mac此前实际使用的020完整配置：
