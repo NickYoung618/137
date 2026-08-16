@@ -6,7 +6,7 @@
 
 **Baseline**: `d15703127f9b80351e42d2819f562553003802d2`
 
-**Status**: Diagnostic decision complete; no runtime change
+**Status**: Complete; initial technical-release boundary confirmed by Mac 100-frame extension; no runtime change
 
 ## User Scenarios & Testing
 
@@ -58,7 +58,7 @@
 
 ### Functional Requirements
 
-- **FR-001**: MUST冻结Mac独立结论：010+030为40/40有效、权威真值PASS、Phi不变。
+- **FR-001**: MUST冻结Mac独立结论：010/030/050/080/100跨5组100/100技术完成、权威真值PASS、Phi运行时不变。
 - **FR-002**: MUST逐条核验010的20条D7来源、回退路径、原质量状态、有限值和审核状态。
 - **FR-003**: MUST追溯v6原质量状态具体由哪些图像门产生，并区分“计算时有边缘”与“交付时有可审核边缘”。
 - **FR-004**: MUST明确`measurementValid`、`evidenceComplete`、绝对准确度和`productionDisposition`四个概念。
@@ -86,7 +86,7 @@
 
 ## Assumptions
 
-- Mac独立验证事实由用户冻结，本轮不重新读取Mac私有运行目录。
+- Mac独立验证事实由用户冻结，本轮不重新读取Mac私有运行目录；050/080/100无逐帧真值。
 - 服务器外置010+030结果用于只读诊断，不进入Git。
 - 初始发布仍是像素级技术检测交付，`productionDisposition`保持`not_evaluated`。
 - 若业务要求每个有效数值都必须有A/B可视证据，应在后续增量中保留v6原始点，而不是放宽或改写有效性。

@@ -8,6 +8,16 @@
 边界可审核、绝对精度已证明或生产OK/NG。如果首版某个消费场景要求人工可复核边界，该场景必须要求
 `measurementValid && evidenceComplete`，而不是改写底层测量状态。
 
+## Mac extension confirmation
+
+Mac在相同`d1570312`运行时代码上完成050/080/100新增60帧独立复验，execution、registration、D7和Phi
+均为60/60；合并既有010/030后，5组100帧达到100/100技术完成且无帧级失败。唯一权威真值仍PASS：
+D7误差0.546162px、Phi直径误差0.939461px。
+
+因此，**初始技术版本状态确认为可交付，且继续受本规格的条件发布边界约束**。这批60帧没有目标真值，
+不能把100/100解释为100张精度通过；010的20帧仍是`measurementValid=true`但
+`evidenceComplete=false`；`productionDisposition`仍为`not_evaluated`。本次记录不触发调参或算法修改。
+
 ## Root cause
 
 010的新paired-transition候选在A/B两侧不能形成合格的同层边界，因此正式逻辑进入受控v6 fallback。
