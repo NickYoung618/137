@@ -150,3 +150,12 @@
 - 39个根目录JSON Schema通过Draft 2020-12 meta-validation；真实队列和真实partial输出均通过对应Schema。Python compile、受影响CLI help和Git内JSON解析通过。
 - `git diff --check`、媒体/大文件、绝对数据路径与原始证据污染门通过。Git中没有BMP/JPEG/PNG/MP4/RAR/ZIP、人工JSON、140张回放JSONL或客户数据绝对路径。
 - `main`/`origin/main`仍为`04d179628a6f3f7f2a30d2a4884ce5ef98abfffa`；本轮仅提交并推送`021-paired-capture-slot-pose`，不合并main、不启用PLC。
+
+## Mac Independent Gate at fc9210d
+
+- Mac将独立验证分支快进到`fc9210dd172a1db96d20daf5b9bbe70d1d193f97`，未改代码、未合并main。聚焦测试`33/33`通过，`1`项按平台条件skip。
+- Mac使用140张原始BMP、现有三折manifest和Git外实验配置独立回放；配置SHA-256为`f234a88b91971b780c6ae6dd5c786da630d090a398bce7515e40983a50de4447`。
+- 顶层保持`0/140 valid`。失败分布为`GROOVE_SOURCE_INCONSISTENT 33`、`HOUSING_CIRCLE_NOT_FOUND 27`，以及`PHYSICAL_OUTER_CIRCLE_FAILED`、`GROOVE_RECOGNITION_AMBIGUOUS`、`GROOVE_RECOGNITION_FAILED`、`GROOVE_REFINEMENT_FAILED`各`20`。局部状态为`PARTIALLY_OBSERVED 33`、`NOT_RUN 107`，与服务器证据一致。
+- Mac独立构建队列同样选中`normal:part-008`的`147`（rank 1）与`145`（rank 2），并正确排除part-006/019。Mac `review-queue.json` SHA-256为`b7946f853e7100bd0a52668928203765d0085b6ec6f0c6ec6817574c8570b8da`，联系表SHA-256为`d6cee826fcbddbf0e66062d60756161860dc54b78e7f4f31fce39ea92a58397c`。这些是独立Git外产物，不要求与服务器渲染文件哈希相同；可审计的核心是分支/配置哈希、输入manifest和队列选择语义。
+- Mac外置相对证据目录为`initial-mvp-021-mac-fc9210d/complete-groove-review/review-bundle`，仍不进Git。人工尚未确认145/147的两墙同源、端点、无遮挡或fixture污染，所以Mac门只证明可复现性与fail-closed一致，不证明完整槽真值、姿态精度或识别率。
+- 下一步仅是人工查看145/147并回答四个已版本化审阅问题。在此之前不根据AUTO图调参、不提升为真值、不合并main。
