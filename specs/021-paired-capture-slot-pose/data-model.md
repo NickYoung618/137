@@ -98,6 +98,32 @@
 - searchOutcomeSummary：每极性seed/accepted/rejection counts、cluster count/sizes和NO_EDGE_SIGNAL/SINGLE_EDGE_ATTRACTOR/MULTIPLE_EDGE_CLUSTERS
 - 配置约束：inwardSearchExtentDeg/outwardSearchExtentDeg不超过maxWallSeparationDeg；maxSeedsPerDomain、maxTotalSearchJobs和maxWallCandidates为硬上限
 
+## LocalSecondWallDiagnostic v4 partial extension
+
+- schemaVersion：`local-second-wall-diagnostic/4`
+- status新增：`PARTIALLY_OBSERVED`
+- partialObservation：仅partial时为对象，其余为null
+- observedWallClusterIds、observedWallCandidateCount
+- completeSameSourceOpeningObserved：恒false
+- trueGrooveWallIdentityConfirmed：恒false（运行时）
+- humanConfirmationAppliedAtRuntime：恒false
+- oppositeWallObservability：UNCONFIRMED
+- reason：SINGLE_WALL_CLUSTER或NO_SAME_SOURCE_WALL_PAIR
+
+规则：partial不带experimentalCandidate，不带完整openingEndpointProfileDeg或中点；外层slot结果仍失败。人工审核可在Git外建立cluster到真壁的关系，但该关系不回灌运行时。
+
+## CompleteGrooveReviewQueue
+
+- schemaVersion：`complete-groove-review-queue/1`
+- datasetIds、sourceManifestSha256s、sourceResultSha256s
+- selectionPolicy：sampleEvidenceRule、withinSampleRule、maxSamples、framesPerSample
+- excludedSamples[]：sampleId、reason、authority
+- sampleAudit[]：sampleId、manifestFrameCount、resultFrameCount、twoWallEvidenceCount、stageCounts、selectionStatus
+- entries[]：sampleId、imageId、relativePath、sourceImageSha256、selectionRank、evidenceStage、topLevelErrorCode、requiredHumanShapes、reviewQuestions
+- truthPolicy：accuracyEvaluated=false、algorithmOutputIsTruth=false、humanVerified=false、runtimeInputAllowed=false
+
+规则：relativePath必须为A2根相对安全路径；一个sample不得因角度或置信度被拆选；已知partial/mixed sample不得进入完整槽正向队列。
+
 ## State Transitions
 
 disabled → EXPERIMENT_DISABLED
@@ -108,4 +134,4 @@ enabled + confirmed + multiple/low margin → PAIR_MATCH_AMBIGUOUS
 enabled + confirmed + unique + no usable frame → PAIR_NO_UNOBSTRUCTED_MEASUREMENT
 enabled + confirmed + unique + usable → DETECTED, image guidance available, PLC blocked
 
-当前单帧只有`HumanVisibleWallReview`而无完整两壁时保持原失败状态。`PARTIALLY_OBSERVED`仅保留为未来可升版的诊断状态候选，不属于当前权威结果状态，且不得使valid或guidance可用。
+当前单帧只有`HumanVisibleWallReview`而无完整两壁时保持原失败状态。v4的`PARTIALLY_OBSERVED`是当前局部实验诊断态，不属于权威slot-pose结果状态，且不得使valid或guidance可用。

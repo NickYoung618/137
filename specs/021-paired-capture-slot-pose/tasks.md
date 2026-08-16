@@ -126,3 +126,25 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 ### Phase 11 Dependencies
 
 - T056 → T057；T058由持有原始人工JSON的Mac执行，不依赖算法修改。
+
+## Phase 12: Initial MVP - 部分观测状态与完整槽复核队列
+
+**Goal**: 版本化表达单壁/混合边的非权威partial状态，保护374负例，并从140张中生成不含真值的最小完整槽复核队列。
+
+**Independent Test**: 单墙、混合边、完整双壁、0墙/多解合成契约全部通过；队列对输入顺序稳定、排除显式partial sample且不含角度择样字段。
+
+- [x] T059 [US7] 先在 tests/test_local_second_wall.py 与 tests/test_single_real_groove.py 增加PARTIALLY_OBSERVED、374式混合边不提升、完整双壁valid/85°修正不回退测试 per FR-062-FR-067/SC-021-SC-023
+- [x] T060 [P] [US7] 先在 tests/test_complete_groove_review_queue.py 增加manifest/result对账、sample内SHA稳定选帧、partial排除、无真值/路径安全/外置输出测试 per FR-068-FR-070/SC-024
+- [x] T061 [US7] 在 algorithms/slot_pose/local_second_wall.py 实现diagnostic/4 PARTIALLY_OBSERVED与partialObservation，保持0.12、0.5°和顶层失败不变 per FR-062-FR-065
+- [x] T062 [P] [US7] 更新 contracts/local-second-wall-diagnostic-result.schema.json、algorithms/slot_pose/contract.py、trace exporter和相应契约测试到diagnostic/4 per FR-062-FR-064/SC-025
+- [x] T063 [US7] 实现 tools/build_complete_groove_review_queue.py 与 contracts/complete-groove-review-queue.schema.json，按sample证据筛选及SHA选帧 per FR-068-FR-070
+- [x] T064 [US7] 更新 README.md、specs/021-paired-capture-slot-pose/quickstart.md和evidence.md，明确partial非真槽身份、Mac队列/回放命令和初版验收边界 per FR-063-FR-070
+- [x] T065 [US7] 用服务器Git外140张冻结三折结果生成最小复核队列和review manifest，显式排除part-006及已知partial part-019，只报告候选证据不称准确率 per SC-024
+- [x] T066 [US7] 用服务器Git外374原图/结果运行diagnostic/4聚焦回归，确认PARTIALLY_OBSERVED且顶层无角/PLC；不重跑完整140张 per SC-021/SC-022
+- [x] T067 运行SpecKit analyze、聚焦/全量测试、全部Schema、CLI、diff/JSON/媒体/绝对路径污染门 per SC-025
+- [x] T068 更新任务和脱敏证据，本地提交并推送021功能分支，不合main、不改PLC per SC-025
+
+### Phase 12 Dependencies
+
+- T059-T060先于T061-T063；T061-T063完成后执行T064-T066；T067-T068收尾。
+- T065只读取冻结140张外置manifest/JSONL；T066只运行374代表帧，不使用人工标注作为运行时输入。

@@ -25,8 +25,8 @@ def payload(name: str) -> dict:
         "error": {"code": "GROOVE_SOURCE_INCONSISTENT"},
         "diagnostics": {
             "localSecondWallDiagnostic": {
-                "schemaVersion": "local-second-wall-diagnostic/3",
-                "status": "SOURCE_INCONSISTENT", "errorCode": "SOURCE_INCONSISTENT",
+                "schemaVersion": "local-second-wall-diagnostic/4",
+                "status": "PARTIALLY_OBSERVED", "errorCode": "PARTIAL_GROOVE_OBSERVATION",
                 "localInterval": {"startDeg": 285.0, "endDeg": 309.0},
                 "searchDomains": [{"domainId": "startSide-outward", "direction": "OUTWARD"}],
                 "searchLimits": {"actualTotalSearchJobs": 48},
@@ -47,6 +47,15 @@ def payload(name: str) -> dict:
                     "memberRawHypothesisIds": ["raw-local-wall-hypothesis-001"],
                 }],
                 "canonicalWallPairs": [{"canonicalPairId": "falling--rising"}],
+                "partialObservation": {
+                    "observedWallClusterIds": ["falling-wall-cluster-001", "rising-wall-cluster-001"],
+                    "observedWallCandidateCount": 2,
+                    "completeSameSourceOpeningObserved": False,
+                    "trueGrooveWallIdentityConfirmed": False,
+                    "humanConfirmationAppliedAtRuntime": False,
+                    "oppositeWallObservability": "UNCONFIRMED",
+                    "reason": "NO_SAME_SOURCE_WALL_PAIR",
+                },
             }
         },
     }

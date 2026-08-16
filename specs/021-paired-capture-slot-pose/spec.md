@@ -130,6 +130,24 @@
 6. **Given** 真槽位于31°或328°附近，**When** 双向局部搜索，**Then** 不得因角度本身被屏蔽。
 7. **Given** 人工只确认一条可见真槽壁且相对侧没有可靠像素证据，**When** 局部诊断运行，**Then** 保留该可见壁及观测性说明，但不得生成另一侧壁真值、完整槽中点、有效姿态或PLC命令。
 
+---
+
+### User Story 7 - 部分观测诊断与完整槽人工复核队列 (Priority: P1)
+
+算法工程师需要把“有墙状像素证据但无法形成完整同源槽口”与“完全没有候选”分开，同时从冻结140张中选择极少量最可能已具备两壁证据的帧供人工确认。人工确认不进入生产运行时，已知part-019混合边只作负例。
+
+**Why this priority**: 初版必须能安全说明单侧可见/遮挡，而完整槽姿态链又需要新的两壁人工真值；两者不能通过放宽门限或把算法输出当真值解决。
+
+**Independent Test**: 用单壁、真壁+fixture混合边、完整同源双壁和无墙候选合成场景验证状态；用多个物理零件的manifest+JSONL验证队列选择稳定、排除已知partial组且不泄漏角度真值。
+
+**Acceptance Scenarios**:
+
+1. **Given** 至少一个墙状cluster可观测但没有完整同源唯一墙对，**When** 局部诊断汇总，**Then** 输出`PARTIALLY_OBSERVED`、`authoritative=false`、`posePromotionAllowed=false`，并明确完整槽未观测。
+2. **Given** 374式真壁+fixture混合边，**When** 配对失败，**Then** 不产生`experimentalCandidate`、槽中点或角度；顶层仍为`GROOVE_SOURCE_INCONSISTENT`和`valid=false`。
+3. **Given** 两侧真实槽壁完整可见且同源门通过，**When** 正常single_real_groove链运行，**Then** 输出唯一完整槽口、当前角和到85°±5°的图像有符号修正量，PLC仍为空。
+4. **Given** 140张manifest与结果，**When** 生成最小复核队列，**Then** 先按物理sample汇总是否到达双壁证据阶段，再在候选sample内用SHA稳定选择，不依据角度误差或最终算法表现挑帧。
+5. **Given** part-019已知partial/mixed语义，**When** 选择完整槽候选，**Then** 它作为负例记录但不进入“可能完整槽”正向队列；所有队列项保持humanVerified=false。
+
 ### Edge Cases
 
 - 第二帧旋转跨越0°/360°，或方向为逆时针。
@@ -211,6 +229,15 @@
 - **FR-059**: 单帧只有一条可见真壁或另一壁可观测性不明时，当前运行时 MUST 保持fail-closed、`valid=false`、无权威角和无PLC命令；系统 MUST NOT 从不可见像素合成第二壁。未来若增加`PARTIALLY_OBSERVED`，必须升版并保持其为非权威诊断状态。
 - **FR-060**: 局部Cartesian/双向侧壁搜索 MAY 发现原区间外实际可见的墙证据，但 MUST NOT 把“搜索不到”解释为真实壁坐标缺失或要求人工猜线；只有两侧均有可审计像素证据时才可评估完整开口。
 - **FR-061**: 双拍配对在生产提升姿态前 MUST 至少有一帧完整、无遮挡、同源两壁可观测；若两帧都只有部分观测或完整帧不唯一，MUST fail-closed。
+- **FR-062**: 局部墙诊断输出 MUST 升版并支持`PARTIALLY_OBSERVED`；该状态只表示存在墙状像素证据但未建立完整同源唯一槽口，不得声明任何候选是真槽真值。
+- **FR-063**: `PARTIALLY_OBSERVED` MUST 保持`authoritative=false`、`posePromotionAllowed=false`、`experimentalCandidate=null`，且完整槽中点、当前角、修正角和PLC命令均不可用。
+- **FR-064**: 部分观测输出 MUST 列出observed wall cluster ID、证据数量、`completeSameSourceOpeningObserved=false`、`humanConfirmationAppliedAtRuntime=false`和`oppositeWallObservability=UNCONFIRMED`，以区分运行时证据与Git外人工审核。
+- **FR-065**: 局部诊断为`PARTIALLY_OBSERVED`时，外层slot-pose结果 MUST 继续使用现有`GROOVE_SOURCE_INCONSISTENT`、`DETECTION_FAILED`、`guidanceStatus=NOT_AVAILABLE`和`valid=false`；不得新增PLC路径或把partial当检测成功。
+- **FR-066**: 完整同源两壁通过现有refinement与source-consistency门时，single_real_groove正常链 MUST 保持`DETECTED`、valid图像测量、85°±5°死区与最短有符号修正语义，不得被partial状态改动回退。
+- **FR-067**: part-019混合边回归 MUST 保留`reuses_rejected_initial_pair`及source inconsistency硬拒绝；309.48°fixture边不得与285.953°已确认真壁形成完整槽口。
+- **FR-068**: 系统 MUST 提供只读、路径安全的完整槽人工复核队列CLI，输入一个或多个冻结manifest与对应JSONL，按sample汇总上游阶段、双壁refinement/cluster证据及已知人工排除项。
+- **FR-069**: 队列选择 MUST 先选具有双壁像素证据且未被人工标为partial/mixed的sample，再在sample内用`sha256(sampleId|sourceImageSha256)`稳定选择至多配置数量；MUST NOT 依据预测角、修正量、85°接近度或门限距离选帧。
+- **FR-070**: 队列JSON、CSV和review manifest MUST 写到Git外，使用A2根相对路径与图像SHA，标记`accuracyEvaluated=false`、`algorithmOutputIsTruth=false`、`humanVerified=false`并列出最小复核问题；媒体和运行JSONL不得提交Git。
 
 ### Key Entities
 
@@ -227,6 +254,8 @@
 - **PhysicalWallCandidate**: 独立seed拟合出的墙角、有限线段、径向证据、外圆交点、cluster归属与拒绝阶段。
 - **CanonicalWallPair**: 按稳定wall cluster ID排序的无序墙对、同一开口几何/灰度/连通性证据又failedChecks。
 - **HumanVisibleWallReview**: 原人工shape身份与SHA、派生语义标签、两点几何、`oppositeWallTruth=false`和观测性限制；只证明一条可见真实槽壁。
+- **PartialWallObservation**: 运行时墙状cluster集合、未形成完整同源槽口的原因和非权威边界；不含人工真壁身份。
+- **CompleteGrooveReviewQueue**: 按物理sample汇总、人工排除项、稳定选帧规则、相对路径/SHA和待回答问题；不含角度真值。
 
 ## Success Criteria
 
@@ -252,6 +281,11 @@
 - **SC-018**: 双向搜索的实际seed数和候选数不超过配置上限；默认关闭时不执行新路径，全量回归和原历史耗时门通过。
 - **SC-019**: 语义派生审核副本100%保留原人工shape两点，记录原文件SHA且不覆盖原件；误命名label不会进入另一侧壁真值或运行时输入。
 - **SC-020**: 一条人工确认真壁加一条fixture边的回归场景100%保持`valid=false`且不产生完整槽中点、姿态或PLC命令；0.12门限和默认配置不变。
+- **SC-021**: 单墙cluster和仅source-inconsistent墙对测试100%输出`PARTIALLY_OBSERVED`及完整FR-064证据；0墙保持NOT_FOUND，多完整解保持AMBIGUOUS。
+- **SC-022**: 374混合边结构回归100%无`experimentalCandidate`、无完整槽端点/中点和无图像引导；已拒绝初始对不能重新通过。
+- **SC-023**: 完整双壁合成运行时100%保持既有`DETECTED`、当前角、85°目标、最短有符号修正和PLC阻断契约。
+- **SC-024**: 140张候选盘点100%按sampleId对账且不含sealed part-006；最小正向复核队列不含已知partial part-019，队列顺序对输入manifest/JSONL顺序不敏感。
+- **SC-025**: 新Schema、CLI和全量测试通过；默认关闭路径、0.12同源门、0.5°墙merge、main和PLC均不改变。
 
 ## Assumptions
 

@@ -458,19 +458,31 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
             "failedChecks": ["edge_contrast_asymmetry"],
         }
         diagnostic = {
-            "schemaVersion": "local-second-wall-diagnostic/2",
+            "schemaVersion": "local-second-wall-diagnostic/4",
             "thresholdVersion": "local-second-wall-diagnostic-v1",
-            "enabled": True, "status": "UNIQUE_DIAGNOSTIC",
-            "failureStage": None, "errorCode": None,
+            "enabled": True, "status": "PARTIALLY_OBSERVED",
+            "failureStage": "single_wall_observability",
+            "errorCode": "PARTIAL_GROOVE_OBSERVATION",
             "authoritative": False, "posePromotionAllowed": False,
             "anchorEvidence": [],
+            "searchDomains": [],
             "sideSearchCandidates": [],
             "sideSearchMergeClusters": [], "searchOutcomeSummary": {},
             "rawHypotheses": [], "hypothesisMergeClusters": [],
-            "hypotheses": [{"hypothesisId": "local-wall-hypothesis-001", "failedChecks": []}],
-            "experimentalCandidate": {
-                "hypothesisId": "local-wall-hypothesis-001", "authoritative": False,
-                "posePromotionAllowed": False,
+            "hypotheses": [{
+                "hypothesisId": "local-wall-hypothesis-001",
+                "failedChecks": ["sidewall_source_consistency"],
+            }],
+            "canonicalWallPairs": [],
+            "experimentalCandidate": None,
+            "partialObservation": {
+                "observedWallClusterIds": ["falling-wall-cluster-001"],
+                "observedWallCandidateCount": 1,
+                "completeSameSourceOpeningObserved": False,
+                "trueGrooveWallIdentityConfirmed": False,
+                "humanConfirmationAppliedAtRuntime": False,
+                "oppositeWallObservability": "UNCONFIRMED",
+                "reason": "SINGLE_WALL_CLUSTER",
             },
         }
         with (
@@ -488,8 +500,38 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertFalse(payload["result"]["valid"])
         self.assertEqual("GROOVE_SOURCE_INCONSISTENT", payload["error"]["code"])
         self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
-        self.assertEqual("UNIQUE_DIAGNOSTIC", payload["diagnostics"]["localSecondWallDiagnostic"]["status"])
+        self.assertEqual("PARTIALLY_OBSERVED", payload["diagnostics"]["localSecondWallDiagnostic"]["status"])
         self.assertFalse(payload["diagnostics"]["localSecondWallDiagnostic"]["posePromotionAllowed"])
+        self.assertIsNone(payload["diagnostics"]["localSecondWallDiagnostic"]["experimentalCandidate"])
+
+    def test_complete_two_wall_pose_keeps_image_guidance_and_plc_block(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["pose"].update({
+            "target_semantics_confirmed": True,
+            "conventions_confirmed": False,
+            "mechanical_zero_image_deg": None,
+            "positive_direction": None,
+            "production_plc_mapping_confirmed": False,
+        })
+        path = self.root / "single-v3-complete-two-wall-regression.json"
+        write_json(path, config)
+        payload = run(self.images / "one-real-two-shadows.png", path, "single:v3:complete")
+        self.assertTrue(payload["result"]["valid"], payload)
+        self.assertEqual("DETECTED", payload["result"]["detectionStatus"])
+        self.assertEqual(85.0, payload["result"]["targetAngleDeg"])
+        self.assertEqual(5.0, payload["result"]["toleranceDeg"])
+        self.assertIsNotNone(payload["result"]["currentAngleDeg"])
+        self.assertIsNotNone(payload["result"]["imageFrameCorrectionDeg"])
+        self.assertIn(payload["result"]["rotationDirection"], {
+            "CLOCKWISE", "COUNTERCLOCKWISE", "NONE",
+        })
+        self.assertIsNone(payload["result"]["mechanicalCorrectionDeg"])
+        self.assertIsNone(payload["result"]["plcCommand"])
 
     def test_v3_zero_or_multiple_grooves_are_detection_failures(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

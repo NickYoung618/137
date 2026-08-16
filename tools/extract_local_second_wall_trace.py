@@ -23,7 +23,7 @@ TRACE_FIELDS = (
     "initialPairEvidence", "sideSearchCandidates",
     "sideSearchMergeClusters", "searchOutcomeSummary", "rawHypotheses",
     "hypothesisMergeClusters", "hypotheses", "canonicalWallPairs", "experimentalCandidate",
-    "passedHypothesisCount", "failedChecks",
+    "partialObservation", "passedHypothesisCount", "failedChecks",
 )
 
 
@@ -44,7 +44,9 @@ def _basename(payload: dict[str, Any]) -> str:
 
 
 def _validate_v3_trace(diagnostic: dict[str, Any], image_name: str) -> None:
-    if diagnostic.get("schemaVersion") != "local-second-wall-diagnostic/3":
+    if diagnostic.get("schemaVersion") not in {
+        "local-second-wall-diagnostic/3", "local-second-wall-diagnostic/4",
+    }:
         return
     searches = diagnostic.get("sideSearchCandidates") or []
     side_clusters = diagnostic.get("sideSearchMergeClusters") or []

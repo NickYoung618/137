@@ -161,7 +161,7 @@ class LocalSecondWallTests(unittest.TestCase):
             image, CENTER, RADIUS, candidate(179.5, 206.0), mixed,
             bilinear_sample, parabolic_peak, v2_config(), source_config(), diagnostic_config(),
         )
-        self.assertEqual("local-second-wall-diagnostic/3", output["schemaVersion"])
+        self.assertEqual("local-second-wall-diagnostic/4", output["schemaVersion"])
         self.assertEqual("UNIQUE_DIAGNOSTIC", output["status"], output)
         measured = output["experimentalCandidate"]["openingEndpointProfileDeg"]
         self.assertAlmostEqual(170.18, measured[0], delta=0.15)
@@ -369,7 +369,7 @@ class LocalSecondWallTests(unittest.TestCase):
         self.assertEqual("LOCAL_SECOND_WALL_NOT_FOUND", output["errorCode"])
         self.assertEqual("local_second_wall_search", output["failureStage"])
 
-    def test_geometry_survives_but_profile_mismatch_is_source_inconsistent(self) -> None:
+    def test_geometry_survives_but_profile_mismatch_is_partially_observed(self) -> None:
         image = groove_image(170.18, 179.72, center=CENTER, radius=RADIUS)
         initial = refine(image, 170.0, 180.0)
         strict_source = source_config(
@@ -384,9 +384,21 @@ class LocalSecondWallTests(unittest.TestCase):
             image, CENTER, RADIUS, candidate(168.0, 182.0), initial,
             bilinear_sample, parabolic_peak, v2_config(), strict_source, diagnostic_config(),
         )
-        self.assertEqual("SOURCE_INCONSISTENT", output["status"], output)
-        self.assertEqual("SOURCE_INCONSISTENT", output["errorCode"])
-        self.assertEqual("sidewall_source_consistency", output["failureStage"])
+        self.assertEqual("local-second-wall-diagnostic/4", output["schemaVersion"])
+        self.assertEqual("PARTIALLY_OBSERVED", output["status"], output)
+        self.assertEqual("PARTIAL_GROOVE_OBSERVATION", output["errorCode"])
+        self.assertEqual("single_wall_observability", output["failureStage"])
+        self.assertIsNone(output["experimentalCandidate"])
+        partial = output["partialObservation"]
+        self.assertGreaterEqual(partial["observedWallCandidateCount"], 1)
+        self.assertEqual(
+            partial["observedWallCandidateCount"], len(partial["observedWallClusterIds"]),
+        )
+        self.assertFalse(partial["completeSameSourceOpeningObserved"])
+        self.assertFalse(partial["trueGrooveWallIdentityConfirmed"])
+        self.assertFalse(partial["humanConfirmationAppliedAtRuntime"])
+        self.assertEqual("UNCONFIRMED", partial["oppositeWallObservability"])
+        self.assertIn(partial["reason"], {"SINGLE_WALL_CLUSTER", "NO_SAME_SOURCE_WALL_PAIR"})
         self.assertTrue(any(
             "reuses_rejected_initial_pair" in item["failedChecks"]
             for item in output["hypotheses"]
@@ -478,7 +490,7 @@ class LocalSecondWallTests(unittest.TestCase):
                     self.assertLess(abs((endpoint - 180.0 + 180.0) % 360.0 - 180.0), 0.30, output)
                 else:
                     self.assertIn(output["errorCode"], {
-                        "LOCAL_SECOND_WALL_NOT_FOUND", "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT",
+                        "LOCAL_SECOND_WALL_NOT_FOUND", "MULTIPLE_LOCAL_OPENINGS", "PARTIAL_GROOVE_OBSERVATION",
                     })
 
     @unittest.skipIf(jsonschema is None, "jsonschema is installed by the explicit Schema gate")

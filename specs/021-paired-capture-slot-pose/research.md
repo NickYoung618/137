@@ -65,3 +65,19 @@ human truth命名空间隔离，拟合圆可在算法诊断中保留但不进入
 **Rationale**: 人工两点线与AUTO 285.953°墙cluster高度重合；309.48°已被确认为fixture shadow edge。把该线当另一壁会制造错误监督，把阴影边配入真槽；要求人工猜不可见边同样不可复核。
 
 **Alternatives considered**: 按label字面训练第二壁会污染真值；用槽宽先验镜像生成第二壁会给出不可观测的伪测量；放宽0.12会重新接受已知混合边。三者均拒绝。未来可升版增加`PARTIALLY_OBSERVED`诊断状态，但它不得提升valid或引导。
+
+## Decision 10: PARTIALLY_OBSERVED只描述证据充分性
+
+**Decision**: 局部诊断升至v4。当至少一个墙状cluster存在，但只有单墙或所有墙对都因已拒绝初始对/同源性失败而不能形成完整开口时，状态为`PARTIALLY_OBSERVED`。输出全部cluster但不指定哪条是真槽壁，`experimentalCandidate`为空，外层仍`GROOVE_SOURCE_INCONSISTENT`。
+
+**Rationale**: 374人工审核能确认某一既有cluster是真壁，但生产运行时不得读取该标签。把“运行时看见墙状边”与“人工确认物理身份”分开，既能表达遮挡，又不会把阴影边包装成真实槽。
+
+**Alternatives considered**: 继续统一为`SOURCE_INCONSISTENT`无法区分完全缺失与部分可见；运行时绑定374坐标会泄漏真值并过拟合；把partial设为valid违反fail-closed。均拒绝。
+
+## Decision 11: 完整槽队列按sample筛选、按SHA选帧
+
+**Decision**: 只读汇总140张冻结manifest/JSONL，先找至少两帧具有双壁refinement或physical-wall-cluster证据的sample；显式排除已有人工partial/mixed判定的sample；候选sample内用`sha256(sampleId|imageSha)`固定选择两帧。输出只含相对路径、SHA、阶段证据和人工问题。
+
+**Rationale**: 算法证据可用于决定“人工先看哪里”，但不能成为真值或用角度表现挑样。按sample防止把同一零件拆散，按身份散列避免肉眼/结果择优。
+
+**Alternatives considered**: 选最接近门限或最稳定帧会引入调参偏差；随机无种子不可复现；把part-019当正向候选与已知partial证据冲突。均拒绝。

@@ -49,7 +49,7 @@ against `contracts/local-second-wall-diagnostic-config.schema.json`; `enabled=tr
 single_real_groove, refinement v2 and enabled source consistency. It runs only after physical sidewall
 refinement succeeded but source consistency rejected the pair.
 
-The `local-second-wall-diagnostic/3` output validates against
+The `local-second-wall-diagnostic/4` output validates against
 `contracts/local-second-wall-diagnostic-result.schema.json`. It retains
 all enumerated hypotheses and failed checks. `UNIQUE_DIAGNOSTIC` may carry an experimental candidate,
 but `authoritative=false` and `posePromotionAllowed=false` are invariants. The surrounding slot result
@@ -80,6 +80,20 @@ checks remain hard gates. Zero or multiple passing canonical pairs remain fail-c
 Each v3 trace includes search domain, direction, seed, fit/rejection, physical wall cluster and canonical pair.
 Even a unique pair remains `authoritative=false`, `posePromotionAllowed=false`; the surrounding result and PLC
 boundary are unchanged.
+
+Version 4 adds `PARTIALLY_OBSERVED` and `partialObservation`. It is emitted only when wall-like pixel evidence
+exists but no complete same-source unique opening can be established. It never identifies a true-groove wall,
+never consumes human annotation, never carries an experimental complete opening, and never changes the outer
+`GROOVE_SOURCE_INCONSISTENT`/`valid=false` result. A Git-external human review may confirm one listed wall cluster,
+but that confirmation is evaluation evidence rather than runtime input.
+
+## Complete-groove review queue
+
+`complete-groove-review-queue/1` is generated outside Git from one or more frozen manifests and matching JSONL.
+It audits every physical sample, records whether two-wall refinement/cluster evidence exists, applies explicit
+human exclusions such as a known partial/mixed sample, and selects a bounded number of frames using only
+`sha256(sampleId|sourceImageSha256)`. It must not rank by predicted angle, correction, confidence or threshold
+distance. Queue entries are pending human review and contain no truth.
 
 `local-second-wall-trace-export/1` is a path-free read-only projection of result JSONL. It includes basenames
 and algorithm/config hashes but no pixels, absolute paths or human truth. It is root-cause evidence only and

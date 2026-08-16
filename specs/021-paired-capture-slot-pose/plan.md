@@ -20,7 +20,7 @@
 
 ## Constitution Check
 
-- 规格先行：PASS。61项FR和20项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性及单壁观测边界。
+- 规格先行：PASS。70项FR和25项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性、部分观测状态及完整槽人工复核队列。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -46,6 +46,8 @@
 15. 审阅工具只画cluster代表与最终canonical pair，标注`AUTO_experimental_`、`human_verified=false`和不权威声明，不画每个raw seed。
 16. 人工审核shape先核对几何而非相信label字面；原件和SHA不变，派生副本只把374的已确认线语义规范为可见真实槽壁，并显式声明它不是相对侧壁真值。
 17. 若仅一条真槽壁可观测，局部诊断保留墙证据和失败原因但不计算完整槽中点；当前顶层继续fail-closed。双拍中必须由至少一张无遮挡帧提供完整开口。
+18. `local-second-wall-diagnostic/4`将“有墙状证据但无完整同源槽口”表达为`PARTIALLY_OBSERVED`；它不选择真壁身份、不读取人工标签，外层错误和所有引导字段保持失败/null。
+19. `build_complete_groove_review_queue.py`只读合并冻结manifest和JSONL，按sample对账双壁证据；已知partial sample通过显式审计排除项剔除，候选sample内只用身份SHA稳定抽帧。
 
 ## Project Structure
 
@@ -56,17 +58,20 @@
     tools/run_paired_slot_pose.py
     tools/prepare_slot_pose_prefill_review.py
     tools/extract_local_second_wall_trace.py
+    tools/build_complete_groove_review_queue.py
     contracts/paired-capture-manifest.schema.json
     contracts/paired-slot-pose-config.schema.json
     contracts/paired-slot-pose-result.schema.json
     contracts/local-second-wall-diagnostic-config.schema.json
     contracts/local-second-wall-diagnostic-result.schema.json
+    contracts/complete-groove-review-queue.schema.json
     config/paired-capture-slot-pose.example.json
     config/local-second-wall-diagnostic.example.json
     tests/test_paired_capture_slot_pose.py
     tests/test_slot_pose_prefill_review.py
     tests/test_local_second_wall.py
     tests/test_local_second_wall_trace.py
+    tests/test_complete_groove_review_queue.py
 
 **Structure Decision**: 双拍功能不进入legacy_adapter选择链；局部第二壁模块只通过legacy_adapter的诊断钩子运行且禁止改变选择结果。图像审阅独立于生产算法。
 
@@ -80,6 +85,8 @@
 - 自动预标注只使用AUTO_标签和human_verified=false；人工标签由现场另行确认。简化图只展示“被复核对象”，020 fixture候选不等于020 valid，且不自动生成真值框。
 - fixture模板pairEvidence是身份选择唯一来源；candidateMatches中的NOT_MATCHED只说明比较过，不允许nearest补位。raw interval始终只是一维暗区证据。
 - 双向墙实验采用“搜索域→独立墙→无序墙对→枚举并保留失败”的诊断架构；原暗区不是硬边界，但物理槽宽和总seed上限仍是硬约束。不修改020 source consistency阈值，也不把唯一实验解升级为姿态。
+- `PARTIALLY_OBSERVED`描述观测充分性而不描述物理身份：一个或多个墙状cluster存在、但完整同源墙对不成立时可输出；人工确认只在外置审核记录中绑定候选，运行时字段明确`humanConfirmationAppliedAtRuntime=false`。
+- 完整槽人工复核队列以物理sample为选择单元；算法阶段只用于找“值得人工看”的组，不用于test拆分、阈值选择或准确率声明。组内选帧完全由SHA身份散列决定。
 
 ## Phase 1 Design Outputs
 

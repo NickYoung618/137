@@ -126,3 +126,27 @@
 - 使用用户提供的两点与服务器Git外AUTO审阅JSON只读比较：人工线长`82.8025 px`；AUTO `detected_groove_wall_left`共有`26`点；AUTO点到人工无限线的距离中位`1.6417 px`、最大`2.8163 px`；两线方向差`2.895°`；人工两端到AUTO首/末端距离约`9.56 px`与`1.76 px`。这些数值支持“近乎重合”，不支持它是新的相对侧壁。
 - 审核语义据此修正为`human-confirmed-visible-real-groove-wall`：285.953°cluster是一条人工确认的可见真实槽壁；309.48°为fixture shadow edge，不可与其配对。该人工线不提供相对侧壁、完整槽口、槽中点或姿态角真值。
 - 相对真实槽壁在该帧是否可见仍未知，且可能被遮挡。单帧算法不得从槽宽或方位先验镜像/补造不可见壁，也不得要求人工猜线；当前顶层fail-closed是正确安全行为。局部Cartesian搜索仅对可见像素证据有效，双拍负责至少取得一张无遮挡完整开口。
+
+## 2026-08-17 Initial MVP Partial-observation Increment
+
+- 局部输出升至`local-second-wall-diagnostic/4`，算法契约版本升至`0.16.0`；配置仍是`local-second-wall-diagnostic/2`且默认`enabled=false`。020同源对比门保持`0.12`、物理墙merge保持`0.5°`，没有PLC路径或main合并。
+- `PARTIALLY_OBSERVED`只描述“至少有墙状cluster，但完整同源唯一槽口未建立”。它输出cluster ID和观测限制，不选择真壁身份；`experimentalCandidate=null`、`authoritative=false`、`posePromotionAllowed=false`。
+- 服务器只重跑Git外part-019代表帧369/374，没有重跑完整140张。两帧均为顶层`GROOVE_SOURCE_INCONSISTENT`、`valid=false`、当前角/null、图像修正/null、PLC/null；局部状态均为`PARTIALLY_OBSERVED/PARTIAL_GROOVE_OBSERVATION`。
+- 两帧唯一canonical pair仍同时失败`reuses_rejected_initial_pair`、`sidewall_source_consistency`和`source_consistency:edge_contrast_asymmetry`，因此374已确认真壁与309.48°fixture边没有形成实验完整槽。运行JSONL SHA-256为`8a4b0cb4edd826a1adba1cc4e70a47e89d40a865d0c936822c4f846238eb5af6`。
+
+## Complete-groove Review Queue from Frozen 140 Frames
+
+- 只读盘点三折`60/40/40`、七个物理sample且不含sealed part-006。part-008有`13/20`帧到达双壁refinement候选、`7/20`为`HOUSING_CIRCLE_NOT_FOUND`；part-019有`20/20`双壁refinement候选但因人工确认partial/mixed而显式排除。
+- part-009、014、015、021、023的双壁证据帧均为0，分别停在圆定位、槽歧义、槽识别、槽精修或物理外圆阶段。因此当前最小正向复核队列只选择part-008，不表示该组真实完整槽已确认。
+- 组内不看预测角、修正量、置信度或门限距离，只用`sha256(sampleId|sourceImageSha256)/1`选择两帧：`Pic_2026_08_13_132229_147.bmp`（repeat 7）和`Pic_2026_08_13_132229_145.bmp`（repeat 5）。两者仍为`humanVerified=false`、`GROOVE_SOURCE_INCONSISTENT`待审样本。
+- Git外产物SHA-256：`review-queue.json`=`40b85f2e7084e3bd77088db6a6ddda54d419684be4f1d2cbaecb33736306fc58`；`review-queue.csv`=`c288b0973d295fdc1835f0061ce273c2d1325ff2d55512ae493c5d5402f1672c`；`review-manifest.json`=`b4b33042168a07ea7ce58efb311da468533ce0e1c06620ab36714c7895afe142`。
+- 精简RAW/SIMPLIFIED联系表已人工抽查，只显示待审墙/端点、暗区区间和非权威声明，没有人工真值框。`contact-sheet.jpg` SHA-256为`2cf1d469b36b75839fb99c8f781f21de6bd02f0f43d6e3fc6f1c6797ac132bb9`，`review-index.json`为`879699998cf445deae213006fad8ee53ff654411a0c1e49039d138ed3faf7559`；媒体仍全部Git外。
+
+## Final Verification for Initial MVP Partial-observation Increment
+
+- SpecKit analyze覆盖70个FR、25个SC和68个任务；无未覆盖的新实现需求、占位符或Constitution冲突。requirements checklist为`16/16`完成。
+- 聚焦门：`tests.test_local_second_wall`/`test_single_real_groove`/`test_local_second_wall_trace`/`test_complete_groove_review_queue`共47项，全部通过；队列专项共3项，全部通过。
+- 首次全量运行422项，421项通过；唯一失败是旧legacy适配器`<8.0s`壁钟门在并发视觉任务下测得`16.442s`。未修改或放宽该门。相同性能项独立复跑为`6.494s`并通过；随后权威全量复跑`422 tests in 143.452s`，全部通过。
+- 39个根目录JSON Schema通过Draft 2020-12 meta-validation；真实队列和真实partial输出均通过对应Schema。Python compile、受影响CLI help和Git内JSON解析通过。
+- `git diff --check`、媒体/大文件、绝对数据路径与原始证据污染门通过。Git中没有BMP/JPEG/PNG/MP4/RAR/ZIP、人工JSON、140张回放JSONL或客户数据绝对路径。
+- `main`/`origin/main`仍为`04d179628a6f3f7f2a30d2a4884ce5ef98abfffa`；本轮仅提交并推送`021-paired-capture-slot-pose`，不合并main、不启用PLC。

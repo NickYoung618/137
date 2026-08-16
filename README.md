@@ -121,10 +121,19 @@ RAW/SIMPLIFIED两栏联系表和精简`AUTO_` LabelMe预填。simplified只显�
 搜索锚点，不再当成不可越过的槽壁边界；搜索范围和候选上限均由`local-second-wall-diagnostic/2`
 显式配置并受物理槽宽上限约束。即使唯一实验候选形成，顶层仍保持
 `GROOVE_SOURCE_INCONSISTENT`、`valid=false`，不得产生权威姿态或PLC命令。
+`local-second-wall-diagnostic/4`进一步把“存在墙状像素证据、但没有完整同源唯一槽口”标为
+`PARTIALLY_OBSERVED`。该状态不指定哪条是真槽壁，`authoritative=false`、
+`posePromotionAllowed=false`、`experimentalCandidate=null`；完整槽中点、当前角、修正角和PLC均为空。
+Git外人工确认可以说明某个cluster是真壁，但人工标签绝不进入生产运行时。
 `tools/extract_local_second_wall_trace.py`可从Git外JSONL按文件basename导出不含原图和绝对路径的
 搜索域、逐seed/拟合、物理墙cluster和canonical pair trace，用于判断另一真壁是未生成、生成后被拒绝
 还是被错误归并；该工具不允许调门限。简化审阅图只额外显示最终墙对候选，使用`AUTO_experimental_`
 且明确非权威，不渲染全部seed射线。
+
+`tools/build_complete_groove_review_queue.py`从冻结manifest/JSONL按物理sample盘点双壁证据，显式排除
+已知partial/mixed样本，并在候选sample内只按图像SHA稳定选择少量待审帧。输出JSON、CSV和review manifest
+全部在Git外，`accuracyEvaluated=false`且不含预测角择样；人工必须确认两壁同属一个完整方形槽及槽口端点后，
+这些帧才可成为完整槽姿态真值。
 
 ## 007单真槽闭环图像引导
 

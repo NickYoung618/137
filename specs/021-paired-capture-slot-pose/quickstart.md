@@ -6,6 +6,11 @@
       tests.test_paired_capture_slot_pose \
       tests.test_slot_pose_prefill_review
 
+    uv run --with jsonschema python -m unittest \
+      tests.test_local_second_wall \
+      tests.test_single_real_groove \
+      tests.test_complete_groove_review_queue
+
     uv run --with jsonschema python -m unittest discover -s tests
 
 ## Mac获取功能分支
@@ -120,8 +125,8 @@ part-006，也不要用本实验结果调020门限：
       --output "$A2_WORK/local-second-wall-021.results.jsonl"
 
 判读`diagnostics.localSecondWallDiagnostic`：`UNIQUE_DIAGNOSTIC`只说明合成门下出现唯一实验候选，
-不表示检测已修复；`CANDIDATE_MISSING`、`LOCAL_SECOND_WALL_NOT_FOUND`、`MULTIPLE_LOCAL_OPENINGS`和
-`SOURCE_INCONSISTENT`由`errorCode/failureStage`区分。所有情况下顶层均应保持
+不表示检测已修复；`CANDIDATE_MISSING`、`LOCAL_SECOND_WALL_NOT_FOUND`、`MULTIPLE_LOCAL_OPENINGS`、
+`PARTIALLY_OBSERVED`和历史`SOURCE_INCONSISTENT`由`status/errorCode/failureStage`区分。所有情况下顶层均应保持
 `GROOVE_SOURCE_INCONSISTENT`、`valid=false`、无PLC命令。再用上面的审阅命令，把
 `--results-020`替换成`$A2_WORK/local-second-wall-021.results.jsonl`重新生成简化材料。
 
@@ -218,3 +223,37 @@ part-006，也不要用本实验结果调020门限：
 
 140张回放继续使用原三折validation manifest，不含sealed part-006。汇总必须分开：
 part-019新outward cluster、旧混合对拒绝、part-008未裁决fail-closed、以及其他上游失败。
+
+## PARTIALLY_OBSERVED与最小完整槽复核队列
+
+`local-second-wall-diagnostic/4`的`PARTIALLY_OBSERVED`只表示存在墙状像素证据但没有完整、同源、唯一槽口。
+它必须同时满足`authoritative=false`、`posePromotionAllowed=false`、`experimentalCandidate=null`；顶层仍为
+`GROOVE_SOURCE_INCONSISTENT`、`valid=false`，当前角、修正角和PLC均为空。人工确认的374可见真壁不会进入运行时。
+
+服务器或Mac可从冻结三折manifest/JSONL生成两帧最小正向复核队列。part-006是sealed，part-019是已知
+partial/mixed负例，二者都通过显式审计排除项记录，不是固定角或运行时ignore：
+
+    uv run --with jsonschema python tools/build_complete_groove_review_queue.py \
+      --manifest "$A2_PRIVATE/manifests/fold-01/validation-manifest.json" \
+      --manifest "$A2_PRIVATE/manifests/fold-02/validation-manifest.json" \
+      --manifest "$A2_PRIVATE/manifests/fold-03/validation-manifest.json" \
+      --results "$A2_PRIVATE/results/021-bidirectional-v3-working/fold-01.jsonl" \
+      --results "$A2_PRIVATE/results/021-bidirectional-v3-working/fold-02.jsonl" \
+      --results "$A2_PRIVATE/results/021-bidirectional-v3-working/fold-03.jsonl" \
+      --exclude-sample normal:part-006=sealed_transition_sample \
+      --exclude-sample normal:part-019=human_confirmed_partial_mixed_opening \
+      --max-samples 1 --frames-per-sample 2 \
+      --output-dir "$A2_WORK/complete-groove-review-021"
+
+输出`review-queue.json`、`review-queue.csv`和`review-manifest.json`，全部位于Git外。它们只说明哪些帧值得人工检查，
+不表示完整槽已检测正确。对当前140张，若队列选择part-008候选，可用fold-03结果生成精简AUTO审阅包：
+
+    uv run python tools/prepare_slot_pose_prefill_review.py \
+      --manifest "$A2_WORK/complete-groove-review-021/review-manifest.json" \
+      --data-root "$A2_PRIVATE" \
+      --results-019 "$A2_PRIVATE/results/021-bidirectional-v3-working/fold-03.jsonl" \
+      --results-020 "$A2_PRIVATE/results/021-bidirectional-v3-working/fold-03.jsonl" \
+      --output-dir "$A2_WORK/complete-groove-review-021/review-bundle"
+
+人工最少回答：两条AUTO墙是否都属于同一真实方形槽、两槽口端点是否准确、整个真实槽是否无遮挡完整可见、
+是否有任一边来自fixture shadow。若任一回答不确定，保持partial/fail-closed；不要根据算法建议直接改成HUMAN真值。

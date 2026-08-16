@@ -115,7 +115,7 @@ def merged_local_second_wall_config(config: dict[str, Any] | None) -> dict[str, 
 
 def _base(config: dict[str, Any], status: str) -> dict[str, Any]:
     return {
-        "schemaVersion": "local-second-wall-diagnostic/3",
+        "schemaVersion": "local-second-wall-diagnostic/4",
         "thresholdVersion": config["threshold_version"],
         "enabled": bool(config["enabled"]),
         "status": status,
@@ -133,6 +133,7 @@ def _base(config: dict[str, Any], status: str) -> dict[str, Any]:
         "hypotheses": [],
         "canonicalWallPairs": [],
         "experimentalCandidate": None,
+        "partialObservation": None,
     }
 
 
@@ -840,10 +841,31 @@ def diagnose_local_second_wall(
             )
             for item in hypotheses
         )
-        if source_only_rejected:
-            result["status"] = "SOURCE_INCONSISTENT"
-            result["failureStage"] = "sidewall_source_consistency"
-            result["errorCode"] = "SOURCE_INCONSISTENT"
+        observed_clusters = [
+            str(item["clusterId"])
+            for item in result["sideSearchMergeClusters"]
+            if isinstance(item, dict) and item.get("clusterId")
+        ]
+        partially_observed = bool(observed_clusters) and (
+            len(observed_clusters) == 1 or source_only_rejected
+        )
+        if partially_observed:
+            result["status"] = "PARTIALLY_OBSERVED"
+            result["failureStage"] = "single_wall_observability"
+            result["errorCode"] = "PARTIAL_GROOVE_OBSERVATION"
+            result["partialObservation"] = {
+                "observedWallClusterIds": observed_clusters,
+                "observedWallCandidateCount": len(observed_clusters),
+                "completeSameSourceOpeningObserved": False,
+                "trueGrooveWallIdentityConfirmed": False,
+                "humanConfirmationAppliedAtRuntime": False,
+                "oppositeWallObservability": "UNCONFIRMED",
+                "reason": (
+                    "SINGLE_WALL_CLUSTER"
+                    if len(observed_clusters) == 1
+                    else "NO_SAME_SOURCE_WALL_PAIR"
+                ),
+            }
         else:
             result["status"] = "LOCAL_SECOND_WALL_NOT_FOUND"
             result["failureStage"] = "local_second_wall_search"
@@ -855,6 +877,10 @@ def diagnose_local_second_wall(
         result["failedChecks"] = ["multiple_same_opening_second_walls"]
     else:
         result["failedChecks"] = [
-            "no_unique_same_opening_second_wall" if hypotheses else "no_second_wall_hypothesis"
+            (
+                "no_complete_same_source_opening"
+                if result["status"] == "PARTIALLY_OBSERVED"
+                else "no_unique_same_opening_second_wall"
+            ) if hypotheses else "no_second_wall_hypothesis"
         ]
     return result

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "complete-groove-review-queue.schema.json",
+  "title": "完整槽人工复核队列",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "datasetIds", "sourceManifestSha256s", "sourceResultSha256s",
+    "selectionPolicy", "excludedSamples", "sampleAudit", "entries", "truthPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "complete-groove-review-queue/1"},
+    "datasetIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "sourceManifestSha256s": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "sourceResultSha256s": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "selectionPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sampleEvidenceRule", "withinSampleRule", "maxSamples", "framesPerSample", "predictionAngleUsed", "thresholdDistanceUsed"],
+      "properties": {
+        "sampleEvidenceRule": {"const": "at_least_frames_per_sample_with_two_wall_pixel_evidence"},
+        "withinSampleRule": {"const": "sha256(sampleId|sourceImageSha256)/1"},
+        "maxSamples": {"type": "integer", "minimum": 1, "maximum": 20},
+        "framesPerSample": {"type": "integer", "minimum": 1, "maximum": 5},
+        "predictionAngleUsed": {"const": false},
+        "thresholdDistanceUsed": {"const": false}
+      }
+    },
+    "excludedSamples": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["sampleId", "reason", "authority"],
+        "properties": {
+          "sampleId": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "authority": {"const": "explicit_review_governance"}
+        }
+      }
+    },
+    "sampleAudit": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["sampleId", "manifestFrameCount", "resultFrameCount", "twoWallEvidenceCount", "stageCounts", "selectionStatus"],
+        "properties": {
+          "sampleId": {"type": "string", "minLength": 1},
+          "manifestFrameCount": {"type": "integer", "minimum": 1},
+          "resultFrameCount": {"type": "integer", "minimum": 1},
+          "twoWallEvidenceCount": {"type": "integer", "minimum": 0},
+          "stageCounts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+          "selectionStatus": {"enum": ["EXCLUDED", "ELIGIBLE", "SELECTED", "INSUFFICIENT_TWO_WALL_EVIDENCE"]}
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": [
+          "imageId", "relativePath", "sampleId", "conditionId", "repeatIndex", "sourceImageSha256",
+          "bytes", "format", "width", "height", "mode",
+          "selectionRank", "selectionRule", "evidenceStage", "topLevelErrorCode",
+          "requiredHumanShapes", "reviewQuestions", "humanVerified"
+        ],
+        "properties": {
+          "imageId": {"type": "string", "minLength": 1},
+          "relativePath": {"type": "string", "pattern": "^A2/"},
+          "sampleId": {"type": "string", "minLength": 1},
+          "conditionId": {"type": "string"},
+          "repeatIndex": {"type": ["integer", "null"]},
+          "sourceImageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "bytes": {"type": "integer", "minimum": 1},
+          "format": {"type": "string", "minLength": 1},
+          "width": {"type": "integer", "minimum": 1},
+          "height": {"type": "integer", "minimum": 1},
+          "mode": {"type": "string", "minLength": 1},
+          "selectionRank": {"type": "integer", "minimum": 1, "maximum": 5},
+          "selectionRule": {"const": "sha256(sampleId|sourceImageSha256)/1"},
+          "evidenceStage": {"type": "string", "minLength": 1},
+          "topLevelErrorCode": {"type": "string", "minLength": 1},
+          "requiredHumanShapes": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "string", "pattern": "^HUMAN_"}},
+          "reviewQuestions": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "humanVerified": {"const": false}
+        }
+      }
+    },
+    "truthPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["accuracyEvaluated", "algorithmOutputIsTruth", "humanVerified", "runtimeInputAllowed"],
+      "properties": {
+        "accuracyEvaluated": {"const": false},
+        "algorithmOutputIsTruth": {"const": false},
+        "humanVerified": {"const": false},
+        "runtimeInputAllowed": {"const": false}
+      }
+    }
+  }
+}

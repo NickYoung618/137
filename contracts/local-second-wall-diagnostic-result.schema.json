@@ -7,19 +7,20 @@
   "required": [
     "schemaVersion", "thresholdVersion", "enabled", "status", "failureStage", "errorCode", "authoritative",
     "posePromotionAllowed", "anchorEvidence", "searchDomains", "sideSearchCandidates", "sideSearchMergeClusters",
-    "searchOutcomeSummary", "rawHypotheses", "hypothesisMergeClusters", "hypotheses", "experimentalCandidate"
+    "searchOutcomeSummary", "rawHypotheses", "hypothesisMergeClusters", "hypotheses", "experimentalCandidate",
+    "partialObservation"
   ],
   "properties": {
-    "schemaVersion": {"const": "local-second-wall-diagnostic/3"},
+    "schemaVersion": {"const": "local-second-wall-diagnostic/4"},
     "thresholdVersion": {"type": "string", "minLength": 1},
     "enabled": {"type": "boolean"},
     "status": {"enum": [
       "DISABLED", "NOT_EVALUATED", "LOCAL_SECOND_WALL_NOT_FOUND",
-      "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT", "UNIQUE_DIAGNOSTIC"
+      "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT", "PARTIALLY_OBSERVED", "UNIQUE_DIAGNOSTIC"
     ]},
     "failureStage": {"type": ["string", "null"]},
     "errorCode": {
-      "enum": [null, "CANDIDATE_MISSING", "LOCAL_SECOND_WALL_NOT_FOUND", "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT"]
+      "enum": [null, "CANDIDATE_MISSING", "LOCAL_SECOND_WALL_NOT_FOUND", "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT", "PARTIAL_GROOVE_OBSERVATION"]
     },
     "authoritative": {"const": false},
     "posePromotionAllowed": {"const": false},
@@ -143,6 +144,31 @@
             "openingWidthDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
             "authoritative": {"const": false},
             "posePromotionAllowed": {"const": false}
+          }
+        }
+      ]
+    },
+    "partialObservation": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "observedWallClusterIds", "observedWallCandidateCount",
+            "completeSameSourceOpeningObserved", "trueGrooveWallIdentityConfirmed",
+            "humanConfirmationAppliedAtRuntime", "oppositeWallObservability", "reason"
+          ],
+          "properties": {
+            "observedWallClusterIds": {
+              "type": "array", "minItems": 1, "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "observedWallCandidateCount": {"type": "integer", "minimum": 1},
+            "completeSameSourceOpeningObserved": {"const": false},
+            "trueGrooveWallIdentityConfirmed": {"const": false},
+            "humanConfirmationAppliedAtRuntime": {"const": false},
+            "oppositeWallObservability": {"const": "UNCONFIRMED"},
+            "reason": {"enum": ["SINGLE_WALL_CLUSTER", "NO_SAME_SOURCE_WALL_PAIR"]}
           }
         }
       ]
