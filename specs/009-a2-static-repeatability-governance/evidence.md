@@ -72,6 +72,16 @@
 - `py_compile`、`git diff --check`通过。
 - Git差异不含图片、视频、压缩包、私有CSV、外置报告或现场绝对路径。
 
+## Validation after merging remote main
+
+- 功能提交：`428492349112be7740a5730ef3bd285b85208f63`。
+- 正常merge输入：`origin/main@2341ba482473ceea5db35a64015a8eb9dd819525`；未改写任何一边历史。
+- 保留槽姿态运行时、契约与历史002规格，同时加入远程A端面/孔2的算法、规格与测试。
+- 合并后完整回归：322 tests，119.645 s，全部通过。
+- 合并后29个JSON Schema Draft 2020-12自检通过，3个009真实dry-run payload验证通过。
+- 合并后700条JSON-only dry-run仍为36组、24组合格、12组排除，三类覆盖仍因缺TARGET_NEAR而`BLOCKED`。
+- `uv lock --check`、全部配置JSON解析、`py_compile`、`git diff --check`和冲突标记扫描通过。
+
 ## Remaining BLOCKED
 
 - badReason/poseUsable及质量authority/provenance。

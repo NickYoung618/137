@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-labelme-short-line-reference/1",
+  "title": "137 A-End-Face External LabelMe Short-Line Reference Catalog v1",
+  "type": "object",
+  "required": ["schemaVersion", "annotationPath", "annotationSha256", "imagePath", "imageSha256", "width", "height", "imageDataIgnored", "features"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-labelme-short-line-reference/1"},
+    "annotationPath": {"type": "string", "minLength": 1},
+    "annotationSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "imagePath": {"type": "string", "minLength": 1},
+    "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1},
+    "imageDataIgnored": {"type": "boolean"},
+    "features": {
+      "type": "object",
+      "required": ["19", "30"],
+      "properties": {
+        "19": {"$ref": "#/$defs/feature19"},
+        "30": {"$ref": "#/$defs/feature30"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "feature": {
+      "type": "object",
+      "required": ["rawLabel", "canonicalFeature", "shapeType", "points", "annotatedLengthPx", "angleDeg"],
+      "properties": {
+        "rawLabel": {"type": "string", "minLength": 1},
+        "canonicalFeature": {"enum": ["19", "30"]},
+        "shapeType": {"const": "line"},
+        "points": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/point"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "annotatedLengthPx": {"type": "number", "exclusiveMinimum": 0},
+        "angleDeg": {"type": "number"}
+      },
+      "additionalProperties": false
+    },
+    "feature19": {
+      "allOf": [
+        {"$ref": "#/$defs/feature"},
+        {"properties": {"canonicalFeature": {"const": "19"}}}
+      ]
+    },
+    "feature30": {
+      "allOf": [
+        {"$ref": "#/$defs/feature"},
+        {"properties": {"canonicalFeature": {"const": "30"}}}
+      ]
+    }
+  },
+  "additionalProperties": false
+}

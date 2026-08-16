@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://137.local/contracts/main-housing-registration-diagnostic-v1.schema.json",
+  "title": "Main housing registration-only diagnostic",
+  "type": "object",
+  "required": ["schemaVersion", "technicalStatus", "input", "algorithm", "registration", "error"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-main-housing-registration-diagnostic/1"},
+    "technicalStatus": {"enum": ["succeeded", "failed"]},
+    "input": {"type": "object"},
+    "algorithm": {
+      "type": "object",
+      "required": ["registrationVersion", "coreSourceSha256", "candidateConfigSha256"],
+      "properties": {
+        "registrationVersion": {"const": "main-housing-registration/2"},
+        "coreSourceSha256": {"const": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc"},
+        "candidateConfigPath": {"type": "string"},
+        "candidateConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "registration": {"type": ["object", "null"]},
+    "error": {"type": ["object", "null"]}
+  },
+  "additionalProperties": false
+}

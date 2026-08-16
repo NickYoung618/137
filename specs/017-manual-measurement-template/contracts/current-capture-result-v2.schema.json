@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/current-capture-result-v2.schema.json",
+  "title": "Hole 2 current-capture result v2",
+  "type": "object",
+  "required": ["schemaVersion", "algorithmVersion", "configVersion", "runtimeInputs", "authoritativeReference", "registration", "features", "qualityStatus", "geometryConsistency", "referenceMeasurements", "timingMs", "evidenceScope"],
+  "properties": {
+    "schemaVersion": {"const": "hole2-current-capture-result/2"},
+    "algorithmVersion": {"type": "string", "minLength": 1},
+    "configVersion": {"type": "string", "minLength": 1},
+    "runtimeInputs": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object", "required": ["role", "path", "sha256"],
+        "properties": {
+          "role": {"enum": ["authoritative_reference_annotation", "authoritative_reference_image", "target_image", "configuration"]},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "authoritativeReference": {
+      "type": "object",
+      "required": ["referenceVersion", "templateSelfCheck", "transformDirection", "transform", "registrationEvidenceSource", "annotationShapeSummary"],
+      "properties": {
+        "referenceVersion": {"const": "hole2-authoritative-manual-reference/1"},
+        "templateSelfCheck": {"type": "boolean"},
+        "transformDirection": {"const": "authoritative_reference_px_to_target_px"},
+        "transform": {"type": ["object", "null"]},
+        "registrationEvidenceSource": {"const": "authoritative_reference_image_pixels"},
+        "annotationShapeSummary": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "registration": {"type": "object", "required": ["registrationValid", "failureReason", "candidates", "selected", "transform", "inverseTransform", "transformDirection", "inverseTransformDirection"]},
+    "features": {"type": "object", "required": ["7", "Phi12.2"], "additionalProperties": false, "properties": {"7": {"$ref": "#/$defs/feature"}, "Phi12.2": {"$ref": "#/$defs/feature"}}},
+    "qualityStatus": {"type": "object"},
+    "geometryConsistency": {"type": "object"},
+    "referenceMeasurements": {"type": "object"},
+    "v6Measurements": {"type": "object"},
+    "timingMs": {"type": "object", "required": ["registration", "extraction", "total"]},
+    "evidenceScope": {"const": "single_image_pixel_geometry_only_not_repeatability_mm_accuracy_or_production_ok_ng"},
+    "errors": {"type": "array"}
+  },
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "required": ["measurementValid", "evidenceComplete", "evidenceAuditStatus", "qualityStatus", "sourceDetector", "reference", "target", "quality"]
+    }
+  },
+  "additionalProperties": false
+}

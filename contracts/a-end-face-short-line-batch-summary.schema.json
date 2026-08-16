@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-short-line-batch-summary/1",
+  "title": "137 A-End-Face Short-Line Batch Summary v1",
+  "type": "object",
+  "required": ["schemaVersion", "dataset", "imageCount", "comparisonStatus", "candidateFeatures", "priorityCoreFeatures", "acceptance"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-short-line-batch-summary/1"},
+    "dataset": {
+      "type": "object",
+      "required": ["datasetId", "datasetFingerprint", "manifestSha256", "comparisonJsonlSha256", "coreSourceSha256", "candidateConfigSha256"],
+      "properties": {
+        "datasetId": {"type": ["string", "null"]},
+        "datasetFingerprint": {"type": ["string", "null"]},
+        "manifestSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "comparisonJsonlSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "coreSourceSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "candidateConfigSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "candidateReferenceMode": {"type": ["string", "null"], "enum": ["desktop_core", "external_labelme", null]},
+        "candidateReferenceSchemaVersion": {"type": ["string", "null"], "enum": ["a-end-face-labelme-short-line-reference/1", null]},
+        "candidateReferenceAnnotationSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "candidateReferenceImageSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "evaluationScope": {"type": ["string", "null"], "enum": ["development_20", "unspecified", null]},
+        "developmentGroup": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["sampleId", "position", "imageCount"],
+              "properties": {
+                "sampleId": {"type": "string", "minLength": 1},
+                "position": {"type": "string", "minLength": 1},
+                "imageCount": {"const": 20}
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "imageCount": {"type": "integer", "minimum": 0},
+    "comparisonStatus": {
+      "type": "object",
+      "required": ["compared", "baselineFailed"],
+      "properties": {"compared": {"type": "integer", "minimum": 0}, "baselineFailed": {"type": "integer", "minimum": 0}},
+      "additionalProperties": false
+    },
+    "candidateFeatures": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["total", "coreValid", "candidateValid", "transitions", "failedChecks", "failureCategories", "deltaMetrics"],
+        "properties": {
+          "total": {"type": "integer", "minimum": 0},
+          "coreValid": {"type": "integer", "minimum": 0},
+          "candidateValid": {"type": "integer", "minimum": 0},
+          "transitions": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+          "failedChecks": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+          "failureCategories": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+          "deltaMetrics": {"type": "object", "additionalProperties": {"$ref": "#/$defs/metric"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "priorityCoreFeatures": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["total", "valid", "invalid", "sources", "reasons"],
+        "properties": {
+          "total": {"type": "integer", "minimum": 0}, "valid": {"type": "integer", "minimum": 0},
+          "invalid": {"type": "integer", "minimum": 0},
+          "sources": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+          "reasons": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "required": ["noRegression", "hasEvidenceBackedRecovery", "regressedCount", "recoveredCount"],
+      "properties": {
+        "noRegression": {"type": "boolean"}, "hasEvidenceBackedRecovery": {"type": "boolean"},
+        "regressedCount": {"type": "integer", "minimum": 0}, "recoveredCount": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "required": ["count", "mean", "min", "max"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "mean": {"type": ["number", "null"]}, "min": {"type": ["number", "null"]}, "max": {"type": ["number", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

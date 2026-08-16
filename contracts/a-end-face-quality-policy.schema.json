@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-quality-policy/1",
+  "title": "137 A-End-Face Quality Policy",
+  "type": "object",
+  "required": ["schemaVersion", "policyId", "localization"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-quality-policy/1"},
+    "policyId": {"type": "string", "minLength": 1},
+    "localization": {
+      "type": "object",
+      "required": ["requiredFiniteMetrics", "scaleRange", "centerMarginPx", "allowedMethodPrefixes", "orientationEvidence", "requiredFeatureLabels"],
+      "properties": {
+        "requiredFiniteMetrics": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "scaleRange": {
+          "type": "array",
+          "prefixItems": [
+            {"type": "number", "exclusiveMinimum": 0},
+            {"type": "number", "exclusiveMinimum": 0}
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "centerMarginPx": {"type": "number", "minimum": 0},
+        "allowedMethodPrefixes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "orientationEvidence": {
+          "type": "object",
+          "required": ["minimumRotationScore", "minimumNotchProminence"],
+          "properties": {
+            "minimumRotationScore": {"type": "number", "minimum": 0},
+            "minimumNotchProminence": {"type": "number", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "requiredFeatureLabels": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

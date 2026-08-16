@@ -40,6 +40,7 @@ def build_manifest(
     grouping_records: dict[str, dict] | None = None,
     dataset_class: str = "normal",
     semantics_records: dict[str, dict] | None = None,
+    forced_split: str | None = None,
 ) -> dict:
     input_root = input_root.resolve()
     if not input_root.is_dir():
@@ -48,6 +49,8 @@ def build_manifest(
         raise ValueError("expected repeats must be positive")
     if dataset_class not in {"normal", "bad"}:
         raise ValueError("dataset_class must be 'normal' or 'bad'")
+    if forced_split is not None and forced_split not in DATASET_SPLITS:
+        raise ValueError(f"split must be one of {sorted(DATASET_SPLITS)}")
 
     paths = sorted(
         (path for path in input_root.rglob("*") if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES),
@@ -76,7 +79,7 @@ def build_manifest(
         inferred_sample, inferred_position, inferred_split = infer_group(relative, default_sample, default_position)
         sample = str(metadata.get("sample_id") or inferred_sample)
         position = str(metadata.get("condition_id") or metadata.get("position") or inferred_position)
-        split = str(metadata.get("split") or inferred_split)
+        split = str(metadata.get("split") or forced_split or inferred_split)
         groups[(sample, position, split)].append((path, {**metadata, "_semantics": semantics}))
 
     images: list[dict] = []
@@ -195,7 +198,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, type=Path, help="External dataset root.")
     parser.add_argument("--output", required=True, type=Path, help="Manifest JSON to create.")
     parser.add_argument("--dataset-id", required=True)
-    parser.add_argument("--task", required=True, help="Stable task name, for example hole_2 or slot_pose.")
+    parser.add_argument("--task", required=True, help="Stable task name, for example a_end_face or hole_2.")
     parser.add_argument("--expected-repeats", type=int, default=20)
     parser.add_argument("--default-sample", default="sample_1")
     parser.add_argument("--default-position", default="pos_1")
@@ -203,6 +206,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--grouping", type=Path, help="Explicit capture grouping CSV keyed by relative_path.")
     parser.add_argument("--dataset-class", choices=("normal", "bad"), default="normal")
     parser.add_argument("--semantics", type=Path, help="Explicit per-image dataset/business/pose semantics CSV.")
+    parser.add_argument(
+        "--split",
+        choices=sorted(DATASET_SPLITS),
+        help="Force every discovered image into this split (useful when --input is already the split root).",
+    )
     return parser.parse_args()
 
 
@@ -219,9 +227,10 @@ def main() -> int:
             args.default_sample,
             args.default_position,
             args.reference_image,
-            grouping,
-            args.dataset_class,
-            semantics,
+            grouping_records=grouping,
+            dataset_class=args.dataset_class,
+            semantics_records=semantics,
+            forced_split=args.split,
         )
         write_json(args.output, manifest)
     except (OSError, ValueError) as exc:

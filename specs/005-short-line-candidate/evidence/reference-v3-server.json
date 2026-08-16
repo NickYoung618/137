@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "server-reference-short-line-evidence/1",
+  "observedAt": "2026-08-14",
+  "source": {
+    "asset": "desktop A-end-face reference extracted to temporary storage",
+    "imageIncluded": false,
+    "runtimeResultIncluded": false
+  },
+  "resultSchemaVersion": "a-end-face-result/3",
+  "technicalStatus": "succeeded",
+  "localizationValid": true,
+  "measurementCompletenessAllValid": false,
+  "measurementFieldCount": 192,
+  "coreSourceSha256": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc",
+  "candidateConfigCanonicalSha256": "8a475d4d734c383d2f0b476d9e018e23d0d4e76dd676846a2237aaa50b2acf98",
+  "features": {
+    "19": {
+      "coreValid": false,
+      "coreSource": "short_line_transform_fallback",
+      "coreReason": "short_line_lateral_edge_not_found",
+      "corePeak": 720.4160790325192,
+      "coreMedian": 652.8549105204384,
+      "coreThreshold": 913.9968747286136,
+      "corePeakAtBoundary": false,
+      "candidateValid": true,
+      "transition": "recovered",
+      "failedChecks": [],
+      "candidateScore": 0.9981704268186152,
+      "candidateAngleCorrectionDeg": 0.0,
+      "candidateLongitudinalOffsetPx": 4.0,
+      "candidateLateralOffsetPx": 2.5
+    },
+    "30": {
+      "coreValid": false,
+      "coreSource": "short_line_transform_fallback",
+      "coreReason": "short_line_lateral_edge_not_found",
+      "corePeak": 461.3625544219801,
+      "coreMedian": 426.0864619891586,
+      "coreThreshold": 596.5210467848219,
+      "corePeakAtBoundary": false,
+      "candidateValid": true,
+      "transition": "recovered",
+      "failedChecks": [],
+      "candidateScore": 0.995419656737897,
+      "candidateAngleCorrectionDeg": 1.0,
+      "candidateLongitudinalOffsetPx": 3.5,
+      "candidateLateralOffsetPx": 3.0
+    }
+  }
+}

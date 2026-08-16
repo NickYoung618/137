@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-main-housing-registration-summary/1",
+  "title": "137 A-End-Face Main-Housing Registration Summary",
+  "type": "object",
+  "required": ["schemaVersion", "dataset", "algorithm", "referenceImage", "imageCount", "technical", "registration", "failureReasons", "diagnosticsJsonlSha256"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-main-housing-registration-summary/1"},
+    "dataset": {
+      "type": "object",
+      "required": ["datasetId", "datasetFingerprint", "manifestSha256"],
+      "properties": {
+        "datasetId": {"type": ["string", "null"]},
+        "datasetFingerprint": {"type": ["string", "null"]},
+        "manifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "algorithm": {"$ref": "#/$defs/algorithm"},
+    "referenceImage": {"$ref": "#/$defs/image"},
+    "imageCount": {"type": "integer", "minimum": 1},
+    "technical": {"$ref": "#/$defs/counts"},
+    "registration": {"$ref": "#/$defs/counts"},
+    "failureReasons": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "diagnosticsJsonlSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "algorithm": {
+      "type": "object",
+      "required": ["registrationVersion", "coreSourceSha256", "candidateConfigPath", "candidateConfigSha256"],
+      "properties": {
+        "registrationVersion": {"const": "main-housing-registration/2"},
+        "coreSourceSha256": {"const": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc"},
+        "candidateConfigPath": {"type": "string", "minLength": 1},
+        "candidateConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "image": {
+      "type": "object",
+      "required": ["path", "bytes", "sha256", "format", "width", "height", "mode"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "format": {"type": "string", "minLength": 1},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "mode": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": ["total", "valid", "invalid"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "valid": {"type": "integer", "minimum": 0},
+        "invalid": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

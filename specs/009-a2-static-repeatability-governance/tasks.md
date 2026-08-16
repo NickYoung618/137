@@ -68,9 +68,9 @@
 
 ## Phase 8: Git Integration
 
-- [ ] T032 在009分支本地提交实现与规格，不改写008历史
-- [ ] T033 fetch并正常merge `origin/main` 到009，保留孔2/端面与槽姿态两边历史，冲突时不覆盖无关改动
-- [ ] T034 merge后复跑完整测试、Schema、dry-run和污染检查
+- [x] T032 在009分支本地提交实现与规格，不改写008历史
+- [x] T033 fetch并正常merge `origin/main` 到009，保留孔2/端面与槽姿态两边历史，冲突时不覆盖无关改动
+- [x] T034 merge后复跑完整测试、Schema、dry-run和污染检查
 - [ ] T035 push 009分支；将009正常merge到本地main并push远程main，禁止force push
 - [ ] T036 核对远程main SHA、分支、工作树和Mac pull命令，完成最终报告
 - [x] T037 [US3] 新增 `tools/run_transitional_blind_once.py` 与冻结后的development Manifest，确保未来开发排除锁定sample且盲测结果最多生成一次

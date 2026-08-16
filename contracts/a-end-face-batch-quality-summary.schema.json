@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-batch-quality-summary/1",
+  "title": "137 A-End-Face Batch Quality Summary",
+  "type": "object",
+  "required": ["schemaVersion", "dataset", "imageCount", "technical", "localization", "measurementCompleteness", "timing", "features"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-batch-quality-summary/1"},
+    "dataset": {
+      "type": "object",
+      "required": ["datasetId", "datasetFingerprint", "manifestSha256"],
+      "properties": {
+        "datasetId": {"type": ["string", "null"]},
+        "datasetFingerprint": {"type": ["string", "null"]},
+        "manifestSha256": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "imageCount": {"type": "integer", "minimum": 0},
+    "technical": {"$ref": "#/$defs/countRate"},
+    "localization": {"$ref": "#/$defs/countRate"},
+    "measurementCompleteness": {"$ref": "#/$defs/countRate"},
+    "timing": {
+      "type": "object",
+      "required": ["count", "meanMs", "minMs", "maxMs"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "meanMs": {"type": ["number", "null"], "minimum": 0},
+        "minMs": {"type": ["number", "null"], "minimum": 0},
+        "maxMs": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/featureStats"}
+    }
+  },
+  "$defs": {
+    "countRate": {
+      "type": "object",
+      "required": ["total", "valid", "invalid", "validRate"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "valid": {"type": "integer", "minimum": 0},
+        "invalid": {"type": "integer", "minimum": 0},
+        "validRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "featureStats": {
+      "type": "object",
+      "required": ["total", "valid", "invalid", "invalidRate", "classifications", "sources", "reasons", "rawLabels"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "valid": {"type": "integer", "minimum": 0},
+        "invalid": {"type": "integer", "minimum": 0},
+        "invalidRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "classifications": {"$ref": "#/$defs/countMap"},
+        "sources": {"$ref": "#/$defs/countMap"},
+        "reasons": {"$ref": "#/$defs/countMap"},
+        "rawLabels": {"$ref": "#/$defs/countMap"}
+      },
+      "additionalProperties": false
+    },
+    "countMap": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    }
+  },
+  "additionalProperties": false
+}
