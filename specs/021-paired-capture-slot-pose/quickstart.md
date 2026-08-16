@@ -161,6 +161,11 @@ part-006，也不要用本实验结果调020门限：
 
 拉取含diagnostic/3的021分支后，仍使用Git外配置和三折manifest。新配置必须显式使用
 `local-second-wall-diagnostic/2`且`enabled=true`；不得修改`sidewall_source_consistency`的0.12。
+从实际使用的020完整配置重新生成，不复用旧config/1文件：
+
+    jq --slurpfile local config/local-second-wall-diagnostic.example.json \
+      '.detector.local_second_wall_diagnostic = ($local[0] | .enabled = true)' \
+      "$CONFIG_020" > "$A2_WORK/local-second-wall-021.bidirectional.experimental.json"
 
 只回放374/369时沿用上文二图manifest，将输出改为Git外新文件：
 
