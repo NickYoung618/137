@@ -18,18 +18,22 @@ def payload(name: str) -> dict:
     return {
         "image": {"path": f"/private/source/{name}"},
         "algorithm": {
-            "version": "0.14.0", "configSha256": digest,
+            "version": "0.15.0", "configSha256": digest,
             "effectiveConfigSha256": "b" * 64,
         },
         "result": {"valid": False},
         "error": {"code": "GROOVE_SOURCE_INCONSISTENT"},
         "diagnostics": {
             "localSecondWallDiagnostic": {
-                "schemaVersion": "local-second-wall-diagnostic/2",
+                "schemaVersion": "local-second-wall-diagnostic/3",
                 "status": "SOURCE_INCONSISTENT", "errorCode": "SOURCE_INCONSISTENT",
                 "localInterval": {"startDeg": 285.0, "endDeg": 309.0},
+                "searchDomains": [{"domainId": "startSide-outward", "direction": "OUTWARD"}],
+                "searchLimits": {"actualTotalSearchJobs": 48},
+                "initialPairEvidence": {"treatedAsConfirmedWalls": False},
                 "sideSearchCandidates": [{
                     "searchCandidateId": "rising-wall-search-001", "seedDeg": 290.0,
+                    "searchStatus": "accepted",
                     "intersectionAngleDeg": 309.0, "rejectionStage": None,
                     "mergeClusterId": "rising-merge-cluster-001",
                 }],
@@ -38,6 +42,11 @@ def payload(name: str) -> dict:
                     "memberSearchCandidateIds": ["rising-wall-search-001"],
                 }],
                 "hypotheses": [{"hypothesisId": "local-wall-hypothesis-001"}],
+                "rawHypotheses": [{"rawHypothesisId": "raw-local-wall-hypothesis-001"}],
+                "hypothesisMergeClusters": [{
+                    "memberRawHypothesisIds": ["raw-local-wall-hypothesis-001"],
+                }],
+                "canonicalWallPairs": [{"canonicalPairId": "falling--rising"}],
             }
         },
     }
@@ -56,6 +65,10 @@ class LocalSecondWallTraceTests(unittest.TestCase):
         self.assertNotIn("imageData", serialized)
         self.assertFalse(output["privacy"]["containsHumanTruth"])
         self.assertFalse(output["interpretation"]["thresholdTuningAllowed"])
+        diagnostic = output["cases"][0]["localSecondWallDiagnostic"]
+        self.assertEqual("OUTWARD", diagnostic["searchDomains"][0]["direction"])
+        self.assertFalse(diagnostic["initialPairEvidence"]["treatedAsConfirmedWalls"])
+        self.assertEqual("falling--rising", diagnostic["canonicalWallPairs"][0]["canonicalPairId"])
         if jsonschema is not None:
             root = Path(__file__).resolve().parents[1]
             schema = json.loads(
@@ -69,6 +82,18 @@ class LocalSecondWallTraceTests(unittest.TestCase):
             build_trace_export([payload("Pic_374.bmp")], ["Pic_369.bmp"])
         with self.assertRaisesRegex(ValueError, "duplicate"):
             build_trace_export([payload("Pic_374.bmp"), payload("Pic_374.bmp")], ["Pic_374.bmp"])
+
+    def test_v3_member_conservation_and_canonical_uniqueness_are_enforced(self) -> None:
+        broken = payload("Pic_374.bmp")
+        diagnostic = broken["diagnostics"]["localSecondWallDiagnostic"]
+        diagnostic["sideSearchMergeClusters"][0]["memberSearchCandidateIds"] = []
+        with self.assertRaisesRegex(ValueError, "side wall cluster membership"):
+            build_trace_export([broken], ["Pic_374.bmp"])
+        duplicate = payload("Pic_369.bmp")
+        diagnostic = duplicate["diagnostics"]["localSecondWallDiagnostic"]
+        diagnostic["canonicalWallPairs"].append(dict(diagnostic["canonicalWallPairs"][0]))
+        with self.assertRaisesRegex(ValueError, "duplicate canonical"):
+            build_trace_export([duplicate], ["Pic_369.bmp"])
 
     def test_cli_refuses_git_internal_output(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

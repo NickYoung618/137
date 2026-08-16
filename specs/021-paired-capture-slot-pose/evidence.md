@@ -90,3 +90,30 @@
 - During both timing measurements, an unrelated protected-repository four-worker image batch occupied all available CPUs at roughly 30% CPU per worker. The failing legacy path does not contain or execute the default-off local diagnostic. The 8-second gate was not modified or waived; a clean-load rerun remains required before claiming the full gate passed.
 - JSON parsing, all root Draft 2020-12 Schema meta-validation, Python compile, trace CLI help, diff, media/large-file and new absolute-data-path checks passed.
 - After that external batch finished, the isolated unchanged legacy timing gate passed in `3.443s` against the original `<8.0s` assertion. A clean-load authoritative rerun then executed all `409 tests` in `109.561s`; all passed. No performance threshold, detector threshold or default configuration was changed to obtain this result.
+
+## 2026-08-17 Bidirectional/Outward Wall-search Increment
+
+- The server replay used the three locked validation manifests: fold sizes `60/40/40`, seven complete physical parts, `140` original grayscale BMPs, and no `normal:part-006`. Media, manifests, JSONL and review images remained Git-external.
+- Experimental config advances to `local-second-wall-diagnostic/2`; output advances to `local-second-wall-diagnostic/3`; algorithm contract version is `0.15.0`. The repository example remains `enabled=false`. The source-consistency contrast gate remains exactly `0.12`, physical-wall merge remains exactly `0.5°`, and no PLC path is enabled.
+- Each untrusted coarse start/end anchor now creates bounded `INWARD` and `OUTWARD` wrap-safe domains. Every domain samples both gradient polarities; each seed records domain, direction, angle, detected edge count, line/intersection outcome and rejection stage. Accepted fits are merged only into physical-wall clusters. Wall pairs use order-independent canonical IDs and do not merge A→B/B→A duplicates.
+- Configured limits are `32` seeds/domain, `256` jobs/image and `32` physical wall candidates. Search extents are bounded by the configured maximum physical slot width. Limit overflow fails closed before pose promotion.
+- The previously rejected initial start/end pair is retained as evidence but cannot be recycled as a successful experimental pair. A unique experimental wall pair remains `authoritative=false` and `posePromotionAllowed=false`; simplified review labels use `AUTO_experimental_` and never become human truth.
+
+## Server 140-frame Replay for diagnostic/3
+
+- Top-level result: `0/140 valid`, exactly preserving fail-closed behavior. Local bidirectional diagnostics ran on `33/140`; the remaining `107/140` stopped at their existing upstream stage.
+- Final error distribution: `GROOVE_SOURCE_INCONSISTENT 33`, `HOUSING_CIRCLE_NOT_FOUND 27`, `GROOVE_RECOGNITION_AMBIGUOUS 20`, `GROOVE_RECOGNITION_FAILED 20`, `GROOVE_REFINEMENT_FAILED 20`, and `PHYSICAL_OUTER_CIRCLE_FAILED 20`.
+- Per part: part-008 had `13` source-inconsistent and `7` housing-circle failures; part-009 `20` housing-circle failures; part-014 `20` groove ambiguities; part-015 `20` groove-recognition failures; part-019 `20` source-inconsistent; part-021 `20` refinement failures; part-023 `20` physical-circle failures.
+- All `33` local runs produced four domains, `176` bounded jobs, two physical-wall clusters, one canonical pair and zero passed pairs. The canonical pair always failed closed; no new pose was promoted.
+- On part-019, the only falling cluster remained `285.952977°..285.957352°` and the only rising cluster `309.480010°..309.481928°`. These are the same old mixed endpoints, not a recovered second true wall. The falling side accepted only `5..6` seeds/frame and the rising side exactly `5`; outward seeds mostly failed at edge sampling, with smaller line-consensus and outer-circle-intersection populations. Therefore the earlier “inward-only” defect is fixed, but real BMP evidence proves it was not the sole cause of the missing true wall.
+- The old mixed pair now explicitly fails `reuses_rejected_initial_pair`, `sidewall_source_consistency`, and `source_consistency:edge_contrast_asymmetry`. The known part-019 false positive remains blocked. part-008 also remains blocked because it has no human truth; its rejection is not called a false positive or false negative.
+- Runtime `diagnostics.elapsedMs` over 140 images was P50 `2258.6 ms`, P95 `3035.3 ms`, max `3696.6 ms`; among the 33 local runs it was P50 `2883.1 ms`, P95 `3379.6 ms`, max `3696.6 ms`. This is an experimental enabled-path measurement, not the default performance path. The disabled/default path is unchanged and covered by contract tests.
+- Fold JSONL SHA-256 values are `c47ace3316d2bfacadda703b6c6e98b7313858a5894ccd6458ec4f18132843cd`, `7411c7ceef40a9ef1e0bee76fd68afbce09fb8da4066756ed9c3b486d075b57c`, and `11414b8e4a465ac11fb69a7db2f3e087ef7076913a0b83b43885ac44173eecbd`. The 374/369 RAW/SIMPLIFIED contact sheet SHA-256 is `db5984c6acc44b984010084bf76258c41ca1448805147b7909c27f3cca6fbb78`.
+- The review bundle compares the old 019 walls against the diagnostic/3 canonical pair and marks both experimental walls non-authoritative. It does not assert a recovered wall. Pixel-level truth is still required before changing wall generation or reporting endpoint accuracy.
+
+## Final Verification for diagnostic/3
+
+- SpecKit analyze after task generation found `0` critical Constitution conflicts, placeholders or uncovered new implementation requirements.
+- Focused schema/runtime/review gate passed `25` tests before limit/conservation additions; the final authoritative suite ran `418 tests` in `141.114s`, all passed.
+- Every root JSON Schema passed Draft 2020-12 meta-validation; the example config and a generated diagnostic/3 payload validated. Trace export now enforces accepted-wall cluster membership, raw-hypothesis membership and canonical-pair uniqueness.
+- `git diff --check`, Python compile and affected CLI tests passed. Media and replay outputs remain outside Git. No accuracy, precision or “seven groups fixed” claim is made.

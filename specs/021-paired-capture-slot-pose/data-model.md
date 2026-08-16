@@ -66,21 +66,24 @@
 - pixelBoundaryKnown：恒false
 - LabelMe shape：AUTO_observed_dark_angular_interval_* linestrip；圆周弧线只表达角区间，不是二维阴影区域
 
-## LocalSecondWallDiagnostic
+## LocalSecondWallDiagnostic v3
 
 - schemaVersion、thresholdVersion、enabled、status、authoritative=false、posePromotionAllowed=false
-- coarseCandidateId、localInterval、anchorSides[]
-- hypotheses[]：hypothesisId、anchorSide、candidateSide、openingEndpointProfileDeg、metrics、checks、failedChecks、score
+- coarseCandidateId、localInterval（只作证据）、anchorSides[]
+- searchDomains[]：domainId、anchorSide、direction（INWARD/OUTWARD）、signedDirection、start/end/span/wrapsBoundary、seedCount、physicalLimitDeg
+- hypotheses[]：canonicalPairId、wallClusterIds[2]、openingEndpointProfileDeg、metrics、checks、failedChecks、score
 - experimentalCandidate：仅唯一解时存在，但仍authoritative=false
-- sideSearchCandidates[]：每个seed/polarity、亚像素直线候选、profile、searchStatus和failedChecks
+- sideSearchCandidates[]：每个domain/seed/polarity、亚像素直线候选、profile、searchStatus和failedChecks
 - hypotheses[].checks[]：layer、hardGate、metric value/threshold/passed；score不得覆盖失败hardGate
 - status：DISABLED、NOT_EVALUATED、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS、SOURCE_INCONSISTENT、UNIQUE_DIAGNOSTIC
 - failureStage、errorCode：CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS、SOURCE_INCONSISTENT
 - anchorEvidence[]：anchorSide、endpointAngleDeg、requiredOppositePolarity、line、lineSegment、support/contrast/gradient/profile
 - sideSearchCandidates[]新增searchWindowDeg、rejectionStage、fitToSeedDeltaDeg、lineSegment、mergeClusterId、mergeDisposition
-- sideSearchMergeClusters[]：polarity、representative、members/suppressed、seed/fitted angles、fittedAngleSpreadDeg、mergeThresholdDeg、selectionRule
-- rawHypotheses[]与hypothesisMergeClusters[]：归并前假设全集、归并成员和最终代表；不得只输出归并后假设
+- sideSearchMergeClusters[]：polarity、representative、members/suppressed、domain/seed/fitted angles、fittedAngleSpreadDeg、mergeThresholdDeg、selectionRule
+- canonicalWallPairs[]：无序wall cluster ID、falling/rising几何端点、原混合对复用证据、分层checks和failedChecks；同一两壁顺序反转不重复
+- rawHypotheses[]与hypothesisMergeClusters[]保留为v2诊断兼容视图；v3每个canonical pair只有一个单例cluster，无顺序suppressed duplicate
 - searchOutcomeSummary：每极性seed/accepted/rejection counts、cluster count/sizes和NO_EDGE_SIGNAL/SINGLE_EDGE_ATTRACTOR/MULTIPLE_EDGE_CLUSTERS
+- 配置约束：inwardSearchExtentDeg/outwardSearchExtentDeg不超过maxWallSeparationDeg；maxSeedsPerDomain、maxTotalSearchJobs和maxWallCandidates为硬上限
 
 ## State Transitions
 

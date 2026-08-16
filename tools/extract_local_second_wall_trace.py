@@ -19,9 +19,10 @@ from tools.render_slot_pose_review import load_results
 TRACE_FIELDS = (
     "schemaVersion", "thresholdVersion", "enabled", "status", "failureStage",
     "errorCode", "authoritative", "posePromotionAllowed", "coarseCandidateId",
-    "localInterval", "anchorSides", "anchorEvidence", "sideSearchCandidates",
+    "localInterval", "anchorSides", "anchorEvidence", "searchDomains", "searchLimits",
+    "initialPairEvidence", "sideSearchCandidates",
     "sideSearchMergeClusters", "searchOutcomeSummary", "rawHypotheses",
-    "hypothesisMergeClusters", "hypotheses", "experimentalCandidate",
+    "hypothesisMergeClusters", "hypotheses", "canonicalWallPairs", "experimentalCandidate",
     "passedHypothesisCount", "failedChecks",
 )
 
@@ -42,10 +43,50 @@ def _basename(payload: dict[str, Any]) -> str:
     return Path(path).name
 
 
+def _validate_v3_trace(diagnostic: dict[str, Any], image_name: str) -> None:
+    if diagnostic.get("schemaVersion") != "local-second-wall-diagnostic/3":
+        return
+    searches = diagnostic.get("sideSearchCandidates") or []
+    side_clusters = diagnostic.get("sideSearchMergeClusters") or []
+    accepted_ids = {
+        str(item["searchCandidateId"])
+        for item in searches
+        if isinstance(item, dict) and item.get("searchStatus") == "accepted"
+    }
+    clustered_ids = {
+        str(candidate_id)
+        for cluster in side_clusters if isinstance(cluster, dict)
+        for candidate_id in (cluster.get("memberSearchCandidateIds") or [])
+    }
+    if accepted_ids != clustered_ids:
+        raise ValueError(f"side wall cluster membership mismatch for {image_name}")
+    raw = diagnostic.get("rawHypotheses") or []
+    hypothesis_clusters = diagnostic.get("hypothesisMergeClusters") or []
+    raw_ids = {
+        str(item["rawHypothesisId"])
+        for item in raw if isinstance(item, dict) and item.get("rawHypothesisId")
+    }
+    hypothesis_member_ids = {
+        str(hypothesis_id)
+        for cluster in hypothesis_clusters if isinstance(cluster, dict)
+        for hypothesis_id in (cluster.get("memberRawHypothesisIds") or [])
+    }
+    if raw_ids != hypothesis_member_ids:
+        raise ValueError(f"canonical pair cluster membership mismatch for {image_name}")
+    pair_ids = [
+        str(item["canonicalPairId"])
+        for item in (diagnostic.get("canonicalWallPairs") or [])
+        if isinstance(item, dict) and item.get("canonicalPairId")
+    ]
+    if len(pair_ids) != len(set(pair_ids)):
+        raise ValueError(f"duplicate canonical wall pair for {image_name}")
+
+
 def _trace_case(payload: dict[str, Any], image_name: str) -> dict[str, Any]:
     diagnostic = (payload.get("diagnostics") or {}).get("localSecondWallDiagnostic")
     if not isinstance(diagnostic, dict):
         raise ValueError(f"localSecondWallDiagnostic missing for {image_name}")
+    _validate_v3_trace(diagnostic, image_name)
     algorithm = payload.get("algorithm") if isinstance(payload.get("algorithm"), dict) else {}
     error = payload.get("error") if isinstance(payload.get("error"), dict) else None
     return {

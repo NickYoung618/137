@@ -27,6 +27,8 @@ COLORS = {
     "endpoint_left": "#FFFFFF",
     "endpoint_right": "#FF3B30",
     "fixture": "#FF9800",
+    "experimental_wall_a": "#00E5FF",
+    "experimental_wall_b": "#FFD600",
 }
 
 
@@ -235,6 +237,57 @@ def _wall_shapes(diagnostics: dict[str, Any], source: str) -> list[dict[str, Any
     return shapes
 
 
+def _experimental_bidirectional_wall_shapes(
+    diagnostics: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Render only the final canonical wall pair, never seed-level search rays."""
+    diagnostic = diagnostics.get("localSecondWallDiagnostic") or {}
+    pair = diagnostic.get("experimentalCandidate")
+    if not isinstance(pair, dict):
+        pairs = diagnostic.get("canonicalWallPairs")
+        pair = pairs[0] if isinstance(pairs, list) and pairs and isinstance(pairs[0], dict) else None
+    if not isinstance(pair, dict):
+        return []
+    walls = pair.get("wallCandidates")
+    if not isinstance(walls, list) or len(walls) != 2:
+        return []
+    normalized: list[tuple[float, dict[str, Any], list[list[float]]]] = []
+    for wall in walls:
+        if not isinstance(wall, dict):
+            return []
+        segment = wall.get("lineSegment")
+        if not isinstance(segment, dict):
+            return []
+        endpoints = [segment.get("start"), segment.get("end")]
+        if not all(
+            isinstance(point, dict) and _finite_number(point.get("x")) and _finite_number(point.get("y"))
+            for point in endpoints
+        ):
+            return []
+        points = [[float(point["x"]), float(point["y"])] for point in endpoints]
+        normalized.append((sum(point[0] for point in points) / 2.0, wall, points))
+    normalized.sort(key=lambda item: item[0])
+    shapes: list[dict[str, Any]] = []
+    failed_checks = [str(value) for value in (pair.get("failedChecks") or [])]
+    for suffix, (_, wall, points) in zip(("a", "b"), normalized):
+        shapes.append(_shape(
+            f"AUTO_experimental_bidirectional_wall_candidate_{suffix}",
+            points, "line", COLORS[f"experimental_wall_{suffix}"], "021",
+            extra_flags={
+                "candidate_only": True,
+                "authoritative": False,
+                "pose_promotion_allowed": False,
+                "canonical_pair_id": pair.get("canonicalPairId"),
+                "wall_cluster_id": wall.get("clusterId"),
+                "search_domain_id": wall.get("searchDomainId"),
+                "search_direction": wall.get("searchDirection"),
+                "pair_passed": bool(pair.get("passed", diagnostic.get("experimentalCandidate") is pair)),
+                "failed_checks": failed_checks,
+            },
+        ))
+    return shapes
+
+
 def _angular_interval_points(
     circle: tuple[float, float, float], start_deg: float, end_deg: float,
 ) -> list[list[float]]:
@@ -300,7 +353,11 @@ def _review_shapes(
 ) -> list[dict[str, Any]]:
     diagnostics_019 = payload_019.get("diagnostics") or {}
     diagnostics_020 = payload_020.get("diagnostics") or {}
-    return _wall_shapes(diagnostics_019, "019") + _fixture_shapes(diagnostics_020)
+    return (
+        _wall_shapes(diagnostics_019, "019")
+        + _fixture_shapes(diagnostics_020)
+        + _experimental_bidirectional_wall_shapes(diagnostics_020)
+    )
 
 
 def _error_code(payload: dict[str, Any]) -> str:
@@ -320,6 +377,7 @@ def _review_text_lines(
         "020 fixture candidate != valid",
         "Observed dark angular interval",
         "Fixture identity unconfirmed | Pixel boundary unknown",
+        "CYAN/YELLOW=021 final canonical wall-pair candidate (NOT AUTHORITATIVE)",
         "HUMAN CONFIRMATION REQUIRED: real groove",
     ]
 
@@ -423,6 +481,8 @@ def render_simplified(
                     fill=color, font=font,
                     stroke_width=2, stroke_fill="black",
                 )
+        elif label.startswith("AUTO_experimental_bidirectional_wall_candidate_"):
+            draw.line(points, fill=color, width=stroke, joint="curve")
     image = Image.alpha_composite(image.convert("RGBA"), annotation).convert("RGB")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path, format="PNG")

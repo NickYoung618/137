@@ -90,3 +90,27 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - [x] T042 新增 tools/extract_local_second_wall_trace.py 与 tests/test_local_second_wall_trace.py，从JSONL按basename导出无图像/无绝对路径的374/369结构trace per SC-014
 - [x] T043 更新Schema、contract、quickstart和README，给Mac二图重跑/trace命令，保持020/双拍默认关闭和PLC阻断 per FR-020/FR-043-FR-046
 - [x] T044 运行聚焦/全量/Schema/diff/媒体与路径污染门，更新evidence、提交推送021分支，不合main per SC-006/SC-008/SC-009
+
+## Phase 10: Convergence - 双向/outward局部墙搜索
+
+**Goal**: 修正140张trace证明的“错误粗暗区只向内搜索”结构缺陷，生成可追溯物理墙与无序墙对，仍不提升姿态。
+
+**Independent Test**: 合成槽的真实另一壁分别在start/end外侧及0°/360°边界时能形成外侧cluster；内侧fixture混合对被拒绝，零/多解fail-closed，顶层valid和PLC不变。
+
+- [x] T045 [US6] 用SpecKit更新 specs/021-paired-capture-slot-pose/spec.md、plan.md、research.md、data-model.md、contracts/paired-capture.md和quickstart.md，记录140张missing-before-merge证据与FR-047-FR-055/SC-015-SC-018
+- [x] T046 [US6] 先在 tests/test_local_second_wall.py 增加config/2严格校验、start/end inward/outward domain、wrap360、seed/候选上限的失败测试 per FR-047/FR-051/SC-018
+- [x] T047 [US6] 先在 tests/test_local_second_wall.py 增加start外侧、end外侧、fixture内侧、无序canonical ID、旧混合对拒绝、多解/零解和31°/328°回归 per FR-048-FR-052/SC-015/SC-016
+- [x] T048 [US6] 在 algorithms/slot_pose/local_second_wall.py 实现四个有界wrap360搜索域、双极性独立seed拟合、上限门与逐seed失败证据 per FR-035/FR-047/FR-048/FR-051
+- [x] T049 [US6] 在 algorithms/slot_pose/local_second_wall.py 实现全domain physical wall cluster、无序canonical pair、原已拒绝端点对硬拒绝和同一方形开口分层门 per FR-036/FR-049/FR-050/FR-052
+- [x] T050 [P] [US6] 升级 contracts/local-second-wall-diagnostic-config.schema.json、contracts/local-second-wall-diagnostic-result.schema.json、config/local-second-wall-diagnostic.example.json和 algorithms/slot_pose/contract.py 的config/2、diagnostic/3契约 per FR-047/FR-051/FR-055
+- [x] T051 [P] [US4] 先更新 tests/test_slot_pose_prefill_review.py，再修改 tools/prepare_slot_pose_prefill_review.py 仅画最终双向wall cluster/canonical pair并使用AUTO_experimental_、human_verified=false per FR-022/FR-054
+- [x] T052 [P] [US6] 更新 tools/extract_local_second_wall_trace.py、contracts/local-second-wall-trace-export.schema.json与tests/test_local_second_wall_trace.py，脱敏导出domain/cluster/canonical pair并校验成员守恒 per FR-051/SC-016
+- [x] T053 [US6] 运行SpecKit analyze后完成聚焦单测、Schema、runtime默认关闭和历史合成回归，修正所有非预期失败 per SC-006/SC-008/SC-015-SC-018
+- [x] T054 [US6] 使用Git外a2-validation-140三折回放diagnostic/3，导出374/369简化图、外侧cluster/旧混合对/part-008/上游错误统计且不称准确率 per FR-053/FR-054/SC-017
+- [x] T055 更新README/evidence，运行全量、Schema/CLI/diff/JSON/媒体/路径/性能门，提交并推送021分支，不合main、不改PLC per FR-055/SC-006/SC-008/SC-018
+
+### Phase 10 Dependencies
+
+- T045 → T046-T047 → T048-T049。
+- T050-T052可在核心结构稳定后按不同文件并行；T053必须在实现和契约同步后执行。
+- T054仅使用冻结三折清单且不含part-006；T055依赖所有前置门完成。

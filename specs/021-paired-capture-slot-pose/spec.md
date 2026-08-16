@@ -21,6 +21,8 @@
 - Q: 能否在该负例上直接放宽020门限？ → A: 不能。新增独立、默认关闭的局部第二侧壁诊断；它枚举同一局部开口内的侧壁假设并保持原020失败状态，只有人工标签和分件验证后才讨论生产选择。
 - Q: 双拍和单帧当前哪个优先？ → A: 双拍保留为最终架构，但不等待现场旋转参数；当前开发主线是单帧真实槽区域、第二侧壁和槽口端点定位。审阅表达只完成证据语义修正，不继续扩展可视化。
 - Q: Mac 140张回放后能否把0.12放宽到0.14？ → A: 绝对不能。33个运行局部诊断的记录全部仍为SOURCE_INCONSISTENT；part-019的唯一假设复现已知混合边。稳定和接近阈值不证明正确，应先查粗区间、anchor、逐seed吸附、生成拒绝阶段和merge cluster。
+- Q: 服务器140张diagnostic/2 trace证明了什么？ → A: part-019的另一真槽壁在side candidate生成前就缺失，不是0.5° merge丢失。原286.125°‒309.125°大暗区只向区间内部搜索，会稳定复现真槽一侧与fixture阴影一侧。
+- Q: 新搜索能否越过原raw candidate端点？ → A: 必须。每个候选anchor同时向原区间内侧和外侧搜索，start可向更小角度、end可向更大角度扩展；原区间只作证据，不得作不可越过边界。
 
 ## User Scenarios & Testing
 
@@ -105,18 +107,20 @@
 
 ---
 
-### User Story 6 - 同一局部开口第二侧壁实验诊断 (Priority: P2)
+### User Story 6 - 双向局部开口侧壁实验诊断 (Priority: P1)
 
-算法工程师在020同源性拒绝后启用独立实验开关。系统把已检测的两侧分别作为锚点，在原始暗区的局部角度范围内枚举另一侧壁；每个假设检查区间包含、角距离、平行性、径向覆盖、槽口端点结构、暗开口连续支持和局部灰度/梯度剖面同源性。零解、多解或跨到fixture的组合继续安全失败。
+算法工程师在020同源性拒绝后启用独立实验开关。系统把粗暗区两端仅视为待验证的anchor证据，对每个anchor向原区间内侧和外侧都枚举独立壁候选。候选不得被原start/end截断，但必须受可配置的物理槽宽与最大扩展约束。系统使用无序墙对判定同一局部方形开口，零解、多解或跨到fixture的组合继续安全失败。
 
 **Independent Test**: 使用受控方形槽、邻近fixture、双解、缺边及31°/328°附近真槽合成证据验证枚举和fail-closed。
 
 **Acceptance Scenarios**:
 
-1. **Given** 同一方形开口内只有一个第二壁假设通过全部门，**When** 实验诊断，**Then** 输出唯一实验候选及全部原始假设/failedChecks，但不提升为权威姿态。
-2. **Given** 另一强边来自局部开口外或不平行/不同源，**When** 评估，**Then** 该组合明确拒绝且原GROOVE_SOURCE_INCONSISTENT不变。
-3. **Given** 零个或多个假设通过，**When** 汇总，**Then** 状态分别为NOT_FOUND或AMBIGUOUS，valid=false且无权威角或PLC命令。
-4. **Given** 真槽位于31°或328°附近，**When** 局部搜索，**Then** 不得因角度本身被屏蔽。
+1. **Given** 真实另一壁位于原start的外侧，**When** 双向诊断，**Then** 向更小角度扩展的搜索域生成该壁候选，且不与区间内fixture边组成可通过墙对。
+2. **Given** 真实另一壁位于原end的外侧，**When** 双向诊断，**Then** 向更大角度扩展的搜索域跨0°/360°安全生成该壁候选。
+3. **Given** 同一方形开口只有一个无序墙对通过全部硬门，**When** 实验诊断，**Then** 输出唯一canonical pair及全部原始假设/failedChecks，但不提升为权威姿态。
+4. **Given** 原错误大暗区内有fixture强边，**When** 外侧真壁和内侧fixture都被枚举，**Then** 跨越另一暗区或不符合同一方形开口的组合必须拒绝。
+5. **Given** 零个或多个墙对通过，**When** 汇总，**Then** 状态分别为NOT_FOUND或AMBIGUOUS，valid=false且无权威角或PLC命令。
+6. **Given** 真槽位于31°或328°附近，**When** 双向局部搜索，**Then** 不得因角度本身被屏蔽。
 
 ### Edge Cases
 
@@ -128,6 +132,9 @@
 - 真槽与固定阴影在一帧重叠，但另一帧无遮挡；两帧都重叠时必须失败。
 - 单帧输出契约版本不同或缺少完整候选；不得只读取旧的最终selected candidate冒充候选全集。
 - 人工审阅包缺原图或结果SHA不匹配；不得生成看似可用的预标注。
+- 原start/end本身就是混合真壁与fixture边；两者均不得因“已精修”而先验成为真壁。
+- outward搜索跨0°/360°，或同时在两个方向找到几何可行强边。
+- 候选位于物理槽宽上限外，或墙对之间穿过与当前开口不连通的第二暗区。
 
 ## Requirements
 
@@ -154,7 +161,7 @@
 - **FR-019**: part-006 MUST 继续封存，不得读取、重跑或用于参数选择。
 - **FR-020**: 实验功能 MUST 默认关闭；默认单帧行为和legacy/paired/multi-role/single_real_groove契约 MUST 不变。
 - **FR-021**: 审阅工具 MUST 在Git外为part-019 374/369生成原始分辨率raw、simplified、RAW/SIMPLIFIED两栏联系表、精简预填LabelMe JSON和review索引。
-- **FR-022**: simplified和预填shape MUST 只保留AUTO_detected_groove_wall_left/right、AUTO_detected_mouth_endpoint_left/right和AUTO_observed_dark_angular_interval_*；MUST NOT 包含外圆、圆定位矩形框、非最终raw候选射线或自动人工真值框。
+- **FR-022**: simplified和预填shape MUST 只保留AUTO_detected_groove_wall_left/right、AUTO_detected_mouth_endpoint_left/right、AUTO_observed_dark_angular_interval_*及明确标记非权威的AUTO_experimental_bidirectional_wall_candidate_*；MUST NOT 包含外圆、圆定位矩形框、非cluster代表的raw候选射线或自动人工真值框。
 - **FR-023**: 审阅工具 MUST 核对原图SHA与两版结果SHA；不匹配时拒绝生成，媒体和绝对现场路径不得进入Git。
 - **FR-024**: Pic_2026_08_13_132354_292.bmp MUST 暂时跳过；当前优先part-019的374与369。
 - **FR-025**: 132112_4的人工圆弧和真槽开放边界 MAY 用作评估参考，MUST NOT 作为生产运行时输入或复制成其他图片真值。
@@ -167,8 +174,8 @@
 - **FR-032**: fixture AUTO_LabelMe shape MUST 为角度interval linestrip（无区间时为line），并包含fixture_identity_confirmed=false、boundary_semantics=angular_profile_interval、match_status、candidate_id、failed_checks；NOT_MATCHED/PAIR_INCOMPLETE不得标为confirmed或region。
 - **FR-033**: 374/369 MUST 作为“019混合真槽壁+右上阴影壁”的语义负例；不得硬编码文件名、坐标或候选角修复，也不得把口头确认伪造成像素真值。
 - **FR-034**: 系统 MUST 提供版本化`local_second_wall_diagnostic`实验配置，缺省或enabled=false时不执行、不改变020门限、状态、姿态或性能路径。
-- **FR-035**: 局部诊断 MUST 分别把当前两侧作为anchor，在coarse raw candidate的圆周局部区间内枚举第二壁，输出每个假设的anchor、candidate、metrics、checks与failedChecks。
-- **FR-036**: 每个第二壁假设 MUST 检查局部区间包含/角距离、两壁近似平行、径向覆盖与差异、槽口端点结构、局部暗开口连续支持、边缘对比/梯度及归一化灰度剖面同源性；跨出局部开口组合 MUST 拒绝。
+- **FR-035**: 局部诊断 MUST 把当前start/end仅视为待验证anchor；对每个anchor同时向coarse raw candidate内侧与外侧枚举墙候选，原start/end MUST NOT 作为不可越过的搜索边界。
+- **FR-036**: 每个墙对假设 MUST 检查物理槽宽、两壁近似直且平行、径向深度/覆盖及差异、相邻外圆槽口端点、局部暗开口连续支持、槽肩/角点结构、边缘对比/梯度及归一化剖面同源性；跨越另一暗区或fixture证据的组合 MUST 拒绝。
 - **FR-037**: 只有恰好一个假设通过且唯一性门成立时 MAY 输出`experimentalCandidate`；该候选 MUST 标记authoritative=false、posePromotionAllowed=false，原`GROOVE_SOURCE_INCONSISTENT`、valid=false、机械/PLC空值保持不变。
 - **FR-038**: 零个通过返回LOCAL_SECOND_WALL_NOT_FOUND，多个通过返回MULTIPLE_LOCAL_OPENINGS；不得回填0度、旧角或权威姿态。
 - **FR-039**: 局部搜索 MUST 与相机固定角无关；合成测试 MUST 覆盖31°和328°附近的同一方形槽可被搜索，而非被屏蔽。
@@ -179,6 +186,15 @@
 - **FR-044**: side candidate merge MUST 输出每个cluster的极性、代表candidate、全部member/suppressed candidateId、seed角、拟合角、角扩展、merge阈值和选择规则；未拟合seed必须显式标记未进入cluster。
 - **FR-045**: anchor MUST 输出来源侧、原始端点角、原始直线/点数/对比/梯度/径向剖面和所需相反极性；粗local interval MUST 明确标记来源为coarse raw dark candidate，以便判断搜索域是否跨真槽与fixture。
 - **FR-046**: pre-merge hypotheses与最终hypothesis merge cluster MUST 分开输出；诊断摘要 MUST 按极性统计seed、拟合成功、失败阶段、cluster数量/大小并区分NO_EDGE_SIGNAL、SINGLE_EDGE_ATTRACTOR和MULTIPLE_EDGE_CLUSTERS。
+- **FR-047**: 双向搜索的内侧扩展、外侧扩展、seed间距、每个域最大seed数和总候选上限 MUST 版本化且严格校验；最大扩展 MUST 受可配置物理槽宽范围约束，不得由part-019角度或坐标推导成运行时常量。
+- **FR-048**: 墙候选 MUST 由多角度seed的径向梯度、直线共识与外圆交点独立生成；start/end只参与搜索域定位与证据比较，MUST NOT 被预先当作已确认两壁。
+- **FR-049**: 墙对 MUST 使用与anchor顺序无关的canonical pair ID；A-anchor+B-candidate与B-anchor+A-candidate MUST 为同一对，不得作为两个假设后再依赖顺序merge。
+- **FR-050**: 物理墙cluster merge MUST 只合并角度/线段证据真正相近的同一墙；不同墙 MUST 保留不同candidateId/clusterId，任何墙对去重不得删除物理候选。
+- **FR-051**: 诊断输出 MUST 对每个anchor列出inward/outward搜索域、wrap360起止、seed角、拟合墙角、拒绝阶段、物理墙cluster、canonical pair ID及分层failedChecks。
+- **FR-052**: 已知fixture证据只可作跨暗区/夹具来源的可观测证据，31°/328° MUST NOT 作屏蔽角；真槽在该位置时仍必须可枚举。
+- **FR-053**: 140张回放 MUST 分别报告part-019是否形成新的外侧wall cluster、旧混合对是否仍拒绝、part-008的fail-closed结果及其他上游失败分布；无像素真值时不得称准确率或自动修复。
+- **FR-054**: 374/369简化图 MUST 展示双向搜索得到的最终墙候选、搜索方向与不权威声明；用户未确认像素壁前，不得写入人工真值或提升pose。
+- **FR-055**: 新路径 MUST 保持诊断默认关闭、`authoritative=false`、`posePromotionAllowed=false`、顶层原失败与PLC阻断；020的0.12门、默认配置及legacy/旧paired路径 MUST 不变。
 
 ### Key Entities
 
@@ -191,6 +207,9 @@
 - **ReviewBundle**: 原图身份、两版算法叠加、AUTO_预标注和人工复核问题。
 - **ObservedAngularInterval**: raw暗区的一维start/center/end、candidateId、match status与失败检查；不是fixture身份或二维像素边界。
 - **LocalSecondWallHypothesis**: anchor侧、备选侧、局部开口证据、几何/剖面门、得分及failedChecks；只用于实验诊断。
+- **BidirectionalSearchDomain**: anchor身份、inward/outward方向、wrap360区间、seed上限和物理扩展约束。
+- **PhysicalWallCandidate**: 独立seed拟合出的墙角、有限线段、径向证据、外圆交点、cluster归属与拒绝阶段。
+- **CanonicalWallPair**: 按稳定wall cluster ID排序的无序墙对、同一开口几何/灰度/连通性证据又failedChecks。
 
 ## Success Criteria
 
@@ -210,6 +229,10 @@
 - **SC-012**: 实验关闭时全量测试输出与020行为不变；实验开启且唯一诊断候选形成时，顶层仍为GROOVE_SOURCE_INCONSISTENT、valid=false且无权威姿态/PLC命令。
 - **SC-013**: 受控曝光/模糊和任意旋转方形槽中，两端点误差各小于0.15°、中点角误差小于0.10°；fixture不对称/部分重叠不得形成跨源权威配对，零解/多解保持显式失败。
 - **SC-014**: 合成trace测试100%证明每个seed可追溯到拒绝阶段或一个merge cluster、cluster成员无丢失、pre/post-merge假设可对账；Mac可从JSONL导出374/369脱敏trace而不读取或复制原图。
+- **SC-015**: 合成测试100%覆盖另一壁位于start外侧、end外侧、0°/360°环绕、fixture位于内侧、双向多解与零解；原错误大区间混合对不得成为通过假设。
+- **SC-016**: 每个拟合墙要么归属恰好一个physical wall cluster，要么保留明确拒绝阶段；每个无序墙对只出现一个canonical ID，端点顺序反转不改变ID或数量。
+- **SC-017**: 140张回放100%产出可解析diagnostic/3 trace；part-019的外侧cluster数、旧混合对拒绝数、part-008安全状态及全部上游错误可分组汇总，但顶层姿态仍不因实验诊断提升。
+- **SC-018**: 双向搜索的实际seed数和候选数不超过配置上限；默认关闭时不执行新路径，全量回归和原历史耗时门通过。
 
 ## Assumptions
 

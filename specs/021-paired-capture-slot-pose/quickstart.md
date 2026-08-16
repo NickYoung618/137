@@ -156,3 +156,27 @@ part-006，也不要用本实验结果调020门限：
 - `status=DETECTED`：双拍几何有效且图像引导可用；PLC仍阻断。
 - `status=DIAGNOSTIC_ONLY`：参数未确认，任何角度假设都不权威。
 - `valid=false`：不得输出0度或沿用旧角，查看`error.code`和`hypotheses[].failedChecks`。
+
+## diagnostic/3 双向/outward墙搜索
+
+拉取含diagnostic/3的021分支后，仍使用Git外配置和三折manifest。新配置必须显式使用
+`local-second-wall-diagnostic/2`且`enabled=true`；不得修改`sidewall_source_consistency`的0.12。
+
+只回放374/369时沿用上文二图manifest，将输出改为Git外新文件：
+
+    uv run python tools/run_slot_pose_batch.py \
+      --manifest "$A2_WORK/local-second-wall-021.manifest.json" \
+      --data-root "$A2_WORK/local-second-wall-021-input" \
+      --config "$A2_WORK/local-second-wall-021.bidirectional.experimental.json" \
+      --output "$A2_WORK/local-second-wall-021.bidirectional.results.jsonl"
+
+判读`diagnostics.localSecondWallDiagnostic`:
+
+- `searchDomains[]`必须同时有start/end的`INWARD`与`OUTWARD`，跨0°时`wrapsBoundary=true`。
+- `sideSearchCandidates[]`的每一项必须有domainId、seed、polarity及拟合或拒绝阶段。
+- `sideSearchMergeClusters[]`是物理墙；`canonicalWallPairs[]`是无序墙对，不应再出现A锚B/B锚A两条顺序重复。
+- 与原已拒绝start/end相同的混合对必须失败`reuses_rejected_initial_pair`。
+- 新外侧cluster在人工确认像素壁前仍只是待审候选，不得把形成率称为准确率。
+
+140张回放继续使用原三折validation manifest，不含sealed part-006。汇总必须分开：
+part-019新outward cluster、旧混合对拒绝、part-008未裁决fail-closed、以及其他上游失败。

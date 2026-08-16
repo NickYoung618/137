@@ -12,6 +12,7 @@ from tools.prepare_slot_pose_prefill_review import (
     COLORS,
     _fixture_selections,
     _fixture_shapes,
+    _experimental_bidirectional_wall_shapes,
     _review_text_lines,
     manifest_from_image_names,
     prepare_prefill_review,
@@ -23,8 +24,11 @@ except ImportError:
     jsonschema = None
 
 
-def result(sha: str, *, source_rejected: bool = False, valid: bool = False) -> dict:
-    return {
+def result(
+    sha: str, *, source_rejected: bool = False, valid: bool = False,
+    bidirectional_pair: bool = False,
+) -> dict:
+    payload = {
         "taskId": "review:i1", "schemaVersion": "slot-pose-result/3",
         "image": {"sha256": sha},
         "result": {"valid": valid},
@@ -65,6 +69,32 @@ def result(sha: str, *, source_rejected: bool = False, valid: bool = False) -> d
             },
         },
     }
+    if bidirectional_pair:
+        payload["diagnostics"]["localSecondWallDiagnostic"] = {
+            "schemaVersion": "local-second-wall-diagnostic/3",
+            "status": "SOURCE_INCONSISTENT",
+            "authoritative": False,
+            "posePromotionAllowed": False,
+            "experimentalCandidate": None,
+            "canonicalWallPairs": [{
+                "canonicalPairId": "falling-wall-cluster-001--rising-wall-cluster-002",
+                "passed": False,
+                "failedChecks": ["sidewall_source_consistency"],
+                "wallCandidates": [
+                    {
+                        "clusterId": "falling-wall-cluster-001",
+                        "searchDomainId": "startSide-outward", "searchDirection": "OUTWARD",
+                        "lineSegment": {"start": {"x": 62.0, "y": 34.0}, "end": {"x": 69.0, "y": 56.0}},
+                    },
+                    {
+                        "clusterId": "rising-wall-cluster-002",
+                        "searchDomainId": "endSide-inward", "searchDirection": "INWARD",
+                        "lineSegment": {"start": {"x": 118.0, "y": 34.0}, "end": {"x": 123.0, "y": 56.0}},
+                    },
+                ],
+            }],
+        }
+    return payload
 
 
 class PrefillReviewTests(unittest.TestCase):
@@ -202,6 +232,22 @@ class PrefillReviewTests(unittest.TestCase):
                     ],
                     output,
                 )
+
+    def test_only_final_canonical_bidirectional_pair_is_rendered_as_non_authoritative(self) -> None:
+        payload = result("c" * 64, source_rejected=True, bidirectional_pair=True)
+        diagnostic = payload["diagnostics"]["localSecondWallDiagnostic"]
+        shapes = _experimental_bidirectional_wall_shapes(payload["diagnostics"])
+        self.assertEqual(2, len(shapes))
+        self.assertEqual({
+            "AUTO_experimental_bidirectional_wall_candidate_a",
+            "AUTO_experimental_bidirectional_wall_candidate_b",
+        }, {shape["label"] for shape in shapes})
+        self.assertTrue(all(shape["shape_type"] == "line" for shape in shapes))
+        self.assertTrue(all(shape["flags"]["authoritative"] is False for shape in shapes))
+        self.assertTrue(all(shape["flags"]["pose_promotion_allowed"] is False for shape in shapes))
+        self.assertTrue(all(shape["flags"]["pair_passed"] is False for shape in shapes))
+        self.assertNotIn("sideSearchCandidates", json.dumps(shapes))
+        self.assertEqual(1, len(diagnostic["canonicalWallPairs"]))
 
     def test_hash_mismatch_rejects_before_writing_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

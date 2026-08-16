@@ -9,6 +9,8 @@ import numpy as np
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.local_second_wall import (
     DEFAULT_LOCAL_SECOND_WALL_CONFIG,
+    _build_search_domains,
+    _canonical_pair_id,
     _cluster_side_searches,
     diagnose_local_second_wall,
     merged_local_second_wall_config,
@@ -78,6 +80,134 @@ def dark_features(features: list[tuple[float, float, float, float]]) -> np.ndarr
 
 
 class LocalSecondWallTests(unittest.TestCase):
+    def test_bidirectional_config_is_strict_and_physically_bounded(self) -> None:
+        merged = merged_local_second_wall_config(None)
+        self.assertEqual("local-second-wall-diagnostic/2", merged["schema_version"])
+        self.assertEqual("local-second-wall-diagnostic-v2", merged["threshold_version"])
+        self.assertLessEqual(merged["outward_search_extent_deg"], merged["max_wall_separation_deg"])
+        self.assertLessEqual(merged["inward_search_extent_deg"], merged["max_wall_separation_deg"])
+        for key, value in (
+            ("outward_search_extent_deg", 31.0),
+            ("inward_search_extent_deg", 31.0),
+        ):
+            with self.subTest(key=key):
+                with self.assertRaisesRegex(ValueError, "physical wall separation"):
+                    merged_local_second_wall_config({**merged, key: value})
+        with self.assertRaisesRegex(ValueError, "max_total_search_jobs"):
+            merged_local_second_wall_config({**merged, "max_total_search_jobs": 7})
+
+    def test_search_domains_cover_start_end_inward_outward_and_wrap(self) -> None:
+        config = diagnostic_config(
+            inward_search_extent_deg=30.0,
+            outward_search_extent_deg=30.0,
+        )
+        domains = _build_search_domains(
+            350.0, 20.0, {"startSide": 350.0, "endSide": 10.0}, config,
+        )
+        self.assertEqual({
+            "startSide-inward", "startSide-outward",
+            "endSide-inward", "endSide-outward",
+        }, {item["domainId"] for item in domains})
+        by_id = {item["domainId"]: item for item in domains}
+        self.assertAlmostEqual(0.0, by_id["startSide-inward"]["endDeg"])
+        self.assertAlmostEqual(320.0, by_id["startSide-outward"]["endDeg"])
+        self.assertAlmostEqual(0.0, by_id["endSide-inward"]["endDeg"])
+        self.assertAlmostEqual(40.0, by_id["endSide-outward"]["endDeg"])
+        self.assertTrue(by_id["startSide-inward"]["wrapsBoundary"])
+        self.assertFalse(by_id["endSide-outward"]["wrapsBoundary"])
+        end_wrap = _build_search_domains(
+            335.0, 20.0, {"startSide": 335.0, "endSide": 355.0}, config,
+        )
+        self.assertTrue({item["domainId"]: item for item in end_wrap}["endSide-outward"]["wrapsBoundary"])
+        self.assertTrue(all(item["seedCount"] <= config["max_seeds_per_domain"] for item in domains))
+
+    def test_runtime_search_job_limit_fails_closed_before_sampling(self) -> None:
+        image = groove_image(170.18, 179.72, center=CENTER, radius=RADIUS)
+        initial = refine(image, 170.0, 180.0)
+        output = diagnose_local_second_wall(
+            image, CENTER, RADIUS, candidate(168.0, 182.0), initial,
+            bilinear_sample, parabolic_peak, v2_config(), source_config(),
+            diagnostic_config(max_total_search_jobs=8),
+        )
+        self.assertEqual("LOCAL_SECOND_WALL_NOT_FOUND", output["errorCode"])
+        self.assertEqual(["search_job_limit_exceeded"], output["failedChecks"])
+        self.assertEqual([], output["sideSearchCandidates"])
+
+    def test_canonical_pair_id_is_endpoint_order_independent(self) -> None:
+        self.assertEqual(
+            _canonical_pair_id("falling-wall-cluster-002", "rising-wall-cluster-001"),
+            _canonical_pair_id("rising-wall-cluster-001", "falling-wall-cluster-002"),
+        )
+
+    def test_true_wall_outside_start_boundary_is_generated(self) -> None:
+        image = groove_image(170.18, 179.72, center=CENTER, radius=RADIUS)
+        true_refinement = refine(image, 170.0, 180.0)
+        fixture_image = groove_image(195.0, 205.0, center=CENTER, radius=RADIUS, contrast=75.0)
+        fixture_refinement = refine(fixture_image, 195.0, 205.0)
+        mixed = {
+            **true_refinement,
+            "startSide": true_refinement["endSide"],
+            "endSide": fixture_refinement["endSide"],
+            "openingEndpointProfileDeg": [
+                true_refinement["openingEndpointProfileDeg"][1],
+                fixture_refinement["openingEndpointProfileDeg"][1],
+            ],
+            "outerCircleIntersections": [
+                true_refinement["outerCircleIntersections"][1],
+                fixture_refinement["outerCircleIntersections"][1],
+            ],
+        }
+        output = diagnose_local_second_wall(
+            image, CENTER, RADIUS, candidate(179.5, 206.0), mixed,
+            bilinear_sample, parabolic_peak, v2_config(), source_config(), diagnostic_config(),
+        )
+        self.assertEqual("local-second-wall-diagnostic/3", output["schemaVersion"])
+        self.assertEqual("UNIQUE_DIAGNOSTIC", output["status"], output)
+        measured = output["experimentalCandidate"]["openingEndpointProfileDeg"]
+        self.assertAlmostEqual(170.18, measured[0], delta=0.15)
+        self.assertAlmostEqual(179.72, measured[1], delta=0.15)
+        true_cluster_ids = set(output["experimentalCandidate"]["wallClusterIds"])
+        self.assertTrue(any(
+            item["direction"] == "OUTWARD" and item["anchorSide"] == "startSide"
+            for item in output["searchDomains"]
+        ))
+        self.assertTrue(any(
+            true_cluster_ids.intersection({item["clusterId"]})
+            and "startSide-outward" in item["memberDomainIds"]
+            for item in output["sideSearchMergeClusters"]
+        ))
+
+    def test_true_wall_outside_end_boundary_is_generated(self) -> None:
+        image = groove_image(195.18, 204.72, center=CENTER, radius=RADIUS)
+        true_refinement = refine(image, 195.0, 205.0)
+        fixture_image = groove_image(170.0, 180.0, center=CENTER, radius=RADIUS, contrast=75.0)
+        fixture_refinement = refine(fixture_image, 170.0, 180.0)
+        mixed = {
+            **true_refinement,
+            "startSide": fixture_refinement["startSide"],
+            "endSide": true_refinement["startSide"],
+            "openingEndpointProfileDeg": [
+                fixture_refinement["openingEndpointProfileDeg"][0],
+                true_refinement["openingEndpointProfileDeg"][0],
+            ],
+            "outerCircleIntersections": [
+                fixture_refinement["outerCircleIntersections"][0],
+                true_refinement["outerCircleIntersections"][0],
+            ],
+        }
+        output = diagnose_local_second_wall(
+            image, CENTER, RADIUS, candidate(169.0, 196.0), mixed,
+            bilinear_sample, parabolic_peak, v2_config(), source_config(), diagnostic_config(),
+        )
+        self.assertEqual("UNIQUE_DIAGNOSTIC", output["status"], output)
+        measured = output["experimentalCandidate"]["openingEndpointProfileDeg"]
+        self.assertAlmostEqual(195.18, measured[0], delta=0.15)
+        self.assertAlmostEqual(204.72, measured[1], delta=0.15)
+        self.assertTrue(any(
+            item["direction"] == "OUTWARD" and item["anchorSide"] == "endSide"
+            for item in output["searchDomains"]
+        ))
+
     def test_default_is_disabled_strict_and_does_not_claim_pose(self) -> None:
         merged = merged_local_second_wall_config(None)
         self.assertFalse(merged["enabled"])
@@ -136,10 +266,16 @@ class LocalSecondWallTests(unittest.TestCase):
             sum(item["memberCount"] for item in output["hypothesisMergeClusters"]),
         )
         self.assertEqual(len(output["hypotheses"]), len(output["hypothesisMergeClusters"]))
+        pair_ids = [item["canonicalPairId"] for item in output["canonicalWallPairs"]]
+        self.assertEqual(len(pair_ids), len(set(pair_ids)))
+        self.assertTrue(all(
+            cluster["memberCount"] == 1 and cluster["suppressedRawHypothesisIds"] == []
+            for cluster in output["hypothesisMergeClusters"]
+        ))
         self.assertEqual([], output["hypotheses"][0]["failedChecks"])
         self.assertTrue(all(check["hardGate"] for check in output["hypotheses"][0]["checks"]))
         self.assertEqual(
-            {"local_geometry", "mouth_endpoint", "opening_structure", "sidewall_source"},
+            {"candidate_origin", "local_geometry", "mouth_endpoint", "opening_structure", "sidewall_source"},
             {check["layer"] for check in output["hypotheses"][0]["checks"]},
         )
         self.assertAlmostEqual(170.18, output["experimentalCandidate"]["openingEndpointProfileDeg"][0], delta=0.15)
@@ -251,6 +387,29 @@ class LocalSecondWallTests(unittest.TestCase):
         self.assertEqual("SOURCE_INCONSISTENT", output["status"], output)
         self.assertEqual("SOURCE_INCONSISTENT", output["errorCode"])
         self.assertEqual("sidewall_source_consistency", output["failureStage"])
+        self.assertTrue(any(
+            "reuses_rejected_initial_pair" in item["failedChecks"]
+            for item in output["hypotheses"]
+        ))
+
+    def test_runtime_wall_candidate_limit_fails_closed(self) -> None:
+        image = union_dark_grooves([(170.0, 178.0), (184.0, 192.0)])
+        first, second = refine(image, 170.0, 178.0), refine(image, 184.0, 192.0)
+        mixed = {
+            **first,
+            "endSide": second["endSide"],
+            "openingEndpointProfileDeg": [
+                first["openingEndpointProfileDeg"][0], second["openingEndpointProfileDeg"][1],
+            ],
+        }
+        output = diagnose_local_second_wall(
+            image, CENTER, RADIUS, candidate(168.0, 194.0), mixed,
+            bilinear_sample, parabolic_peak, v2_config(), source_config(),
+            diagnostic_config(max_wall_candidates=2),
+        )
+        self.assertEqual("MULTIPLE_LOCAL_OPENINGS", output["errorCode"])
+        self.assertEqual(["wall_candidate_limit_exceeded"], output["failedChecks"])
+        self.assertIsNone(output["experimentalCandidate"])
 
     def test_real_square_opening_near_fixture_prior_angles_is_not_screened(self) -> None:
         for start, end in ((26.0, 36.0), (323.0, 333.0)):
@@ -341,7 +500,7 @@ class LocalSecondWallTests(unittest.TestCase):
         output = diagnose_local_second_wall(
             image, CENTER, RADIUS, candidate(168.0, 182.0), refine(image, 170.0, 180.0),
             bilinear_sample, parabolic_peak, v2_config(), source_config(),
-            diagnostic_config(scan_step_deg=7.0, max_scan_seeds=3),
+            diagnostic_config(scan_step_deg=7.0, max_seeds_per_domain=3),
         )
         jsonschema.validate(output, result_schema)
 

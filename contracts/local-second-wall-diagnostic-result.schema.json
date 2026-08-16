@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": [
     "schemaVersion", "thresholdVersion", "enabled", "status", "failureStage", "errorCode", "authoritative",
-    "posePromotionAllowed", "anchorEvidence", "sideSearchCandidates", "sideSearchMergeClusters",
+    "posePromotionAllowed", "anchorEvidence", "searchDomains", "sideSearchCandidates", "sideSearchMergeClusters",
     "searchOutcomeSummary", "rawHypotheses", "hypothesisMergeClusters", "hypotheses", "experimentalCandidate"
   ],
   "properties": {
-    "schemaVersion": {"const": "local-second-wall-diagnostic/2"},
+    "schemaVersion": {"const": "local-second-wall-diagnostic/3"},
     "thresholdVersion": {"type": "string", "minLength": 1},
     "enabled": {"type": "boolean"},
     "status": {"enum": [
@@ -27,17 +27,48 @@
     "localInterval": {"type": "object", "additionalProperties": true},
     "anchorSides": {"type": "array", "items": {"enum": ["startSide", "endSide"]}},
     "anchorEvidence": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
+    "searchDomains": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": [
+          "domainId", "anchorSide", "direction", "signedDirection", "startDeg", "endDeg",
+          "spanDeg", "wrapsBoundary", "seedCount", "seedAnglesDeg", "physicalLimitDeg", "source"
+        ],
+        "properties": {
+          "domainId": {"type": "string", "minLength": 1},
+          "anchorSide": {"enum": ["startSide", "endSide"]},
+          "direction": {"enum": ["INWARD", "OUTWARD"]},
+          "signedDirection": {"enum": [-1, 1]},
+          "startDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+          "endDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+          "spanDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+          "wrapsBoundary": {"type": "boolean"},
+          "seedCount": {"type": "integer", "minimum": 2},
+          "seedAnglesDeg": {"type": "array", "minItems": 2, "items": {"type": "number", "minimum": 0, "exclusiveMaximum": 360}},
+          "physicalLimitDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+          "source": {"const": "untrusted_coarse_endpoint"}
+        }
+      }
+    },
+    "searchLimits": {"type": "object", "additionalProperties": true},
+    "initialPairEvidence": {"type": "object", "additionalProperties": true},
     "sideSearchCandidates": {
       "type": "array",
       "items": {
         "type": "object", "additionalProperties": true,
         "required": [
-          "searchCandidateId", "seedDeg", "searchWindowDeg", "polarity", "searchStatus",
+          "searchCandidateId", "searchDomainId", "searchDirection", "searchAnchorSide", "seedIndexWithinDomain",
+          "seedDeg", "searchWindowDeg", "polarity", "searchStatus",
           "rejectionStage", "fitToSeedDeltaDeg", "line", "lineSegment", "failedChecks",
           "mergeClusterId", "mergeDisposition"
         ],
         "properties": {
           "searchCandidateId": {"type": "string", "minLength": 1},
+          "searchDomainId": {"type": "string", "minLength": 1},
+          "searchDirection": {"enum": ["INWARD", "OUTWARD"]},
+          "searchAnchorSide": {"enum": ["startSide", "endSide"]},
+          "seedIndexWithinDomain": {"type": "integer", "minimum": 1},
           "seedDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
           "polarity": {"enum": ["falling", "rising"]},
           "searchStatus": {"type": "string", "minLength": 1},
@@ -89,17 +120,22 @@
         }
       }
     },
+    "canonicalWallPairs": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
     "experimentalCandidate": {
       "oneOf": [
         {"type": "null"},
         {
           "type": "object", "additionalProperties": false,
           "required": [
-            "hypothesisId", "openingEndpointProfileDeg", "openingWidthDeg",
+            "hypothesisId", "canonicalPairId", "wallClusterIds", "wallCandidates",
+            "openingEndpointProfileDeg", "openingWidthDeg",
             "authoritative", "posePromotionAllowed"
           ],
           "properties": {
             "hypothesisId": {"type": "string", "minLength": 1},
+            "canonicalPairId": {"type": "string", "minLength": 1},
+            "wallClusterIds": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string", "minLength": 1}},
+            "wallCandidates": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "object", "additionalProperties": true}},
             "openingEndpointProfileDeg": {
               "type": "array", "minItems": 2, "maxItems": 2,
               "items": {"type": "number", "minimum": 0, "exclusiveMaximum": 360}

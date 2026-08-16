@@ -16,7 +16,7 @@ from tools.dataset_common import inspect_image
 SCHEMA_VERSION = "slot-pose-result/2"
 SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.14.0"
+ALGORITHM_VERSION = "0.15.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",

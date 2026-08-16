@@ -4,7 +4,7 @@
 
 ## Summary
 
-在020单帧圆定位、暗区、真槽几何、亚像素侧壁和同源性诊断之上增加独立、默认关闭的双帧编排层。每帧仍由既有算法产出完整候选；配对层只处理身份、旋转归一化、一对一匹配、唯一性、无遮挡选择和第二拍后引导。审阅层将020的一维暗区证据严格画成角度区间而非fixture区域。另增默认关闭的局部第二侧壁实验诊断：复用现有亚像素侧壁精修/同源性证据，枚举同一局部开口内的第二壁，但绝不改变020权威状态或姿态。
+在020单帧圆定位、暗区、真槽几何、亚像素侧壁和同源性诊断之上增加独立、默认关闭的双帧编排层。当前增量聚焦单帧局部墙候选：已有140张真实BMP trace证明原粗暗区只向内搜索会漏掉真实另一壁。新版对每个待验证anchor同时建立inward/outward wrap360搜索域，独立拟合物理墙，然后以无序canonical wall pair检查同一方形开口。该路径仍只产生不可提升的实验诊断，不改变020权威状态或姿态。
 
 ## Technical Context
 
@@ -14,13 +14,13 @@
 **Testing**: unittest、jsonschema、纯数学合成候选、临时图像/JSON CLI测试
 **Target Platform**: Linux服务器开发；macOS原始BMP离线回放；单进程CPU
 **Project Type**: Python算法库与离线CLI
-**Performance Goals**: 双帧匹配本身P95小于20ms/对（不含两个单帧检测）；候选数每帧上限16；不复制全分辨率图像
+**Performance Goals**: 双帧匹配本身P95小于20ms/对（不含两个单帧检测）；双向局部搜索有严格的domain/seed/wall上限，不复制全分辨率图像；默认关闭的历史耗时门不回退
 **Constraints**: fail-closed、参数配置化、固定角不屏蔽、part-006封存、默认关闭、不合main
-**Scale/Scope**: 单帧局部第二壁和双拍契约的合成验证；part-019 374/369 Git外预标注；真实双拍数据尚未到位
+**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；真实双拍数据尚未到位
 
 ## Constitution Check
 
-- 规格先行：PASS。46项FR和14项SC覆盖契约、未知参数、安全失败、审阅区间语义、局部第二壁诊断和逐seed可追溯性。
+- 规格先行：PASS。55项FR和18项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对和逐seed可追溯性。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -38,10 +38,12 @@
 7. 至少一侧为可信无遮挡候选才可测量；优先第二帧直接测量，否则用第一帧加已知旋转推导第二拍后姿态。
 8. currentAngle从负Y轴顺时针有符号；target=85±5；输出图像最短修正，PLC字段永远不权威。
 9. review工具读取显式图片名/manifest与019/020 JSONL，核SHA后只生成原分辨率raw、单张simplified、精简AUTO_LabelMe及RAW/SIMPLIFIED两栏联系表；fixture只展示pairEvidence选择或未确认暗区，一维start/center/end画角度括号与三刻线，不画实心区域。
-10. `local_second_wall.py`在实验开关开启且020因同源性失败时运行；分别锚定已有两侧，在raw暗区局部范围内用既有侧壁采样/拟合产生备选边，并按区间、平行、覆盖、端点、暗开口及剖面门枚举所有假设。
-11. 唯一实验解只写入`diagnostics.localSecondWallDiagnostic`，标记不可提升；顶层失败码、valid、姿态和PLC字段完全不变。
-12. 局部诊断按candidate anchor→side search→local geometry→mouth endpoint→opening structure→sidewall source→uniqueness分层，硬物理矛盾不可被score覆盖；错误码保留失败阶段。
-13. 诊断trace在不改任何门限的前提下保留每个seed的生成阶段、拟合线段、归并cluster和pre/post-merge假设；Git外提取工具只读JSONL，不读取原图。
+10. `local_second_wall.py`在实验开关开启且020因同源性失败时运行；原start/end只定义待验证anchor。对start/end分别建立inward/outward搜索域，inward最多到原区间中点，outward最多到物理槽宽上限，全部角度wrap360。
+11. 每个搜索域对falling/rising极性独立播种，复用既有亚像素径向梯度、共识直线和外圆交点。接受拟合按极性和角度聚成physical wall cluster，cluster保留所有domain/seed来源。
+12. 枚举一falling与一rising cluster的无序墙对，canonical ID仅由排序后cluster ID决定。依次检查物理槽宽、直壁/平行、径向深度与覆盖、外圆端点、暗开口连续性、槽肩/端点与同源剖面。与原已拒绝start/end相同的墙对显式拒绝，避免复现混合边。
+13. 唯一实验解只写入`diagnostics.localSecondWallDiagnostic`，标记不可提升；顶层失败码、valid、姿态和PLC字段完全不变。
+14. diagnostic/3保留search domain、每个seed的生成/拒绝、physical wall cluster、canonical pair和分层failedChecks；Git外提取工具只读JSONL，不读取原图。
+15. 审阅工具只画cluster代表与最终canonical pair，标注`AUTO_experimental_`、`human_verified=false`和不权威声明，不画每个raw seed。
 
 ## Project Structure
 
@@ -55,7 +57,10 @@
     contracts/paired-capture-manifest.schema.json
     contracts/paired-slot-pose-config.schema.json
     contracts/paired-slot-pose-result.schema.json
+    contracts/local-second-wall-diagnostic-config.schema.json
+    contracts/local-second-wall-diagnostic-result.schema.json
     config/paired-capture-slot-pose.example.json
+    config/local-second-wall-diagnostic.example.json
     tests/test_paired_capture_slot_pose.py
     tests/test_slot_pose_prefill_review.py
     tests/test_local_second_wall.py
@@ -72,7 +77,7 @@
 - 输出以第二次拍摄后的零件姿态为current；第一帧测量必须通过已确认旋转传播，禁止复用旧角。
 - 自动预标注只使用AUTO_标签和human_verified=false；人工标签由现场另行确认。简化图只展示“被复核对象”，020 fixture候选不等于020 valid，且不自动生成真值框。
 - fixture模板pairEvidence是身份选择唯一来源；candidateMatches中的NOT_MATCHED只说明比较过，不允许nearest补位。raw interval始终只是一维暗区证据。
-- 第二壁实验采用“枚举并保留失败”的诊断架构；不修改020 source consistency阈值，也不把唯一实验解升级为姿态。
+- 双向墙实验采用“搜索域→独立墙→无序墙对→枚举并保留失败”的诊断架构；原暗区不是硬边界，但物理槽宽和总seed上限仍是硬约束。不修改020 source consistency阈值，也不把唯一实验解升级为姿态。
 
 ## Phase 1 Design Outputs
 
@@ -82,7 +87,7 @@
 
 ## Post-Design Constitution Re-check
 
-PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。真实双拍BMP、确认旋转参数、端到端性能和人工标注是现场验收阻塞，不妨碍默认关闭框架交付。
+PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed，但只有口头区域确认而无多张像素壁真值；真实双拍BMP、确认旋转参数和人工标注仍是生产验收阻塞。
 
 ## Complexity Tracking
 
