@@ -21,6 +21,7 @@ from algorithms.hole_2.current_capture import (
     _detect_d7_tangent,
     _d7_multiband_recovery,
     _detect_phi12_2,
+    _fit_dominant_paired_layer,
     _paired_contour_boundary,
     _ransac_circle,
     _shared_parallel_boundary_geometry,
@@ -575,6 +576,85 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertGreaterEqual(first_diagnostic["pairSupport"], 12)
         self.assertAlmostEqual(8.0, first_diagnostic["pairWidthMedianPx"], delta=1.0)
 
+    def test_d7_paired_transition_recovers_dominant_layer_after_mixed_fit(self):
+        image = np.full((200, 220), 220.0)
+        image[:, 56:64] = 20.0
+        # Nine central profiles lose the physical layer and expose a strong
+        # neighbouring optical layer.  The physical layer still has the
+        # dominant paired-transition support, but an unconstrained TLS fit is
+        # pulled above the unchanged residual gate.
+        image[91:109, 54:66] = 220.0
+        image[91:109, 78:86] = 0.0
+        image = gaussian_blur(image, 1.0)
+        config = _test_config()["d7"] | {
+            "paired_edge_strip_half_width_px": 24,
+            "paired_edge_strip_samples": 25,
+        }
+        diagnostics = {}
+
+        boundary = _paired_contour_boundary(
+            image, (60.0, 100.0), (140.0, 100.0), "p1", -100.0,
+            config, diagnostics,
+        )
+
+        self.assertIsNotNone(boundary, diagnostics)
+        self.assertAlmostEqual(60.0, boundary.feature_point[0], delta=0.8)
+        self.assertTrue(diagnostics["layerStabilizationAttempted"])
+        self.assertTrue(diagnostics["layerStabilizationUsed"])
+        self.assertEqual(
+            "fit_residual_above_gate",
+            diagnostics["layerStabilizationInitialFailureStage"],
+        )
+        self.assertGreaterEqual(
+            diagnostics["layerStabilizationInlierPointCount"],
+            config["paired_edge_min_support"],
+        )
+        self.assertEqual(
+            config["max_fit_residual_target_px"],
+            diagnostics["layerStabilizationResidualGatePx"],
+        )
+
+    def test_d7_paired_transition_primary_success_is_not_rewritten(self):
+        image = np.full((200, 220), 220.0)
+        image[:, 56:64] = 20.0
+        image = gaussian_blur(image, 1.0)
+        config = _test_config()["d7"] | {
+            "paired_edge_strip_half_width_px": 24,
+            "paired_edge_strip_samples": 25,
+        }
+        diagnostics = {}
+
+        boundary = _paired_contour_boundary(
+            image, (60.0, 100.0), (140.0, 100.0), "p1", -100.0,
+            config, diagnostics,
+        )
+
+        self.assertIsNotNone(boundary, diagnostics)
+        self.assertAlmostEqual(60.0, boundary.feature_point[0], delta=0.6)
+        self.assertFalse(diagnostics["layerStabilizationAttempted"])
+        self.assertFalse(diagnostics["layerStabilizationUsed"])
+
+    def test_d7_paired_transition_does_not_recover_equal_competing_layers(self):
+        # Two separated layers have the same tangent support and neither is
+        # uniquely justified.  Safe behaviour is failure, not proximity to a
+        # reference or nominal dimension.
+        tangent = [float(value) for value in range(12) for _ in range(2)]
+        axial = [value for _ in range(12) for value in (0.0, 22.0)]
+        points = [
+            (60.0 + axis_value, 80.0 + tangent_value)
+            for tangent_value, axis_value in zip(tangent, axial)
+        ]
+
+        fitted, diagnostics = _fit_dominant_paired_layer(
+            points, tangent, axial, minimum_support=12, residual_gate=3.0,
+        )
+
+        self.assertIsNone(fitted)
+        self.assertIn(
+            diagnostics["layerStabilizationFailure"],
+            {"dominant_layer_support_below_gate", "ambiguous_competing_layers"},
+        )
+
     def test_d7_shared_parallel_fit_returns_exact_normal_distance(self):
         evidence = [
             {
@@ -977,11 +1057,12 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertIn("candidate_edge_polarity", phi_quality)
         self.assertGreater(phi_quality["candidate_angle_coverage_deg"], 350.0)
 
-        # Use a separate straight-band target so the two endpoint boundaries
-        # are unambiguous; the axis must move from y=145 to the detected
-        # Phi12.2 tangent at y=140.
+        # Use finite-width optical contour bands so both endpoints expose the
+        # required opposite-polarity transition pair.  A single bright step is
+        # deliberately no longer an acceptable D7 contour surrogate.
         band = np.full((220, 220), 20.0)
-        band[:, 60:141] = 220.0
+        band[:, 56:64] = 220.0
+        band[:, 136:144] = 220.0
         band = gaussian_blur(band, 1.0)
         tangent_values, tangent_quality = _detect_d7_tangent(
             band, reference, SimilarityTransform(0.0, 0.0, 1.0, 0.0),
@@ -1227,6 +1308,21 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
                 self.assertIsNone(values)
                 self.assertIsNone(quality["candidate_fallback_pass"])
                 self.assertEqual("v6_original_quality_rejected", quality["candidate_fallback_failure"])
+
+        values, quality = _v6_d7_fallback(
+            valid_v6,
+            {
+                "candidate_failure": "tangent_boundary_fit_failed",
+                "candidate_semantic_fallback_allowed": False,
+            },
+        )
+        self.assertEqual(8.0, values["d7_length"])
+        self.assertEqual("v6_original_quality", quality["candidate_fallback_pass"])
+        self.assertIsNone(quality["candidate_fallback_failure"])
+        self.assertEqual(
+            "unavailable_v6_original_quality_fallback",
+            quality["candidate_boundary_evidence_status"],
+        )
 
 
 if __name__ == "__main__":

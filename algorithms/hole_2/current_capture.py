@@ -2788,6 +2788,15 @@ def _paired_contour_boundary(
         "axisCosine": None,
         "offsetPx": None,
         "failureStage": None,
+        "layerStabilizationAttempted": False,
+        "layerStabilizationUsed": False,
+        "layerStabilizationInitialFailureStage": None,
+        "layerStabilizationRawPointCount": 0,
+        "layerStabilizationInlierPointCount": 0,
+        "layerStabilizationResidualGatePx": float(
+            d7_config["max_fit_residual_target_px"]
+        ),
+        "layerStabilizationFailure": None,
     })
     dx = p2_target[0] - p1_target[0]
     dy = p2_target[1] - p1_target[1]
@@ -2818,6 +2827,8 @@ def _paired_contour_boundary(
     outer_peaks: list[float] = []
     inner_peaks: list[float] = []
     pair_widths: list[float] = []
+    tangent_coordinates: list[float] = []
+    axis_coordinates: list[float] = []
 
     for tangent_offset in np.linspace(
         -float(d7_config["paired_edge_strip_half_width_px"]),
@@ -2891,6 +2902,8 @@ def _paired_contour_boundary(
         outer_peaks.append(outer_peak)
         inner_peaks.append(inner_peak)
         pair_widths.append(pair_width)
+        tangent_coordinates.append(float(tangent_offset))
+        axis_coordinates.append(float(center_position))
 
     diagnostics.update({
         "pairSupport": len(contour_points),
@@ -2907,15 +2920,47 @@ def _paired_contour_boundary(
     diagnostics["inlierPoints"] = int(len(inliers))
     axis_cosine = abs(float(line[0]) * axis[0] + float(line[1]) * axis[1])
     diagnostics["axisCosine"] = axis_cosine
-    if axis_cosine < D7_BOUNDARY_MIN_AXIS_COSINE:
-        diagnostics["failureStage"] = "axis_alignment_below_gate"
-        return None
     residuals = np.abs(line[0] * inliers[:, 0] + line[1] * inliers[:, 1] + line[2])
     median_residual = float(np.median(residuals))
     diagnostics["medianResidualPx"] = median_residual
-    if median_residual > float(d7_config["max_fit_residual_target_px"]):
-        diagnostics["failureStage"] = "fit_residual_above_gate"
-        return None
+    initial_failure = None
+    if axis_cosine < D7_BOUNDARY_MIN_AXIS_COSINE:
+        initial_failure = "axis_alignment_below_gate"
+    elif median_residual > float(d7_config["max_fit_residual_target_px"]):
+        initial_failure = "fit_residual_above_gate"
+    if initial_failure is not None:
+        diagnostics["layerStabilizationAttempted"] = True
+        diagnostics["layerStabilizationInitialFailureStage"] = initial_failure
+        diagnostics["layerStabilizationRawPointCount"] = len(contour_points)
+        stabilized, stabilization = _fit_dominant_paired_layer(
+            contour_points,
+            tangent_coordinates,
+            axis_coordinates,
+            minimum_support=minimum_support,
+            residual_gate=float(d7_config["max_fit_residual_target_px"]),
+        )
+        diagnostics.update(stabilization)
+        if stabilized is None:
+            diagnostics["failureStage"] = initial_failure
+            return None
+        line, inliers = stabilized
+        diagnostics["layerStabilizationUsed"] = True
+        diagnostics["inlierPoints"] = int(len(inliers))
+        axis_cosine = abs(float(line[0]) * axis[0] + float(line[1]) * axis[1])
+        diagnostics["axisCosine"] = axis_cosine
+        residuals = np.abs(
+            line[0] * inliers[:, 0] + line[1] * inliers[:, 1] + line[2]
+        )
+        median_residual = float(np.median(residuals))
+        diagnostics["medianResidualPx"] = median_residual
+        # Stabilization changes candidate generation only.  The final
+        # acceptance checks deliberately reuse every existing quality gate.
+        if axis_cosine < D7_BOUNDARY_MIN_AXIS_COSINE:
+            diagnostics["failureStage"] = "axis_alignment_below_gate"
+            return None
+        if median_residual > float(d7_config["max_fit_residual_target_px"]):
+            diagnostics["failureStage"] = "fit_residual_above_gate"
+            return None
     intersection = line_axis_intersection(line, origin, axis)
     if intersection is None:
         diagnostics["failureStage"] = "axis_intersection_failed"
@@ -2951,6 +2996,81 @@ def _paired_contour_boundary(
         median_edge_score=float(min(np.median(outer_peaks), np.median(inner_peaks))),
         offset_px=float(offset),
     )
+
+
+def _fit_dominant_paired_layer(
+    contour_points: list[tuple[float, float]],
+    tangent_coordinates: list[float],
+    axis_coordinates: list[float],
+    *,
+    minimum_support: int,
+    residual_gate: float,
+) -> tuple[
+    tuple[tuple[float, float, float], np.ndarray] | None,
+    dict[str, Any],
+]:
+    """Recover a dominant paired-transition layer without nominal guidance.
+
+    The fit is expressed in the scan frame: tangent position is the independent
+    coordinate and the paired-transition midpoint is the dependent coordinate.
+    A Theil-Sen median slope resists a minority neighbouring layer.  Inliers
+    are selected with the *existing* D7 fit-residual gate, and an independently
+    supported second layer makes the result ambiguous and therefore invalid.
+    """
+    quality: dict[str, Any] = {
+        "layerStabilizationInlierPointCount": 0,
+        "layerStabilizationResidualGatePx": float(residual_gate),
+        "layerStabilizationFailure": None,
+    }
+    points = np.asarray(contour_points, dtype=np.float64)
+    tangent = np.asarray(tangent_coordinates, dtype=np.float64)
+    axial = np.asarray(axis_coordinates, dtype=np.float64)
+    if (
+        points.ndim != 2 or points.shape[1:] != (2,)
+        or len(points) != len(tangent) or len(points) != len(axial)
+        or len(points) < minimum_support
+    ):
+        quality["layerStabilizationFailure"] = "support_below_gate"
+        return None, quality
+
+    def layer_mask(x: np.ndarray, y: np.ndarray) -> np.ndarray | None:
+        slopes = [
+            float((y[j] - y[i]) / (x[j] - x[i]))
+            for i in range(len(x))
+            for j in range(i + 1, len(x))
+            if abs(float(x[j] - x[i])) > 1e-9
+        ]
+        if not slopes:
+            return None
+        slope = float(np.median(np.asarray(slopes, dtype=np.float64)))
+        intercept = float(np.median(y - slope * x))
+        return np.abs(y - (slope * x + intercept)) <= residual_gate
+
+    selected = layer_mask(tangent, axial)
+    if selected is None or int(selected.sum()) < minimum_support:
+        quality["layerStabilizationFailure"] = "dominant_layer_support_below_gate"
+        return None, quality
+
+    # A second independently supported layer is genuine ambiguity.  Do not
+    # resolve it by proximity to the reference length or a nominal dimension.
+    rejected = ~selected
+    if int(rejected.sum()) >= minimum_support:
+        alternate = layer_mask(tangent[rejected], axial[rejected])
+        if alternate is not None and int(alternate.sum()) >= minimum_support:
+            quality["layerStabilizationFailure"] = "ambiguous_competing_layers"
+            return None, quality
+
+    inlier_points = points[selected]
+    fitted = robust_fit_line(
+        [tuple(float(value) for value in point) for point in inlier_points],
+        min_points=minimum_support,
+    )
+    if fitted is None:
+        quality["layerStabilizationFailure"] = "dominant_layer_fit_failed"
+        return None, quality
+    line, fitted_inliers = fitted
+    quality["layerStabilizationInlierPointCount"] = int(len(fitted_inliers))
+    return (line, fitted_inliers), quality
 
 
 def _d7_multiband_recovery(
@@ -3357,28 +3477,28 @@ def _detect_d7_tangent(
             image, p1_shifted, p2_shifted, polarities, d7_config
         )
         combined = {**primary_quality, **recovery_quality}
-        if recovered is None:
-            return None, combined
-        recovered_first, recovered_second = recovered
-        shared = _shared_parallel_boundary_geometry(
-            combined.get("candidate_boundary_evidence_target_px", [])
-        )
-        if shared is not None:
-            (recovered_first, recovered_second), shared_evidence, shared_quality = shared
-            combined["candidate_boundary_evidence_target_px"] = shared_evidence
-            combined.update(shared_quality)
-        ref_first = transform.inverse(*recovered_first)
-        ref_second = transform.inverse(*recovered_second)
         combined["candidate_primary_failed_sides"] = list(
             combined.get("candidate_failed_sides", [])
         )
-        combined["candidate_failed_sides"] = []
-        combined["candidate_failure"] = None
-        return {
-            "d7_x1": ref_first[0], "d7_y1": ref_first[1],
-            "d7_x2": ref_second[0], "d7_y2": ref_second[1],
-            "d7_length": math.dist(ref_first, ref_second),
-        }, combined
+        combined["candidate_multiband_diagnostic_pass"] = recovered is not None
+        combined["candidate_multiband_semantics_rejected"] = recovered is not None
+        combined["candidate_multiband_semantics_rejection_reason"] = (
+            "single_gradient_edge_is_not_paired_transition_contour_locus"
+            if recovered is not None else None
+        )
+        # This legacy recovery selects one strongest gradient per profile.  It
+        # remains useful diagnostics, but the 030 manual audit proved that it
+        # can consistently select a neighbouring optical layer while every
+        # numerical gate passes.  It therefore cannot directly produce the
+        # current-capture D7.  The separately computed v6 result may still be
+        # returned only through its own original dual-boundary quality gate;
+        # such a value is explicitly marked as having unavailable new-style
+        # boundary evidence.
+        combined["candidate_semantic_fallback_allowed"] = True
+        combined["candidate_recovery_pass"] = None
+        if recovered is not None:
+            combined["candidate_multiband_failure"] = "boundary_semantics_mismatch"
+        return None, combined
 
     if first is None or second is None:
         failed_sides = [
@@ -3406,7 +3526,19 @@ def _detect_d7_tangent(
         reasons.append("boundary_parallelism_above_gate")
     quality = {
         "candidate_failure": None if not reasons else ",".join(reasons),
-        "candidate_recovery_pass": None,
+        "candidate_recovery_pass": (
+            "paired_transition_layer_stabilization"
+            if first_diagnostic.get("layerStabilizationUsed")
+            or second_diagnostic.get("layerStabilizationUsed")
+            else None
+        ),
+        "candidate_layer_stabilized_sides": [
+            side_name
+            for side_name, side_diagnostic in (
+                ("p1", first_diagnostic), ("p2", second_diagnostic)
+            )
+            if side_diagnostic.get("layerStabilizationUsed")
+        ],
         "candidate_boundary_semantics": "neck_outer_contour_edges",
         "candidate_reference_tangent_error_px": tangent_error_ref,
         "candidate_axis_shift_target_px": axis_shift,
