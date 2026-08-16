@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "local-second-wall-diagnostic-config.schema.json",
+  "title": "局部第二侧壁实验诊断配置",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "enabled", "threshold_version", "scan_step_deg",
+    "max_scan_seeds", "local_interval_margin_deg", "min_wall_separation_deg",
+    "max_wall_separation_deg", "max_parallel_difference_deg", "max_endpoint_circle_residual_px", "min_radial_coverage",
+    "max_radial_coverage_difference", "min_opening_dark_fraction",
+    "opening_sample_angles", "opening_sample_radii", "candidate_merge_deg"
+  ],
+  "properties": {
+    "schema_version": {"const": "local-second-wall-diagnostic/1"},
+    "enabled": {"type": "boolean", "default": false},
+    "threshold_version": {"const": "local-second-wall-diagnostic-v1"},
+    "scan_step_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "max_scan_seeds": {"type": "integer", "minimum": 3, "maximum": 256},
+    "local_interval_margin_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "min_wall_separation_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "max_wall_separation_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "max_parallel_difference_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "max_endpoint_circle_residual_px": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+    "min_radial_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+    "max_radial_coverage_difference": {"type": "number", "minimum": 0, "maximum": 1},
+    "min_opening_dark_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "opening_sample_angles": {"type": "integer", "minimum": 3, "maximum": 256},
+    "opening_sample_radii": {"type": "integer", "minimum": 3, "maximum": 256},
+    "candidate_merge_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180}
+  }
+}

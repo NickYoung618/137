@@ -66,7 +66,21 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 ## Phase 8: Convergence - 简化人工复核图
 
 - [x] T023 先在 tests/test_slot_pose_prefill_review.py 增加RAW/SIMPLIFIED两栏、稳定颜色/标题/图例、原分辨率输出及禁止圆/矩形/raw射线的聚焦测试 per FR-021/FR-026/FR-027/SC-007 (partial)
-- [x] T024 在 tools/prepare_slot_pose_prefill_review.py 实现独立简化渲染层，仅画019最终左右壁/端点和020 fixture候选区域或方向，不调用完整调试overlay per FR-021/FR-022/FR-026/FR-027 (contradicts)
-- [x] T025 收紧LabelMe预填与review索引，只保留最终两侧壁/端点/fixture候选，所有shape保持AUTO_且human_verified=false并拒绝覆盖人工内容 per FR-022/FR-028 (contradicts)
+- [x] T024 在 tools/prepare_slot_pose_prefill_review.py 实现独立简化渲染层，仅画019最终左右壁/端点和020候选证据，不调用完整调试overlay per FR-021/FR-022/FR-026/FR-027 (superseded by T028-T029 interval semantics)
+- [x] T025 收紧LabelMe预填与review索引，只保留最终两侧壁/端点/候选证据，所有shape保持AUTO_且human_verified=false并拒绝覆盖人工内容 per FR-022/FR-028 (superseded by T028-T029 interval semantics)
 - [x] T026 更新 contracts/slot-pose-prefill-review.schema.json、specs/021-paired-capture-slot-pose/quickstart.md和README.md，明确020候选不等于valid及374/369准确命令 per FR-021/FR-027/Constitution IV (partial)
 - [x] T027 运行聚焦/全量/Schema/CLI/diff/媒体与路径污染门，更新evidence，本地提交并推送021功能分支且不合并main per SC-006/SC-008/SC-009 (partial)
+
+## Phase 9: Convergence - 区间审阅语义与局部第二壁诊断
+
+- [x] T028 [US5] 先在 tests/test_slot_pose_prefill_review.py 覆盖pairEvidence选择、NOT_MATCHED/PAIR_INCOMPLETE、不允许nearest补位、角度括号三刻线与FR-032 flags per FR-029-FR-032/SC-010
+- [x] T029 [US5] 修正 tools/prepare_slot_pose_prefill_review.py：fixture身份与raw区间分离，interval linestrip/方向降级及可视声明，不再画polygon/实心区域 per FR-029-FR-032
+- [x] T030 [US5] 更新contracts、quickstart、README和证据，记录374/369人工反馈仅为语义负例而非像素真值 per FR-033/BLOCKED-B05
+- [x] T031 [US6] 先写 tests/test_local_second_wall.py，覆盖方形槽唯一补齐、fixture跨源、多解、缺边和31°/328° per FR-034-FR-039/SC-011
+- [x] T032 [US6] 实现 algorithms/slot_pose/local_second_wall.py 的严格配置、局部侧壁枚举、独立几何/暗开口/剖面门和全假设输出 per FR-034-FR-038
+- [x] T033 [US6] 在contract与legacy_adapter增加默认关闭诊断钩子；唯一实验候选不得改变GROOVE_SOURCE_INCONSISTENT、valid或PLC字段 per FR-034/FR-037/SC-012
+- [x] T034 更新SpecKit contracts/data-model/quickstart与Mac外置实验配置命令；不修改现有020阈值或默认配置 per FR-020/FR-034
+- [x] T035 运行spec analyze、聚焦/全量、Schema/CLI/diff/JSON/媒体/路径污染门，更新evidence并提交推送021分支，不合main per SC-006/SC-008/SC-009
+- [x] T036 [US6] 输出CANDIDATE_MISSING/LOCAL_SECOND_WALL_NOT_FOUND/MULTIPLE_LOCAL_OPENINGS/SOURCE_INCONSISTENT阶段码，所有side search候选携带failedChecks per FR-040
+- [x] T037 [US6] 在局部假设checks标注geometry/endpoint/opening/source层和hardGate，同一外圆端点残差进入硬门，score不得越门 per FR-041
+- [x] T038 [US6] 补任意旋转、环绕、曝光/模糊、fixture对比/宽度不对称及部分重叠的端点/中点误差与fail-closed测试 per FR-042/SC-013

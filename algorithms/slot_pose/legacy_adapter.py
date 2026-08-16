@@ -27,6 +27,7 @@ from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_cir
 from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
 from algorithms.slot_pose.sidewall_consistency import assess_sidewall_source_consistency
+from algorithms.slot_pose.local_second_wall import diagnose_local_second_wall
 
 
 REQUIRED_FUNCTIONS = (
@@ -573,6 +574,23 @@ class LegacyAEndFaceAdapter:
                         detector.get("sidewall_source_consistency"),
                     )
                     output = {**refinement, "sourceConsistency": source_consistency}
+                    if (
+                        "local_second_wall_diagnostic" in detector
+                        and source_consistency["status"] == "rejected"
+                    ):
+                        output["localSecondWallDiagnostic"] = diagnose_local_second_wall(
+                            target_gray,
+                            groove_center,
+                            groove_outer_radius,
+                            candidate,
+                            refinement,
+                            self.module.bilinear_sample,
+                            self.module.parabolic_peak,
+                            detector["groove_refinement"],
+                            detector.get("sidewall_source_consistency"),
+                            detector.get("local_second_wall_diagnostic"),
+                            pixel_scale=scale,
+                        )
                     if source_consistency["status"] == "rejected":
                         return {
                             **output,
@@ -592,6 +610,8 @@ class LegacyAEndFaceAdapter:
                     refinement = refine_candidate(groove_candidates[0])
                     diagnostics["grooveRefinement"] = refinement
                     diagnostics["grooveSourceConsistency"] = refinement.get("sourceConsistency")
+                    if "localSecondWallDiagnostic" in refinement:
+                        diagnostics["localSecondWallDiagnostic"] = refinement["localSecondWallDiagnostic"]
                     groove_candidates = [{
                         **groove_candidates[0],
                         "refinedStartDeg": (
@@ -615,6 +635,8 @@ class LegacyAEndFaceAdapter:
                         refinement = selected["grooveRefinement"]
                         diagnostics["grooveRefinement"] = refinement
                         diagnostics["grooveSourceConsistency"] = refinement.get("sourceConsistency")
+                        if "localSecondWallDiagnostic" in refinement:
+                            diagnostics["localSecondWallDiagnostic"] = refinement["localSecondWallDiagnostic"]
                         groove_candidates = [{
                             **selected,
                             "refinedStartDeg": refinement["openingEndpointProfileDeg"][0],

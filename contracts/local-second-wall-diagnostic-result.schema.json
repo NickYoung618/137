@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "local-second-wall-diagnostic-result.schema.json",
+  "title": "局部第二侧壁实验诊断输出",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "thresholdVersion", "enabled", "status", "failureStage", "errorCode", "authoritative",
+    "posePromotionAllowed", "sideSearchCandidates", "hypotheses", "experimentalCandidate"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "local-second-wall-diagnostic/1"},
+    "thresholdVersion": {"type": "string", "minLength": 1},
+    "enabled": {"type": "boolean"},
+    "status": {"enum": [
+      "DISABLED", "NOT_EVALUATED", "LOCAL_SECOND_WALL_NOT_FOUND",
+      "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT", "UNIQUE_DIAGNOSTIC"
+    ]},
+    "failureStage": {"type": ["string", "null"]},
+    "errorCode": {
+      "enum": [null, "CANDIDATE_MISSING", "LOCAL_SECOND_WALL_NOT_FOUND", "MULTIPLE_LOCAL_OPENINGS", "SOURCE_INCONSISTENT"]
+    },
+    "authoritative": {"const": false},
+    "posePromotionAllowed": {"const": false},
+    "coarseCandidateId": {"type": ["string", "null"]},
+    "localInterval": {"type": "object", "additionalProperties": true},
+    "anchorSides": {"type": "array", "items": {"enum": ["startSide", "endSide"]}},
+    "sideSearchCandidates": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": ["searchCandidateId", "seedDeg", "polarity", "searchStatus", "failedChecks"],
+        "properties": {
+          "searchCandidateId": {"type": "string", "minLength": 1},
+          "seedDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+          "polarity": {"enum": ["falling", "rising"]},
+          "searchStatus": {"type": "string", "minLength": 1},
+          "failedChecks": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": ["hypothesisId", "checks", "failedChecks", "passed", "score"],
+        "properties": {
+          "hypothesisId": {"type": "string", "minLength": 1},
+          "checks": {"type": "array"},
+          "failedChecks": {"type": "array", "items": {"type": "string"}},
+          "passed": {"type": "boolean"},
+          "score": {"type": "number"}
+        }
+      }
+    },
+    "experimentalCandidate": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "hypothesisId", "openingEndpointProfileDeg", "openingWidthDeg",
+            "authoritative", "posePromotionAllowed"
+          ],
+          "properties": {
+            "hypothesisId": {"type": "string", "minLength": 1},
+            "openingEndpointProfileDeg": {
+              "type": "array", "minItems": 2, "maxItems": 2,
+              "items": {"type": "number", "minimum": 0, "exclusiveMaximum": 360}
+            },
+            "openingWidthDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
+            "authoritative": {"const": false},
+            "posePromotionAllowed": {"const": false}
+          }
+        }
+      ]
+    },
+    "passedHypothesisCount": {"type": "integer", "minimum": 0},
+    "failedChecks": {"type": "array", "items": {"type": "string"}}
+  }
+}

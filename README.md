@@ -109,9 +109,15 @@ fail-closed，PLC字段始终为空。约31°/328°不形成ignore mask。
 
 `tools/prepare_slot_pose_prefill_review.py`在Git外为part-019 374/369生成原分辨率raw/simplified、
 RAW/SIMPLIFIED两栏联系表和精简`AUTO_` LabelMe预填。simplified只显示019最终左右槽壁/端点及020
-fixture候选，不画外圆、定位框或其他raw射线；图上明确“020候选不等于valid”和“真实凹槽待人工确认”。
+观测暗区角度区间，不画外圆、定位框、其他raw射线或实心fixture区域。它优先使用
+`pairEvidence.selectedCandidateIds`；配对不完整时绝不把最近的`NOT_MATCHED`候选冒充fixture。
+橙色括号只表示一维`start/center/end`，图上明确“fixture身份未确认、像素边界未知”。
 自动shape保持`human_verified=false`，无需从空白图重画外圆。完整契约和Mac命令见
 `specs/021-paired-capture-slot-pose/quickstart.md`。
+
+`detector.local_second_wall_diagnostic`是另一个默认不存在/关闭的实验开关：仅在020同源性拒绝后，
+复用现有亚像素侧壁和灰度剖面，在同一局部暗开口枚举第二壁。即使唯一实验候选形成，顶层仍保持
+`GROOVE_SOURCE_INCONSISTENT`、`valid=false`，不得产生权威姿态或PLC命令。
 
 ## 007单真槽闭环图像引导
 

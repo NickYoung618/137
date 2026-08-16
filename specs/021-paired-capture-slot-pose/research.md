@@ -35,8 +35,15 @@
 ## Decision 6: 人工审阅用精简AUTO_预填而非空白真值模板
 
 **Decision**: 生成RAW/SIMPLIFIED两栏材料和精简AUTO_ shapes。简化图只显示019最终左右壁/端点与020
-fixture候选；不画圆、定位框、非最终raw射线或真值框。020候选若有匹配边界则画橙色候选区域，否则
-只画短方向箭头；两种情况均明确不等于valid。人工只确认真槽边界、两个阴影区域和左右壁是否同源。
+观测暗区；不画圆、定位框、非最终raw射线或真值框。优先使用pairEvidence.selectedCandidateIds，但即使模板匹配也只画
+raw start/center/end对应的圆周角度括号与三刻线，声明fixture身份未确认、像素边界未知。NOT_MATCHED不得nearest补成A/B；
+无区间时才画短方向箭头。
 
 **Rationale**: 空白原图无法显示算法实际选边，完整调试overlay又会淹没待确认对象；自动shape必须与
 human truth命名空间隔离，拟合圆可在算法诊断中保留但不进入本轮人工复核画面。
+
+## Decision 7: 局部第二侧壁只做不可提升的实验诊断
+
+**Decision**: 当020已有两侧壁因同源性拒绝时，分别以每侧为anchor，在raw暗区局部范围内枚举备选第二壁；复用现有亚像素采样、直线拟合和source consistency证据，并增加区间包含、平行性、径向覆盖、槽口端点、暗开口连续性门。唯一解只写诊断，不改变原错误码或valid。
+
+**Rationale**: 374/369证明混合配对稳定但没有像素级真值。保留所有假设与failedChecks可验证搜索逻辑，同时避免对单个part硬编码或把实验候选包装成修复。

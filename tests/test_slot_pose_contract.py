@@ -104,6 +104,37 @@ class SlotPoseContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "refinement v2"):
                 load_config(path)
 
+    def test_local_second_wall_is_explicit_default_off_and_strictly_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            omitted = minimal_single_groove_config()
+            omitted_path = root / "omitted.json"
+            omitted_path.write_text(json.dumps(omitted), encoding="utf-8")
+            loaded = load_config(omitted_path)
+            self.assertNotIn("local_second_wall_diagnostic", loaded["detector"])
+
+            enabled = minimal_single_groove_config()
+            enabled["detector"]["local_second_wall_diagnostic"] = {"enabled": True}
+            enabled_path = root / "without-source.json"
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "requires sidewall_source_consistency"):
+                load_config(enabled_path)
+
+            enabled["detector"]["sidewall_source_consistency"] = {"enabled": True}
+            enabled["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+            }
+            valid_path = root / "valid.json"
+            valid_path.write_text(json.dumps(enabled), encoding="utf-8")
+            configured = load_config(valid_path)
+            self.assertTrue(configured["detector"]["local_second_wall_diagnostic"]["enabled"])
+
+            enabled["detector"]["local_second_wall_diagnostic"]["unexpected"] = True
+            invalid_path = root / "invalid.json"
+            invalid_path.write_text(json.dumps(enabled), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unknown fields"):
+                load_config(invalid_path)
+
     def test_effective_config_hash_ignores_paths_and_explicit_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

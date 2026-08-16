@@ -119,6 +119,13 @@ def _finite_number(value: Any) -> bool:
 
 
 def _fixture_selections(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return observed angular intervals without inventing fixture identities.
+
+    A complete pair may select candidate ids, but even then the AUTO review only
+    exposes one-dimensional profile evidence.  An incomplete pair exposes raw
+    observations as unassigned intervals; it never chooses the nearest failed
+    template match.
+    """
     evidence = diagnostics.get("fixtureShadowEvidence") or {}
     matches = evidence.get("candidateMatches")
     if not isinstance(matches, list):
@@ -130,42 +137,72 @@ def _fixture_selections(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
         str(item.get("candidateId")): item
         for item in raw if isinstance(item, dict) and item.get("candidateId") is not None
     }
+    pair = evidence.get("pairEvidence") if isinstance(evidence.get("pairEvidence"), dict) else {}
+    selected_ids = pair.get("selectedCandidateIds")
+    pair_complete = (
+        pair.get("status") == "complete"
+        and isinstance(selected_ids, list) and len(selected_ids) == 2
+        and len({str(value) for value in selected_ids}) == 2
+    )
+    match_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for match in matches:
+        if isinstance(match, dict) and match.get("candidateId") is not None:
+            match_by_candidate.setdefault(str(match["candidateId"]), []).append(match)
+    if pair_complete:
+        requested = [(str(candidate_id), suffix) for candidate_id, suffix in zip(selected_ids, ("a", "b"))]
+    else:
+        requested = [(candidate_id, candidate_id) for candidate_id in sorted(by_id)]
+    pair_failures = [str(value) for value in (pair.get("failedChecks") or [])]
     output: list[dict[str, Any]] = []
-    for suffix in ("a", "b"):
-        choices = [
-            item for item in matches
-            if isinstance(item, dict) and str(item.get("templateId") or "").endswith(f"-{suffix}")
-        ]
-        if not choices:
-            continue
-        matched = [item for item in choices if item.get("status") == "matched"]
-        pool = matched or choices
-        selected = min(
-            pool,
-            key=lambda item: (float(item.get("centerDistanceDeg", 999.0)), str(item.get("candidateId"))),
-        )
-        candidate_id = str(selected.get("candidateId"))
+    for candidate_id, suffix in requested:
         candidate = by_id.get(candidate_id)
         if candidate is None or not _finite_number(candidate.get("centerDeg")):
             continue
+        candidate_matches = match_by_candidate.get(candidate_id, [])
+        if pair_complete:
+            match_status = "MATCHED_PAIR_MEMBER"
+            selection_source = "PAIR_EVIDENCE"
+            relevant = [
+                item for item in candidate_matches
+                if str(item.get("templateId") or "").endswith(f"-{suffix}")
+            ] or candidate_matches
+        else:
+            matched = [item for item in candidate_matches if item.get("status") == "matched"]
+            relevant = candidate_matches
+            if matched:
+                match_status = "PAIR_INCOMPLETE_MATCHED"
+            elif candidate_matches:
+                match_status = "NOT_MATCHED"
+            else:
+                match_status = "NOT_EVALUATED"
+            selection_source = "UNASSIGNED_OBSERVATION"
+        failed_checks = list(dict.fromkeys(
+            pair_failures
+            + [
+                str(value)
+                for item in relevant
+                for value in (item.get("failedChecks") or [])
+            ]
+        ))
         start, end = candidate.get("startDeg"), candidate.get("endDeg")
         if not (_finite_number(start) and _finite_number(end)):
             half = candidate.get("halfWidthDeg")
             if _finite_number(half):
                 start = (float(candidate["centerDeg"]) - float(half)) % 360.0
                 end = (float(candidate["centerDeg"]) + float(half)) % 360.0
-        region_supported = (
-            selected.get("status") == "matched"
-            and _finite_number(start) and _finite_number(end)
-        )
+        interval_supported = _finite_number(start) and _finite_number(end)
         output.append({
             "suffix": suffix,
             "candidateId": candidate_id,
-            "matchStatus": str(selected.get("status") or "unknown"),
+            "matchStatus": match_status,
+            "selectionSource": selection_source,
             "centerDeg": float(candidate["centerDeg"]),
             "startDeg": float(start) if _finite_number(start) else None,
             "endDeg": float(end) if _finite_number(end) else None,
-            "regionSupported": region_supported,
+            "intervalSupported": interval_supported,
+            "fixtureIdentityConfirmed": False,
+            "pixelBoundaryKnown": False,
+            "failedChecks": failed_checks,
         })
     return output
 
@@ -198,7 +235,7 @@ def _wall_shapes(diagnostics: dict[str, Any], source: str) -> list[dict[str, Any
     return shapes
 
 
-def _sector_points(
+def _angular_interval_points(
     circle: tuple[float, float, float], start_deg: float, end_deg: float,
 ) -> list[list[float]]:
     span = (float(end_deg) - float(start_deg)) % 360.0
@@ -206,21 +243,13 @@ def _sector_points(
         return []
     count = max(4, int(math.ceil(span / 3.0)) + 1)
     angles = [float(start_deg) + span * index / (count - 1) for index in range(count)]
-    outer = [
+    return [
         [
-            circle[0] + circle[2] * 1.02 * math.cos(math.radians(angle)),
-            circle[1] + circle[2] * 1.02 * math.sin(math.radians(angle)),
+            circle[0] + circle[2] * 1.035 * math.cos(math.radians(angle)),
+            circle[1] + circle[2] * 1.035 * math.sin(math.radians(angle)),
         ]
         for angle in angles
     ]
-    inner = [
-        [
-            circle[0] + circle[2] * 0.86 * math.cos(math.radians(angle)),
-            circle[1] + circle[2] * 0.86 * math.sin(math.radians(angle)),
-        ]
-        for angle in reversed(angles)
-    ]
-    return outer + inner
 
 
 def _fixture_shapes(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -230,12 +259,14 @@ def _fixture_shapes(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
     shapes: list[dict[str, Any]] = []
     for selection in _fixture_selections(diagnostics):
         points = (
-            _sector_points(circle, selection["startDeg"], selection["endDeg"])
-            if selection["regionSupported"] else []
+            _angular_interval_points(circle, selection["startDeg"], selection["endDeg"])
+            if selection["intervalSupported"] else []
         )
-        shape_type = "polygon"
+        shape_type = "linestrip"
+        boundary_semantics = "angular_profile_interval"
         if not points:
             shape_type = "line"
+            boundary_semantics = "direction_only"
             angle = math.radians(selection["centerDeg"])
             points = [
                 [
@@ -245,12 +276,20 @@ def _fixture_shapes(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
                 for ratio in (0.86, 1.02)
             ]
         shapes.append(_shape(
-            f"AUTO_fixture_shadow_candidate_{selection['suffix']}",
+            f"AUTO_observed_dark_angular_interval_{selection['suffix']}",
             points, shape_type, COLORS["fixture"], "020",
             extra_flags={
                 "candidate_only": True,
-                "region_supported": bool(selection["regionSupported"]),
-                "fixture_match_status": selection["matchStatus"],
+                "fixture_identity_confirmed": False,
+                "boundary_semantics": boundary_semantics,
+                "pixel_boundary_known": False,
+                "match_status": selection["matchStatus"],
+                "candidate_id": selection["candidateId"],
+                "failed_checks": selection["failedChecks"],
+                "selection_source": selection["selectionSource"],
+                "start_deg": selection["startDeg"],
+                "center_deg": selection["centerDeg"],
+                "end_deg": selection["endDeg"],
             },
         ))
     return shapes
@@ -279,6 +318,8 @@ def _review_text_lines(
         f"019 valid={valid_019} | 020 error={_error_code(payload_020)}",
         "GREEN=019 wall-left | PINK=019 wall-right | DOTS=mouth endpoints",
         "020 fixture candidate != valid",
+        "Observed dark angular interval",
+        "Fixture identity unconfirmed | Pixel boundary unknown",
         "HUMAN CONFIRMATION REQUIRED: real groove",
     ]
 
@@ -350,18 +391,36 @@ def render_simplified(
                 (x - endpoint_radius, y - endpoint_radius, x + endpoint_radius, y + endpoint_radius),
                 fill=color, outline="black", width=max(2, stroke // 3),
             )
-        elif label.startswith("AUTO_fixture_shadow_candidate_"):
-            if shape["shape_type"] == "polygon":
-                draw.polygon(points, fill=(255, 152, 0, 48), outline=color)
-                draw.line(points + [points[0]], fill=color, width=stroke)
+        elif label.startswith("AUTO_observed_dark_angular_interval_"):
+            flags = shape["flags"]
+            if shape["shape_type"] == "linestrip":
+                draw.line(points, fill=color, width=stroke)
+                circle = _circle(payload_020.get("diagnostics") or {})
+                if circle is not None:
+                    for key in ("start_deg", "center_deg", "end_deg"):
+                        angle_value = flags.get(key)
+                        if _finite_number(angle_value):
+                            angle = math.radians(float(angle_value))
+                            tick = [
+                                (circle[0] + circle[2] * ratio * math.cos(angle),
+                                 circle[1] + circle[2] * ratio * math.sin(angle))
+                                for ratio in (1.00, 1.07)
+                            ]
+                            draw.line(tick, fill=color, width=stroke)
             else:
                 _draw_arrow(draw, points, color, stroke)
             if points:
-                suffix = label.rsplit("_", 1)[-1].upper()
                 anchor = points[len(points) // 2]
+                values = (
+                    f"{float(flags['start_deg']):.3f}/{float(flags['center_deg']):.3f}/"
+                    f"{float(flags['end_deg']):.3f} deg"
+                    if all(_finite_number(flags.get(key)) for key in ("start_deg", "center_deg", "end_deg"))
+                    else f"center={float(flags['center_deg']):.3f} deg"
+                )
                 draw.text(
                     (anchor[0] + stroke, anchor[1] + stroke),
-                    f"Fixture {suffix} candidate", fill=color, font=font,
+                    f"{flags['candidate_id']} | {values} | {flags['match_status']}",
+                    fill=color, font=font,
                     stroke_width=2, stroke_fill="black",
                 )
     image = Image.alpha_composite(image.convert("RGBA"), annotation).convert("RGB")
@@ -377,7 +436,7 @@ def _auto_labelme(
         "flags": {
             "human_verified": False, "formal_truth": False,
             "independent_from_algorithm": False, "runtime_input_allowed": False,
-            "annotation_version": "AUTO-prefill-review-v2-simplified",
+            "annotation_version": "AUTO-prefill-review-v3-angular-interval",
             "review_real_groove_required": True,
             "review_fixture_shadow_a_required": True,
             "review_fixture_shadow_b_required": True,

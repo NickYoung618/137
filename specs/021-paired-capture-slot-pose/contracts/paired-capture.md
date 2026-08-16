@@ -33,7 +33,26 @@ Even DETECTED never emits plcCommand or mechanicalCorrectionDeg in v1.
 
 `slot-pose-prefill-review/2` is a Git-external review index. Each entry references one raw image,
 one full-resolution simplified image and one minimal AUTO_ LabelMe JSON. The simplified image may
-show only the 019 final left/right walls and mouth endpoints plus 020 fixture candidates. It does
+show only the 019 final left/right walls and mouth endpoints plus 020 observed dark angular intervals. It does
 not show fitted circles, localization rectangles, non-final raw rays or any generated truth box.
 The title carries 019 valid and 020 error code; displaying a 020 fixture candidate never changes
-the 020 validity state. All LabelMe shapes remain `human_verified=false` and runtime-forbidden.
+the 020 validity state. `pairEvidence.selectedCandidateIds` is the only allowed identity selection;
+NOT_MATCHED/PAIR_INCOMPLETE is never replaced by the nearest candidate. Each interval is an open
+linestrip with `fixture_identity_confirmed=false`, `boundary_semantics=angular_profile_interval`,
+`pixel_boundary_known=false`, match status, candidate id and failed checks. All LabelMe shapes remain
+`human_verified=false` and runtime-forbidden.
+
+## Local second-wall diagnostic
+
+`detector.local_second_wall_diagnostic` is optional and absent by default. When present it validates
+against `contracts/local-second-wall-diagnostic-config.schema.json`; `enabled=true` requires
+single_real_groove, refinement v2 and enabled source consistency. It runs only after physical sidewall
+refinement succeeded but source consistency rejected the pair.
+
+The output validates against `contracts/local-second-wall-diagnostic-result.schema.json`. It retains
+all enumerated hypotheses and failed checks. `UNIQUE_DIAGNOSTIC` may carry an experimental candidate,
+but `authoritative=false` and `posePromotionAllowed=false` are invariants. The surrounding slot result
+remains `GROOVE_SOURCE_INCONSISTENT`, `valid=false`, with no pose promotion or PLC command.
+Failure inventory distinguishes `CANDIDATE_MISSING`, `LOCAL_SECOND_WALL_NOT_FOUND`,
+`MULTIPLE_LOCAL_OPENINGS` and `SOURCE_INCONSISTENT`. Every hypothesis check names its evidence layer
+and whether it is a hard gate; a numerical score is diagnostic ranking only and cannot override a gate.

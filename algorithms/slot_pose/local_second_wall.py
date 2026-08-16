@@ -1,0 +1,535 @@
+"""Default-off diagnostic search for a second wall in one local dark opening.
+
+The module never promotes a hypothesis to the authoritative single-groove pose.
+It reuses the existing subpixel side sampler/line fitter and source-consistency
+evidence, while retaining every rejected hypothesis for audit.
+"""
+
+from __future__ import annotations
+
+import copy
+import math
+from typing import Any, Callable
+
+import numpy as np
+
+from algorithms.slot_pose.angular_profile import circular_distance_deg, wrap_360_deg
+from algorithms.slot_pose.groove_refinement import (
+    _profile_evidence,
+    _select_consensus_line,
+    _side_points,
+    merged_groove_refinement_config,
+)
+from algorithms.slot_pose.sidewall_consistency import assess_sidewall_source_consistency
+
+
+DEFAULT_LOCAL_SECOND_WALL_CONFIG: dict[str, Any] = {
+    "schema_version": "local-second-wall-diagnostic/1",
+    "enabled": False,
+    "threshold_version": "local-second-wall-diagnostic-v1",
+    "scan_step_deg": 1.0,
+    "max_scan_seeds": 48,
+    "local_interval_margin_deg": 1.0,
+    "min_wall_separation_deg": 2.0,
+    "max_wall_separation_deg": 30.0,
+    "max_parallel_difference_deg": 25.0,
+    "max_endpoint_circle_residual_px": 0.50,
+    "min_radial_coverage": 0.60,
+    "max_radial_coverage_difference": 0.20,
+    "min_opening_dark_fraction": 0.70,
+    "opening_sample_angles": 9,
+    "opening_sample_radii": 9,
+    "candidate_merge_deg": 0.50,
+}
+
+
+def validate_local_second_wall_config(config: dict[str, Any]) -> None:
+    if not isinstance(config, dict):
+        raise ValueError("detector.local_second_wall_diagnostic must be an object")
+    required = set(DEFAULT_LOCAL_SECOND_WALL_CONFIG)
+    missing, unknown = sorted(required - set(config)), sorted(set(config) - required)
+    if missing:
+        raise ValueError(f"local_second_wall_diagnostic missing fields: {missing}")
+    if unknown:
+        raise ValueError(f"local_second_wall_diagnostic has unknown fields: {unknown}")
+    if config["schema_version"] != "local-second-wall-diagnostic/1":
+        raise ValueError("local_second_wall_diagnostic.schema_version is unsupported")
+    if not isinstance(config["enabled"], bool):
+        raise ValueError("local_second_wall_diagnostic.enabled must be boolean")
+    if not isinstance(config["threshold_version"], str) or not config["threshold_version"].strip():
+        raise ValueError("local_second_wall_diagnostic.threshold_version must be non-empty")
+    for key in ("max_scan_seeds", "opening_sample_angles", "opening_sample_radii"):
+        value = config[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not 3 <= value <= 256:
+            raise ValueError(f"local_second_wall_diagnostic.{key} must be an integer in [3,256]")
+    for key in (
+        "scan_step_deg", "local_interval_margin_deg", "min_wall_separation_deg",
+        "max_wall_separation_deg", "max_parallel_difference_deg", "candidate_merge_deg",
+        "max_endpoint_circle_residual_px",
+    ):
+        value = config[key]
+        if (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(float(value)) or not 0.0 < float(value) <= 180.0
+        ):
+            raise ValueError(f"local_second_wall_diagnostic.{key} must be in (0,180]")
+    for key in (
+        "min_radial_coverage", "max_radial_coverage_difference", "min_opening_dark_fraction",
+    ):
+        value = config[key]
+        if (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(float(value)) or not 0.0 <= float(value) <= 1.0
+        ):
+            raise ValueError(f"local_second_wall_diagnostic.{key} must be in [0,1]")
+    if float(config["min_wall_separation_deg"]) >= float(config["max_wall_separation_deg"]):
+        raise ValueError("local_second_wall_diagnostic wall separation bounds must be ordered")
+
+
+def merged_local_second_wall_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    if config is not None and not isinstance(config, dict):
+        raise ValueError("detector.local_second_wall_diagnostic must be an object")
+    merged = copy.deepcopy(DEFAULT_LOCAL_SECOND_WALL_CONFIG)
+    if config:
+        merged.update(copy.deepcopy(config))
+    validate_local_second_wall_config(merged)
+    return merged
+
+
+def _base(config: dict[str, Any], status: str) -> dict[str, Any]:
+    return {
+        "schemaVersion": "local-second-wall-diagnostic/1",
+        "thresholdVersion": config["threshold_version"],
+        "enabled": bool(config["enabled"]),
+        "status": status,
+        "failureStage": None,
+        "errorCode": None,
+        "authoritative": False,
+        "posePromotionAllowed": False,
+        "sideSearchCandidates": [],
+        "hypotheses": [],
+        "experimentalCandidate": None,
+    }
+
+
+def _inside_interval(angle: float, start: float, span: float, margin: float) -> bool:
+    return ((float(angle) - (float(start) - margin)) % 360.0) <= span + 2.0 * margin
+
+
+def _line_parallel_difference(first: dict[str, Any], second: dict[str, Any]) -> float | None:
+    try:
+        left = np.asarray((float(first["line"]["a"]), float(first["line"]["b"])), dtype=float)
+        right = np.asarray((float(second["line"]["a"]), float(second["line"]["b"])), dtype=float)
+    except (KeyError, TypeError, ValueError):
+        return None
+    denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if denominator <= 1e-12:
+        return None
+    cosine = max(-1.0, min(1.0, abs(float(np.dot(left, right))) / denominator))
+    return math.degrees(math.acos(cosine))
+
+
+def _radial_coverage(side: dict[str, Any]) -> float | None:
+    try:
+        value = float(side["profileEvidence"]["radialCoverage"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _opening_dark_fraction(
+    gray: np.ndarray,
+    center: tuple[float, float],
+    outer_radius: float,
+    start_deg: float,
+    span_deg: float,
+    depth_px: float,
+    start_side: dict[str, Any],
+    end_side: dict[str, Any],
+    bilinear_sample: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+    refinement_config: dict[str, Any],
+    config: dict[str, Any],
+    pixel_scale: float,
+) -> tuple[float | None, dict[str, Any]]:
+    profiles = [start_side.get("profileEvidence"), end_side.get("profileEvidence")]
+    if not all(isinstance(item, dict) for item in profiles):
+        return None, {"sampleCount": 0, "finiteCount": 0, "thresholdGray": None}
+    try:
+        metal = float(np.median([float(item["metalLevelMedian"]) for item in profiles]))
+        dark = float(np.median([float(item["grooveLevelMedian"]) for item in profiles]))
+    except (KeyError, TypeError, ValueError):
+        return None, {"sampleCount": 0, "finiteCount": 0, "thresholdGray": None}
+    threshold = 0.5 * (metal + dark)
+    angular_margin = min(0.25 * span_deg, max(0.15, 0.08 * span_deg))
+    if span_deg <= 2.0 * angular_margin:
+        return None, {"sampleCount": 0, "finiteCount": 0, "thresholdGray": threshold}
+    angles = np.linspace(
+        start_deg + angular_margin, start_deg + span_deg - angular_margin,
+        int(config["opening_sample_angles"]), dtype=float,
+    )
+    minimum_inset = float(refinement_config["radial_inset_min_px"]) * pixel_scale
+    maximum_inset = min(
+        float(refinement_config["radial_inset_max_px"]) * pixel_scale,
+        0.80 * float(depth_px),
+    )
+    if maximum_inset <= minimum_inset:
+        return None, {"sampleCount": 0, "finiteCount": 0, "thresholdGray": threshold}
+    radii = outer_radius - np.linspace(
+        minimum_inset, maximum_inset, int(config["opening_sample_radii"]), dtype=float,
+    )
+    mesh_angles, mesh_radii = np.meshgrid(angles, radii)
+    radians = np.radians(mesh_angles)
+    xs = center[0] + mesh_radii * np.cos(radians)
+    ys = center[1] + mesh_radii * np.sin(radians)
+    values = np.asarray(bilinear_sample(gray, xs.ravel(), ys.ravel()), dtype=float)
+    finite = np.isfinite(values)
+    fraction = None if not bool(np.any(finite)) else float(np.mean(values[finite] <= threshold))
+    return fraction, {
+        "sampleCount": int(values.size), "finiteCount": int(np.count_nonzero(finite)),
+        "thresholdGray": float(threshold), "metalLevelMedian": metal,
+        "darkLevelMedian": dark,
+    }
+
+
+def _candidate_side(
+    gray: np.ndarray,
+    center: tuple[float, float],
+    outer_radius: float,
+    radii: np.ndarray,
+    seed_deg: float,
+    polarity: str,
+    bilinear_sample: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+    parabolic_peak: Callable[[list[float], int], float],
+    refinement_config: dict[str, Any],
+    pixel_scale: float,
+) -> dict[str, Any]:
+    points, contrasts, gradients, observations = _side_points(
+        gray, center, radii, seed_deg, polarity, bilinear_sample, parabolic_peak,
+        refinement_config,
+    )
+    profile = _profile_evidence(observations, radii)
+    decision = _select_consensus_line(
+        points, minimum=int(refinement_config["min_side_points"]), center=center,
+        outer_radius=outer_radius, coarse_angle_deg=seed_deg,
+        maximum_delta_deg=float(refinement_config["max_intersection_coarse_delta_deg"]),
+        config=refinement_config, pixel_scale=pixel_scale,
+    )
+    base = {
+        "seedDeg": float(seed_deg), "polarity": polarity,
+        "detectedPointCount": len(points), "profileEvidence": profile,
+        "edgeContrastMedian": None if not contrasts else float(np.median(contrasts)),
+        "edgeGradientMedianPerPx": None if not gradients else float(np.median(gradients)),
+        "searchStatus": str(decision["status"]), "failedCheck": decision["failedCheck"],
+    }
+    if decision["status"] != "accepted":
+        return {**base, "intersectionAngleDeg": None, "line": None, "points": []}
+    mask = np.asarray(decision["inlierMask"], dtype=bool)
+    kept = np.asarray(points, dtype=float)[mask]
+    line = decision["line"]
+    return {
+        **base, "supportPointCount": int(len(kept)),
+        "sampledPointCount": int(len(radii)),
+        "lineInlierRatio": float(decision["inlierRatio"]),
+        "lineLongitudinalCoverage": float(decision["longitudinalCoverage"]),
+        "lineResidualPx": {"p95": float(decision["residualP95Px"])},
+        "line": {"a": float(line[0]), "b": float(line[1]), "c": float(line[2])},
+        "points": [[float(value) for value in point] for point in kept],
+        "intersectionAngleDeg": float(decision["intersectionAngleDeg"]),
+        "intersection": {
+            "x": float(decision["intersection"][0]),
+            "y": float(decision["intersection"][1]),
+        },
+    }
+
+
+def diagnose_local_second_wall(
+    gray: np.ndarray,
+    center: tuple[float, float],
+    outer_radius: float,
+    coarse_candidate: dict[str, Any],
+    initial_refinement: dict[str, Any],
+    bilinear_sample: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+    parabolic_peak: Callable[[list[float], int], float],
+    refinement_config: dict[str, Any] | None,
+    source_consistency_config: dict[str, Any] | None,
+    config: dict[str, Any] | None,
+    *,
+    pixel_scale: float = 1.0,
+) -> dict[str, Any]:
+    """Enumerate local alternatives and return a non-authoritative diagnostic."""
+    merged = merged_local_second_wall_config(config)
+    if not merged["enabled"]:
+        return _base(merged, "DISABLED")
+    result = _base(merged, "NOT_EVALUATED")
+    result["coarseCandidateId"] = coarse_candidate.get("candidateId")
+    if initial_refinement.get("status") != "accepted":
+        result["failureStage"] = "candidate_anchor"
+        result["errorCode"] = "CANDIDATE_MISSING"
+        result["failedChecks"] = ["initial_refinement_not_accepted"]
+        return result
+    try:
+        local_start = float(coarse_candidate["startDeg"]) % 360.0
+        local_end = float(coarse_candidate["endDeg"]) % 360.0
+        depth = float(coarse_candidate["radialDepthPx"])
+    except (KeyError, TypeError, ValueError):
+        result["failureStage"] = "candidate_anchor"
+        result["errorCode"] = "CANDIDATE_MISSING"
+        result["failedChecks"] = ["invalid_coarse_candidate"]
+        return result
+    local_span = (local_end - local_start) % 360.0
+    if not 0.0 < local_span < 180.0 or not math.isfinite(depth) or depth <= 0.0:
+        result["failureStage"] = "candidate_anchor"
+        result["errorCode"] = "CANDIDATE_MISSING"
+        result["failedChecks"] = ["invalid_local_interval"]
+        return result
+    result["localInterval"] = {
+        "startDeg": local_start, "endDeg": local_end, "spanDeg": local_span,
+        "marginDeg": float(merged["local_interval_margin_deg"]),
+    }
+    refinement = merged_groove_refinement_config(refinement_config)
+    minimum_inset = float(refinement["radial_inset_min_px"]) * pixel_scale
+    maximum_inset = min(float(refinement["radial_inset_max_px"]) * pixel_scale, 0.80 * depth)
+    if maximum_inset <= minimum_inset:
+        result["failureStage"] = "local_second_wall_search"
+        result["errorCode"] = "LOCAL_SECOND_WALL_NOT_FOUND"
+        result["failedChecks"] = ["insufficient_radial_depth"]
+        return result
+    radii = outer_radius - np.linspace(
+        minimum_inset, maximum_inset, int(refinement["radial_sample_count"]), dtype=float,
+    )
+    radii = radii[radii > 1.0]
+    if len(radii) < int(refinement["min_side_points"]):
+        result["failureStage"] = "local_second_wall_search"
+        result["errorCode"] = "LOCAL_SECOND_WALL_NOT_FOUND"
+        result["failedChecks"] = ["insufficient_radial_support"]
+        return result
+    anchors: list[tuple[str, dict[str, Any], str]] = []
+    for name, polarity in (("startSide", "rising"), ("endSide", "falling")):
+        side = initial_refinement.get(name)
+        if isinstance(side, dict) and isinstance(side.get("line"), dict):
+            anchors.append((name, side, polarity))
+    result["anchorSides"] = [name for name, _, _ in anchors]
+    if not anchors:
+        result["failureStage"] = "candidate_anchor"
+        result["errorCode"] = "CANDIDATE_MISSING"
+        result["failedChecks"] = ["anchor_side_missing"]
+        return result
+    step = float(merged["scan_step_deg"])
+    seed_count = min(
+        int(merged["max_scan_seeds"]), max(3, int(math.ceil(local_span / step)) + 1),
+    )
+    seeds = [wrap_360_deg(local_start + local_span * index / (seed_count - 1)) for index in range(seed_count)]
+    searched: dict[str, list[dict[str, Any]]] = {}
+    all_searches: list[dict[str, Any]] = []
+    for polarity in {item[2] for item in anchors}:
+        raw_sides = [
+            _candidate_side(
+                np.asarray(gray), center, outer_radius, radii, seed, polarity,
+                bilinear_sample, parabolic_peak, refinement, pixel_scale,
+            )
+            for seed in seeds
+        ]
+        for index, side in enumerate(raw_sides, start=1):
+            side["searchCandidateId"] = f"{polarity}-wall-search-{index:03d}"
+            side["failedChecks"] = [] if side["searchStatus"] == "accepted" else [
+                str(side.get("failedCheck") or "side_search_not_accepted")
+            ]
+            all_searches.append(side)
+        accepted = [item for item in raw_sides if item.get("intersectionAngleDeg") is not None]
+        accepted.sort(key=lambda item: (float(item["intersectionAngleDeg"]), float(item["seedDeg"])))
+        distinct: list[dict[str, Any]] = []
+        for side in accepted:
+            if any(
+                circular_distance_deg(float(side["intersectionAngleDeg"]), float(existing["intersectionAngleDeg"]))
+                <= float(merged["candidate_merge_deg"])
+                for existing in distinct
+            ):
+                continue
+            distinct.append(side)
+        searched[polarity] = distinct
+    result["sideSearchCandidates"] = sorted(
+        all_searches,
+        key=lambda item: (str(item["polarity"]), float(item["seedDeg"])),
+    )
+    hypotheses: list[dict[str, Any]] = []
+    for anchor_name, anchor, other_polarity in anchors:
+        try:
+            anchor_angle = float(
+                initial_refinement["openingEndpointProfileDeg"][0 if anchor_name == "startSide" else 1]
+            ) % 360.0
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+        for candidate_side in searched.get(other_polarity, []):
+            candidate_angle = float(candidate_side["intersectionAngleDeg"])
+            if circular_distance_deg(anchor_angle, candidate_angle) <= float(merged["candidate_merge_deg"]):
+                continue
+            if anchor_name == "startSide":
+                start_angle, end_angle = anchor_angle, candidate_angle
+                start_side, end_side = anchor, candidate_side
+            else:
+                start_angle, end_angle = candidate_angle, anchor_angle
+                start_side, end_side = candidate_side, anchor
+            opening_span = (end_angle - start_angle) % 360.0
+            interval_ok = (
+                _inside_interval(start_angle, local_start, local_span, float(merged["local_interval_margin_deg"]))
+                and _inside_interval(end_angle, local_start, local_span, float(merged["local_interval_margin_deg"]))
+            )
+            parallel = _line_parallel_difference(start_side, end_side)
+            start_coverage, end_coverage = _radial_coverage(start_side), _radial_coverage(end_side)
+            dark_fraction, dark_evidence = _opening_dark_fraction(
+                np.asarray(gray), center, outer_radius, start_angle, opening_span, depth,
+                start_side, end_side, bilinear_sample, refinement, merged, pixel_scale,
+            )
+            constructed = {
+                "status": "accepted", "startSide": start_side, "endSide": end_side,
+                "openingEndpointProfileDeg": [start_angle, end_angle],
+            }
+            source = assess_sidewall_source_consistency(constructed, source_consistency_config)
+            candidate_intersection = candidate_side.get("intersection")
+            if isinstance(candidate_intersection, dict):
+                candidate_circle_residual = abs(
+                    math.hypot(
+                        float(candidate_intersection["x"]) - center[0],
+                        float(candidate_intersection["y"]) - center[1],
+                    ) - outer_radius
+                )
+            else:
+                candidate_circle_residual = math.inf
+            anchor_index = 0 if anchor_name == "startSide" else 1
+            try:
+                anchor_intersection = initial_refinement["outerCircleIntersections"][anchor_index]
+                anchor_circle_residual = abs(
+                    math.hypot(
+                        float(anchor_intersection["x"]) - center[0],
+                        float(anchor_intersection["y"]) - center[1],
+                    ) - outer_radius
+                )
+            except (KeyError, TypeError, ValueError, IndexError):
+                anchor_circle_residual = math.inf
+            endpoint_residuals = [anchor_circle_residual, candidate_circle_residual]
+            endpoint_residual_gate = float(merged["max_endpoint_circle_residual_px"]) * pixel_scale
+            checks = [
+                {"layer": "local_geometry", "hardGate": True,
+                 "checkId": "local_interval_containment", "passed": interval_ok,
+                 "value": [start_angle, end_angle], "threshold": [local_start, local_end]},
+                {"layer": "local_geometry", "hardGate": True,
+                 "checkId": "minimum_wall_separation", "passed": opening_span >= float(merged["min_wall_separation_deg"]),
+                 "value": opening_span, "threshold": float(merged["min_wall_separation_deg"])},
+                {"layer": "local_geometry", "hardGate": True,
+                 "checkId": "maximum_wall_separation", "passed": opening_span <= float(merged["max_wall_separation_deg"]),
+                 "value": opening_span, "threshold": float(merged["max_wall_separation_deg"])},
+                {"layer": "local_geometry", "hardGate": True,
+                 "checkId": "wall_parallelism", "passed": parallel is not None and parallel <= float(merged["max_parallel_difference_deg"]),
+                 "value": parallel, "threshold": float(merged["max_parallel_difference_deg"])},
+                {"layer": "local_geometry", "hardGate": True,
+                 "checkId": "radial_coverage", "passed": start_coverage is not None and end_coverage is not None and min(start_coverage, end_coverage) >= float(merged["min_radial_coverage"]),
+                 "value": [start_coverage, end_coverage], "threshold": float(merged["min_radial_coverage"])},
+                {"layer": "local_geometry", "hardGate": True,
+                 "checkId": "radial_coverage_consistency", "passed": start_coverage is not None and end_coverage is not None and abs(start_coverage - end_coverage) <= float(merged["max_radial_coverage_difference"]),
+                 "value": None if start_coverage is None or end_coverage is None else abs(start_coverage - end_coverage),
+                 "threshold": float(merged["max_radial_coverage_difference"])},
+                {"layer": "mouth_endpoint", "hardGate": True,
+                 "checkId": "outer_circle_endpoint_residual", "passed": max(endpoint_residuals) <= endpoint_residual_gate,
+                 "value": endpoint_residuals, "threshold": endpoint_residual_gate},
+                {"layer": "opening_structure", "hardGate": True,
+                 "checkId": "local_dark_opening_continuity", "passed": dark_fraction is not None and dark_fraction >= float(merged["min_opening_dark_fraction"]),
+                 "value": dark_fraction, "threshold": float(merged["min_opening_dark_fraction"])},
+                {"layer": "sidewall_source", "hardGate": True,
+                 "checkId": "sidewall_source_consistency", "passed": source.get("status") == "accepted",
+                 "value": source.get("metrics"), "threshold": source.get("thresholdVersion")},
+            ]
+            failed = [str(item["checkId"]) for item in checks if not item["passed"]]
+            failed.extend(f"source_consistency:{value}" for value in source.get("failedChecks") or [])
+            numeric_margins = [
+                float(merged["max_wall_separation_deg"]) - opening_span,
+                float(merged["max_parallel_difference_deg"]) - (parallel if parallel is not None else 180.0),
+                (dark_fraction if dark_fraction is not None else -1.0) - float(merged["min_opening_dark_fraction"]),
+            ]
+            hypotheses.append({
+                "hypothesisId": "",
+                "anchorSide": anchor_name,
+                "anchorAngleDeg": anchor_angle,
+                "candidateSeedDeg": float(candidate_side["seedDeg"]),
+                "candidateAngleDeg": candidate_angle,
+                "openingEndpointProfileDeg": [start_angle, end_angle],
+                "openingWidthDeg": opening_span,
+                "metrics": {
+                    "parallelDifferenceDeg": parallel,
+                    "radialCoverage": [start_coverage, end_coverage],
+                    "openingDarkFraction": dark_fraction,
+                    "openingDarkEvidence": dark_evidence,
+                    "endpointCircleResidualPx": endpoint_residuals,
+                    "sourceConsistency": source,
+                },
+                "scoreComponents": {
+                    "widthUpperMarginDeg": numeric_margins[0],
+                    "parallelMarginDeg": numeric_margins[1],
+                    "darkContinuityMargin": numeric_margins[2],
+                },
+                "checks": checks,
+                "failedChecks": list(dict.fromkeys(failed)),
+                "passed": not failed,
+                "score": float(min(numeric_margins)),
+                "candidateSide": candidate_side,
+            })
+    hypotheses.sort(key=lambda item: (
+        not bool(item["passed"]), -float(item["score"]), str(item["anchorSide"]),
+        float(item["candidateAngleDeg"]),
+    ))
+    distinct: list[dict[str, Any]] = []
+    for hypothesis in hypotheses:
+        endpoints = hypothesis["openingEndpointProfileDeg"]
+        if any(
+            circular_distance_deg(float(endpoints[0]), float(other["openingEndpointProfileDeg"][0]))
+            <= float(merged["candidate_merge_deg"])
+            and circular_distance_deg(float(endpoints[1]), float(other["openingEndpointProfileDeg"][1]))
+            <= float(merged["candidate_merge_deg"])
+            for other in distinct
+        ):
+            continue
+        distinct.append(hypothesis)
+    for index, hypothesis in enumerate(distinct, start=1):
+        hypothesis["hypothesisId"] = f"local-wall-hypothesis-{index:03d}"
+    result["hypotheses"] = distinct
+    passed = [item for item in distinct if item["passed"]]
+    if len(passed) == 1:
+        result["status"] = "UNIQUE_DIAGNOSTIC"
+        result["experimentalCandidate"] = {
+            "hypothesisId": passed[0]["hypothesisId"],
+            "openingEndpointProfileDeg": passed[0]["openingEndpointProfileDeg"],
+            "openingWidthDeg": passed[0]["openingWidthDeg"],
+            "authoritative": False,
+            "posePromotionAllowed": False,
+        }
+    elif len(passed) > 1:
+        result["status"] = "MULTIPLE_LOCAL_OPENINGS"
+        result["failureStage"] = "local_opening_uniqueness"
+        result["errorCode"] = "MULTIPLE_LOCAL_OPENINGS"
+    else:
+        source_only_rejected = any(
+            item["failedChecks"]
+            and all(
+                value == "sidewall_source_consistency"
+                or str(value).startswith("source_consistency:")
+                for value in item["failedChecks"]
+            )
+            for item in distinct
+        )
+        if source_only_rejected:
+            result["status"] = "SOURCE_INCONSISTENT"
+            result["failureStage"] = "sidewall_source_consistency"
+            result["errorCode"] = "SOURCE_INCONSISTENT"
+        else:
+            result["status"] = "LOCAL_SECOND_WALL_NOT_FOUND"
+            result["failureStage"] = "local_second_wall_search"
+            result["errorCode"] = "LOCAL_SECOND_WALL_NOT_FOUND"
+    result["passedHypothesisCount"] = len(passed)
+    if len(passed) == 1:
+        result["failedChecks"] = []
+    elif len(passed) > 1:
+        result["failedChecks"] = ["multiple_same_opening_second_walls"]
+    else:
+        result["failedChecks"] = [
+            "no_unique_same_opening_second_wall" if distinct else "no_second_wall_hypothesis"
+        ]
+    return result

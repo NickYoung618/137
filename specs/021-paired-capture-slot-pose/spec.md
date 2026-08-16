@@ -16,6 +16,10 @@
 - Q: 未确认参数时能否输出引导？ → A: 只能输出逐帧候选与非权威匹配诊断，机械/PLC指令必须为空。
 - Q: 人工如何复核混合边？ → A: 工具生成精简AUTO_预标注和RAW/SIMPLIFIED联系表，人工不重画已稳定拟合的外圆。
 - Q: 调试叠加线过多时如何复核？ → A: part-019 374/369只生成RAW/SIMPLIFIED对照；SIMPLIFIED仅显示019最终两侧壁/端点和020 fixture A/B候选，不显示圆、定位框、非最终raw射线或长诊断文字。
+- Q: 橙色fixture标记能否视为阴影边界或身份真值？ → A: 不能。现有020只提供圆周一维暗区start/center/end及模板匹配状态；应显示“Observed dark angular interval / Fixture identity unconfirmed / Pixel boundary unknown”，不得把最近NOT_MATCHED候选冒充fixture或画成实心区域。
+- Q: 374/369人工反馈能证明什么？ → A: 只能证明上方方形缺口是真槽所在区域、019命中至少一侧且另一侧跨到右上阴影；这是一条语义负例，不是像素级侧壁、端点或fixture区域真值。
+- Q: 能否在该负例上直接放宽020门限？ → A: 不能。新增独立、默认关闭的局部第二侧壁诊断；它枚举同一局部开口内的侧壁假设并保持原020失败状态，只有人工标签和分件验证后才讨论生产选择。
+- Q: 双拍和单帧当前哪个优先？ → A: 双拍保留为最终架构，但不等待现场旋转参数；当前开发主线是单帧真实槽区域、第二侧壁和槽口端点定位。审阅表达只完成证据语义修正，不继续扩展可视化。
 
 ## User Scenarios & Testing
 
@@ -81,7 +85,37 @@
 1. **Given** 原图及019/020结果，**When** 生成审阅包，**Then** 每图包含原始分辨率的raw和simplified图、RAW/SIMPLIFIED联系表及LabelMe可打开的精简预填JSON。
 2. **Given** 自动候选，**When** 写入LabelMe，**Then** 只保留最终左右槽壁、两槽口端点和fixture A/B候选，标签以AUTO_开头且human_verified=false，不写入外圆、定位框、raw暗区射线或人工真值。
 3. **Given** 已有132112_4人工真值，**When** 做评估，**Then** 只作为Git外参考，不能进入生产运行时或成为待复核图的伪造标签。
-4. **Given** 020只提供fixture方向而没有可靠区域，**When** 画简化图，**Then** 只画候选方向并明确标记为candidate，不画伪造的实心区域或红色真值框。
+4. **Given** 020提供raw start/center/end但没有二维像素边界，**When** 画简化图，**Then** 画开放角度括号和三刻线；只有角区间也缺失时才降级为候选方向，不画伪造的实心区域或红色真值框。
+
+---
+
+### User Story 5 - 暗区区间证据不冒充fixture真值 (Priority: P1)
+
+人工复核者查看020观测到的圆周暗区区间。工具优先使用完整配对证据明确选中的candidateId；每个有start/center/end的raw candidate只画圆周角度括号和三条刻线，并同时显示候选编号、角度、match status及证据限制。PAIR_INCOMPLETE、NOT_MATCHED或缺失选择均不得显示为已确认fixture。
+
+**Independent Test**: 构造完整配对、NOT_MATCHED、PAIR_INCOMPLETE和无区间payload，验证选择来源、形状类型、flags和画面声明。
+
+**Acceptance Scenarios**:
+
+1. **Given** pairEvidence.selectedCandidateIds存在且可追溯到raw candidate，**When** 生成审阅包，**Then** 只展示这些candidateId并保留其start/center/end和匹配检查。
+2. **Given** 只有NOT_MATCHED或PAIR_INCOMPLETE，**When** 生成审阅包，**Then** 可展示观测暗区区间，但fixture_identity_confirmed=false且不得使用实心区域语义。
+3. **Given** candidate有完整角度区间，**When** 写LabelMe，**Then** 使用AUTO_角度interval linestrip并记录boundary_semantics=angular_profile_interval、candidate_id、match_status、failed_checks。
+4. **Given** start/end缺失但center可用，**When** 渲染，**Then** 才降级为方向箭头并明确Pixel boundary unknown。
+
+---
+
+### User Story 6 - 同一局部开口第二侧壁实验诊断 (Priority: P2)
+
+算法工程师在020同源性拒绝后启用独立实验开关。系统把已检测的两侧分别作为锚点，在原始暗区的局部角度范围内枚举另一侧壁；每个假设检查区间包含、角距离、平行性、径向覆盖、槽口端点结构、暗开口连续支持和局部灰度/梯度剖面同源性。零解、多解或跨到fixture的组合继续安全失败。
+
+**Independent Test**: 使用受控方形槽、邻近fixture、双解、缺边及31°/328°附近真槽合成证据验证枚举和fail-closed。
+
+**Acceptance Scenarios**:
+
+1. **Given** 同一方形开口内只有一个第二壁假设通过全部门，**When** 实验诊断，**Then** 输出唯一实验候选及全部原始假设/failedChecks，但不提升为权威姿态。
+2. **Given** 另一强边来自局部开口外或不平行/不同源，**When** 评估，**Then** 该组合明确拒绝且原GROOVE_SOURCE_INCONSISTENT不变。
+3. **Given** 零个或多个假设通过，**When** 汇总，**Then** 状态分别为NOT_FOUND或AMBIGUOUS，valid=false且无权威角或PLC命令。
+4. **Given** 真槽位于31°或328°附近，**When** 局部搜索，**Then** 不得因角度本身被屏蔽。
 
 ### Edge Cases
 
@@ -119,13 +153,27 @@
 - **FR-019**: part-006 MUST 继续封存，不得读取、重跑或用于参数选择。
 - **FR-020**: 实验功能 MUST 默认关闭；默认单帧行为和legacy/paired/multi-role/single_real_groove契约 MUST 不变。
 - **FR-021**: 审阅工具 MUST 在Git外为part-019 374/369生成原始分辨率raw、simplified、RAW/SIMPLIFIED两栏联系表、精简预填LabelMe JSON和review索引。
-- **FR-022**: simplified和预填shape MUST 只保留AUTO_detected_groove_wall_left/right、AUTO_detected_mouth_endpoint_left/right和AUTO_fixture_shadow_candidate_a/b；MUST NOT 包含外圆、圆定位矩形框、非最终raw候选射线或自动人工真值框。
+- **FR-022**: simplified和预填shape MUST 只保留AUTO_detected_groove_wall_left/right、AUTO_detected_mouth_endpoint_left/right和AUTO_observed_dark_angular_interval_*；MUST NOT 包含外圆、圆定位矩形框、非最终raw候选射线或自动人工真值框。
 - **FR-023**: 审阅工具 MUST 核对原图SHA与两版结果SHA；不匹配时拒绝生成，媒体和绝对现场路径不得进入Git。
 - **FR-024**: Pic_2026_08_13_132354_292.bmp MUST 暂时跳过；当前优先part-019的374与369。
 - **FR-025**: 132112_4的人工圆弧和真槽开放边界 MAY 用作评估参考，MUST NOT 作为生产运行时输入或复制成其他图片真值。
-- **FR-026**: simplified图 MUST 用稳定颜色和粗线显示019最终wall-left（绿）、wall-right（亮粉）及两个明显槽口端点；020 fixture A/B只能以橙色候选区域或方向显示。
+- **FR-026**: simplified图 MUST 用稳定颜色和粗线显示019最终wall-left（绿）、wall-right（亮粉）及两个明显槽口端点；020暗区只能以橙色开放角度区间或无区间时的方向证据显示。
 - **FR-027**: 每张simplified图 MUST 显示简短图例和“人工真实凹槽待确认”提示，并在标题列出019 valid状态和020 error code；图例 MUST 声明020所画候选不等于valid。
 - **FR-028**: LabelMe预填 MUST 对所有shape使用AUTO_前缀并设置human_verified=false；人工标签保持空白，工具 MUST 拒绝覆盖已有非AUTO_或human_verified内容。
+- **FR-029**: fixture审阅选择 MUST 优先使用`fixtureShadowEvidence.pairEvidence.selectedCandidateIds`；不得从NOT_MATCHED候选中按最近距离补出fixture A/B身份。
+- **FR-030**: 有start/center/end的raw暗区 MUST 画圆周角度括号与三刻线并标candidateId、数值和match status；不得用实心扇区、polygon或“已定位区域”表达一维角度剖面。
+- **FR-031**: 审阅图 MUST 逐项明确显示`Observed dark angular interval`、`Fixture identity unconfirmed`和`Pixel boundary unknown`；无start/end时才可降级为仅方向证据。
+- **FR-032**: fixture AUTO_LabelMe shape MUST 为角度interval linestrip（无区间时为line），并包含fixture_identity_confirmed=false、boundary_semantics=angular_profile_interval、match_status、candidate_id、failed_checks；NOT_MATCHED/PAIR_INCOMPLETE不得标为confirmed或region。
+- **FR-033**: 374/369 MUST 作为“019混合真槽壁+右上阴影壁”的语义负例；不得硬编码文件名、坐标或候选角修复，也不得把口头确认伪造成像素真值。
+- **FR-034**: 系统 MUST 提供版本化`local_second_wall_diagnostic`实验配置，缺省或enabled=false时不执行、不改变020门限、状态、姿态或性能路径。
+- **FR-035**: 局部诊断 MUST 分别把当前两侧作为anchor，在coarse raw candidate的圆周局部区间内枚举第二壁，输出每个假设的anchor、candidate、metrics、checks与failedChecks。
+- **FR-036**: 每个第二壁假设 MUST 检查局部区间包含/角距离、两壁近似平行、径向覆盖与差异、槽口端点结构、局部暗开口连续支持、边缘对比/梯度及归一化灰度剖面同源性；跨出局部开口组合 MUST 拒绝。
+- **FR-037**: 只有恰好一个假设通过且唯一性门成立时 MAY 输出`experimentalCandidate`；该候选 MUST 标记authoritative=false、posePromotionAllowed=false，原`GROOVE_SOURCE_INCONSISTENT`、valid=false、机械/PLC空值保持不变。
+- **FR-038**: 零个通过返回LOCAL_SECOND_WALL_NOT_FOUND，多个通过返回MULTIPLE_LOCAL_OPENINGS；不得回填0度、旧角或权威姿态。
+- **FR-039**: 局部搜索 MUST 与相机固定角无关；合成测试 MUST 覆盖31°和328°附近的同一方形槽可被搜索，而非被屏蔽。
+- **FR-040**: 局部诊断 MUST 分字段区分CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS和SOURCE_INCONSISTENT，并输出failureStage；不得把不同阶段统一包装成识别失败。
+- **FR-041**: 候选评估 MUST 标明分层layer和hardGate；局部区间/槽宽、直壁平行性、径向覆盖、同一外圆端点、暗开口连续性和侧壁来源矛盾均为硬拒绝，score只能排序证据，不能覆盖硬门。
+- **FR-042**: 合成验证 MUST 量化任意旋转、0/360环绕、31°/328°、曝光/模糊、fixture对比与宽度不对称、部分重叠场景的两端点误差、槽中点角误差和fail-closed；单张132112_4只作development参考，不产生准确率声明。
 
 ### Key Entities
 
@@ -136,6 +184,8 @@
 - **CrossFrameHypothesis**: 两帧候选一对一对应、归一化角、残差、形状差和唯一性分数。
 - **PairedPoseResult**: 配对状态、零件相对槽角、第二拍当前角、图像修正量和PLC阻断。
 - **ReviewBundle**: 原图身份、两版算法叠加、AUTO_预标注和人工复核问题。
+- **ObservedAngularInterval**: raw暗区的一维start/center/end、candidateId、match status与失败检查；不是fixture身份或二维像素边界。
+- **LocalSecondWallHypothesis**: anchor侧、备选侧、局部开口证据、几何/剖面门、得分及failedChecks；只用于实验诊断。
 
 ## Success Criteria
 
@@ -150,6 +200,10 @@
 - **SC-007**: part-019 374/369每图100%生成raw、simplified和精简AUTO_LabelMe；两行RAW/SIMPLIFIED联系表可直接对照，自动检查证明不含外圆/定位框/raw射线/伪真值框，且标签不冒充人工真值。
 - **SC-008**: 功能分支通过全量单元测试、Schema、CLI、diff、JSON和媒体/绝对路径污染检查。
 - **SC-009**: 未获得真实双拍BMP和确认旋转参数前，不宣称生产准确率、7组修复或可合入main。
+- **SC-010**: NOT_MATCHED与PAIR_INCOMPLETE测试100%证明不产生fixture confirmed、实心区域或nearest候选身份补全；有区间的AUTO_shape 100%携带FR-032 flags。
+- **SC-011**: 局部第二壁合成测试100%覆盖唯一方形槽成功、fixture跨源拒绝、多解、缺边和31°/328°；所有假设均可审计failedChecks。
+- **SC-012**: 实验关闭时全量测试输出与020行为不变；实验开启且唯一诊断候选形成时，顶层仍为GROOVE_SOURCE_INCONSISTENT、valid=false且无权威姿态/PLC命令。
+- **SC-013**: 受控曝光/模糊和任意旋转方形槽中，两端点误差各小于0.15°、中点角误差小于0.10°；fixture不对称/部分重叠不得形成跨源权威配对，零解/多解保持显式失败。
 
 ## Assumptions
 
@@ -167,3 +221,4 @@
 - **BLOCKED-B02**: 真实配对BMP及其sampleId/pairId/captureIndex尚未提供，当前只能做合成和契约验证。
 - **BLOCKED-B03**: PLC方向、缩放、地址和字节序仍未授权，paired image guidance不得升级为PLC命令。
 - **BLOCKED-B04**: part-019 374/369尚需AUTO_预标注辅助下的人工确认；part-015 292明确跳过。
+- **BLOCKED-B05**: 374/369现只有区域/混合来源语义确认，尚无像素级真实第二壁、槽口端点和两处fixture边界标签；局部实验结果不得作为准确率证据。

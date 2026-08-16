@@ -10,6 +10,8 @@ from PIL import Image
 from tools.dataset_common import inspect_image
 from tools.prepare_slot_pose_prefill_review import (
     COLORS,
+    _fixture_selections,
+    _fixture_shapes,
     _review_text_lines,
     manifest_from_image_names,
     prepare_prefill_review,
@@ -34,9 +36,9 @@ def result(sha: str, *, source_rejected: bool = False, valid: bool = False) -> d
                 "physicalCircle": {"centerX": 100.0, "centerY": 100.0, "radiusPx": 80.0},
             },
             "rawCandidates": [
-                {"candidateId": "candidate-001", "centerDeg": 31.0, "halfWidthDeg": 10.0, "prominence": 100.0, "deficitArea": 300.0},
-                {"candidateId": "candidate-002", "centerDeg": 297.0, "halfWidthDeg": 12.0, "prominence": 150.0, "deficitArea": 1400.0},
-                {"candidateId": "candidate-003", "centerDeg": 328.0, "halfWidthDeg": 11.0, "prominence": 99.0, "deficitArea": 280.0},
+                {"candidateId": "candidate-001", "startDeg": 21.0, "centerDeg": 31.0, "endDeg": 41.0, "halfWidthDeg": 10.0, "prominence": 100.0, "deficitArea": 300.0},
+                {"candidateId": "candidate-002", "startDeg": 285.0, "centerDeg": 297.0, "endDeg": 309.0, "halfWidthDeg": 12.0, "prominence": 150.0, "deficitArea": 1400.0},
+                {"candidateId": "candidate-003", "startDeg": 317.0, "centerDeg": 328.0, "endDeg": 339.0, "halfWidthDeg": 11.0, "prominence": 99.0, "deficitArea": 280.0},
             ],
             "grooveRecognition": {"assessments": []},
             "fixtureShadowEvidence": {
@@ -47,9 +49,13 @@ def result(sha: str, *, source_rejected: bool = False, valid: bool = False) -> d
                     },
                     {
                         "templateId": "fixture-shadow-b", "candidateId": "candidate-003",
-                        "status": "not_matched", "centerDistanceDeg": 0.4,
+                        "status": "matched", "centerDistanceDeg": 0.4,
                     },
-                ]
+                ],
+                "pairEvidence": {
+                    "status": "complete", "selectedCandidateIds": ["candidate-001", "candidate-003"],
+                    "candidatePairCount": 1, "failedChecks": [],
+                },
             },
             "grooveRefinement": {
                 "status": "failed" if source_rejected else "accepted",
@@ -129,7 +135,7 @@ class PrefillReviewTests(unittest.TestCase):
             self.assertFalse(labelme["flags"]["runtime_input_allowed"])
             labels = {shape["label"] for shape in labelme["shapes"]}
             self.assertEqual({
-                "AUTO_fixture_shadow_candidate_a", "AUTO_fixture_shadow_candidate_b",
+                "AUTO_observed_dark_angular_interval_a", "AUTO_observed_dark_angular_interval_b",
                 "AUTO_detected_groove_wall_left", "AUTO_detected_groove_wall_right",
                 "AUTO_detected_mouth_endpoint_left", "AUTO_detected_mouth_endpoint_right",
             }, labels)
@@ -139,18 +145,17 @@ class PrefillReviewTests(unittest.TestCase):
             ))
             fixtures = {
                 shape["label"]: shape for shape in labelme["shapes"]
-                if shape["label"].startswith("AUTO_fixture_shadow_candidate_")
+                if shape["label"].startswith("AUTO_observed_dark_angular_interval_")
             }
-            self.assertEqual("polygon", fixtures["AUTO_fixture_shadow_candidate_a"]["shape_type"])
-            self.assertTrue(
-                fixtures["AUTO_fixture_shadow_candidate_a"]["flags"]["region_supported"]
-            )
-            self.assertEqual("line", fixtures["AUTO_fixture_shadow_candidate_b"]["shape_type"])
-            self.assertFalse(
-                fixtures["AUTO_fixture_shadow_candidate_b"]["flags"]["region_supported"]
-            )
+            self.assertEqual(2, len(fixtures))
+            self.assertTrue(all(shape["shape_type"] == "linestrip" for shape in fixtures.values()))
             self.assertTrue(all(
-                shape["flags"]["candidate_only"] and
+                shape["flags"]["fixture_identity_confirmed"] is False and
+                shape["flags"]["boundary_semantics"] == "angular_profile_interval" and
+                shape["flags"]["pixel_boundary_known"] is False and
+                shape["flags"]["match_status"] == "MATCHED_PAIR_MEMBER" and
+                shape["flags"]["candidate_id"].startswith("candidate-") and
+                shape["flags"]["failed_checks"] == [] and
                 shape["flags"]["display_color"] == COLORS["fixture"]
                 for shape in fixtures.values()
             ))
@@ -173,6 +178,8 @@ class PrefillReviewTests(unittest.TestCase):
             self.assertIn("019 valid=True", lines[0])
             self.assertIn("020 error=GROOVE_SOURCE_INCONSISTENT", lines[0])
             self.assertIn("020 fixture candidate != valid", lines)
+            self.assertIn("Observed dark angular interval", lines)
+            self.assertIn("Fixture identity unconfirmed | Pixel boundary unknown", lines)
             self.assertIn("HUMAN CONFIRMATION REQUIRED: real groove", lines)
             self.assertNotIn(str(root), json.dumps(index))
             if jsonschema is not None:
@@ -206,6 +213,49 @@ class PrefillReviewTests(unittest.TestCase):
             bad = result("f" * 64)
             with self.assertRaisesRegex(ValueError, "result SHA"):
                 prepare_prefill_review(manifest, data, [bad], [bad], root / "review")
+
+    def test_incomplete_pair_never_uses_nearest_unmatched_as_fixture_identity(self) -> None:
+        payload = result("a" * 64, source_rejected=True)
+        diagnostics = payload["diagnostics"]
+        evidence = diagnostics["fixtureShadowEvidence"]
+        evidence["candidateMatches"][1].update({
+            "status": "not_matched", "failedChecks": ["prominence"],
+        })
+        evidence["pairEvidence"] = {
+            "status": "incomplete", "selectedCandidateIds": None,
+            "candidatePairCount": 0, "failedChecks": ["fixture_pair_incomplete"],
+        }
+        selections = _fixture_selections(diagnostics)
+        self.assertEqual(3, len(selections))
+        by_id = {item["candidateId"]: item for item in selections}
+        self.assertEqual("PAIR_INCOMPLETE_MATCHED", by_id["candidate-001"]["matchStatus"])
+        self.assertEqual("NOT_EVALUATED", by_id["candidate-002"]["matchStatus"])
+        self.assertEqual("NOT_MATCHED", by_id["candidate-003"]["matchStatus"])
+        self.assertTrue(all(item["fixtureIdentityConfirmed"] is False for item in selections))
+        self.assertIn("fixture_pair_incomplete", by_id["candidate-003"]["failedChecks"])
+        self.assertIn("prominence", by_id["candidate-003"]["failedChecks"])
+        shapes = _fixture_shapes(diagnostics)
+        self.assertEqual(3, len(shapes))
+        self.assertTrue(all(shape["shape_type"] == "linestrip" for shape in shapes))
+        serialized = json.dumps(shapes).lower()
+        self.assertNotIn('"polygon"', serialized)
+        self.assertNotIn('"fixture_identity_confirmed": true', serialized)
+        self.assertNotIn('"region_supported": true', serialized)
+
+    def test_missing_interval_degrades_to_direction_only_without_pixel_boundary_claim(self) -> None:
+        diagnostics = result("b" * 64)["diagnostics"]
+        candidate = diagnostics["rawCandidates"][0]
+        candidate.pop("startDeg"); candidate.pop("endDeg"); candidate.pop("halfWidthDeg")
+        diagnostics["fixtureShadowEvidence"]["pairEvidence"] = {
+            "status": "complete", "selectedCandidateIds": ["candidate-001", "candidate-003"],
+            "candidatePairCount": 1, "failedChecks": [],
+        }
+        shapes = _fixture_shapes(diagnostics)
+        first = next(shape for shape in shapes if shape["flags"]["candidate_id"] == "candidate-001")
+        self.assertEqual("line", first["shape_type"])
+        self.assertEqual("direction_only", first["flags"]["boundary_semantics"])
+        self.assertFalse(first["flags"]["fixture_identity_confirmed"])
+        self.assertFalse(first["flags"]["pixel_boundary_known"])
 
 
 if __name__ == "__main__":

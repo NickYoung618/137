@@ -1,0 +1,18 @@
+{
+  "schema_version": "local-second-wall-diagnostic/1",
+  "enabled": false,
+  "threshold_version": "local-second-wall-diagnostic-v1",
+  "scan_step_deg": 1.0,
+  "max_scan_seeds": 48,
+  "local_interval_margin_deg": 1.0,
+  "min_wall_separation_deg": 2.0,
+  "max_wall_separation_deg": 30.0,
+  "max_parallel_difference_deg": 25.0,
+  "max_endpoint_circle_residual_px": 0.5,
+  "min_radial_coverage": 0.6,
+  "max_radial_coverage_difference": 0.2,
+  "min_opening_dark_fraction": 0.7,
+  "opening_sample_angles": 9,
+  "opening_sample_radii": 9,
+  "candidate_merge_deg": 0.5
+}

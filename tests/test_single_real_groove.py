@@ -439,6 +439,55 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
         self.assertEqual("rejected", payload["diagnostics"]["grooveSourceConsistency"]["status"])
 
+    def test_unique_local_second_wall_diagnostic_cannot_promote_failed_pose(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["local_second_wall_diagnostic"] = {"enabled": True}
+        path = self.root / "single-v3-local-wall-diagnostic.json"
+        write_json(path, config)
+        rejected = {
+            "schemaVersion": "groove-sidewall-source-consistency/1",
+            "thresholdVersion": "sidewall-source-consistency-v1",
+            "enabled": True, "status": "rejected",
+            "metrics": {"contrastNormalizedDifference": 0.18}, "checks": [],
+            "failedChecks": ["edge_contrast_asymmetry"],
+        }
+        diagnostic = {
+            "schemaVersion": "local-second-wall-diagnostic/1",
+            "thresholdVersion": "local-second-wall-diagnostic-v1",
+            "enabled": True, "status": "UNIQUE_DIAGNOSTIC",
+            "failureStage": None, "errorCode": None,
+            "authoritative": False, "posePromotionAllowed": False,
+            "sideSearchCandidates": [],
+            "hypotheses": [{"hypothesisId": "local-wall-hypothesis-001", "failedChecks": []}],
+            "experimentalCandidate": {
+                "hypothesisId": "local-wall-hypothesis-001", "authoritative": False,
+                "posePromotionAllowed": False,
+            },
+        }
+        with (
+            patch(
+                "algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency",
+                return_value=rejected,
+            ),
+            patch(
+                "algorithms.slot_pose.legacy_adapter.diagnose_local_second_wall",
+                return_value=diagnostic,
+            ) as search,
+        ):
+            payload = run(self.images / "one-real-two-shadows.png", path, "single:v3:local-wall")
+        search.assert_called_once()
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_SOURCE_INCONSISTENT", payload["error"]["code"])
+        self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
+        self.assertEqual("UNIQUE_DIAGNOSTIC", payload["diagnostics"]["localSecondWallDiagnostic"]["status"])
+        self.assertFalse(payload["diagnostics"]["localSecondWallDiagnostic"]["posePromotionAllowed"])
+
     def test_v3_zero_or_multiple_grooves_are_detection_failures(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3

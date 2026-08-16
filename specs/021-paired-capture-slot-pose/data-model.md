@@ -57,6 +57,26 @@
 - displaySummary：019Valid、020ErrorCode；020候选展示不改变020 valid状态
 - questions：真实凹槽、fixture A/B、左右壁同源性
 
+## ObservedAngularInterval
+
+- candidateId、startDeg、centerDeg、endDeg、wrapsBoundary
+- matchStatus、failedChecks、selectionSource（PAIR_EVIDENCE或UNASSIGNED_OBSERVATION）
+- fixtureIdentityConfirmed：恒false（AUTO审阅阶段）
+- boundarySemantics：angular_profile_interval
+- pixelBoundaryKnown：恒false
+- LabelMe shape：AUTO_observed_dark_angular_interval_* linestrip；圆周弧线只表达角区间，不是二维阴影区域
+
+## LocalSecondWallDiagnostic
+
+- schemaVersion、thresholdVersion、enabled、status、authoritative=false、posePromotionAllowed=false
+- coarseCandidateId、localInterval、anchorSides[]
+- hypotheses[]：hypothesisId、anchorSide、candidateSide、openingEndpointProfileDeg、metrics、checks、failedChecks、score
+- experimentalCandidate：仅唯一解时存在，但仍authoritative=false
+- sideSearchCandidates[]：每个seed/polarity、亚像素直线候选、profile、searchStatus和failedChecks
+- hypotheses[].checks[]：layer、hardGate、metric value/threshold/passed；score不得覆盖失败hardGate
+- status：DISABLED、NOT_EVALUATED、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS、SOURCE_INCONSISTENT、UNIQUE_DIAGNOSTIC
+- failureStage、errorCode：CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS、SOURCE_INCONSISTENT
+
 ## State Transitions
 
 disabled → EXPERIMENT_DISABLED
