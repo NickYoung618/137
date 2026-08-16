@@ -81,6 +81,8 @@
 - 合并后29个JSON Schema Draft 2020-12自检通过，3个009真实dry-run payload验证通过。
 - 合并后700条JSON-only dry-run仍为36组、24组合格、12组排除，三类覆盖仍因缺TARGET_NEAR而`BLOCKED`。
 - `uv lock --check`、全部配置JSON解析、`py_compile`、`git diff --check`和冲突标记扫描通过。
+- 009集成分支merge commit：`60bf2ff5e88fab4866fce03a8758b4d4b85a97d7`；首次并入远程main的commit：
+  `cf5178230a6f2d62a2c7ccc8d0e565f10aebd502`，push为普通fast-forward，未使用force。
 
 ## Remaining BLOCKED
 
