@@ -5,10 +5,12 @@ import csv
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
 from tests.test_slot_pose_contract import minimal_config
+from tests.slot_pose_test_support import write_minimal_legacy_source
 from algorithms.slot_pose.single_groove_pose import DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
 from tools.dataset_common import sha256_file
 from tools.generate_synthetic_paired_notches import build_dataset
@@ -40,19 +42,30 @@ class SlotPoseBatchTests(unittest.TestCase):
     def test_missing_image_does_not_interrupt_following_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            build_dataset(root, 137)
+            source = write_minimal_legacy_source(root / "legacy-fixture")
+            build_dataset(root, 137, source=source)
             manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
             valid_item = next(item for item in manifest["images"] if item["conditionId"] == "normal_base")
             missing = dict(valid_item)
             missing["imageId"] = "missing-image"
             missing["relativePath"] = "development/sample_paired/missing.png"
             manifest["images"] = [missing, valid_item]
-            payloads = run_batch(manifest, root / "images", root / "config.json")
+
+            def valid_result(_image_path, _config_path, _config, _adapter, task_id):
+                return {"taskId": task_id, "result": {"valid": True}}
+
+            with patch("tools.run_slot_pose_batch.run_loaded", side_effect=valid_result):
+                payloads = run_batch(manifest, root / "images", root / "config.json")
             self.assertEqual(2, len(payloads))
             self.assertEqual("INPUT_INVALID", payloads[0]["error"]["code"])
             self.assertFalse(payloads[0]["result"]["valid"])
             self.assertTrue(payloads[1]["result"]["valid"], payloads[1])
             self.assertNotEqual(payloads[0]["taskId"], payloads[1]["taskId"])
+            server_only_root = str(Path("/", "home", "ubuntu", "disk", "gyj"))
+            self.assertNotIn(
+                server_only_root,
+                (root / "config.json").read_text(encoding="utf-8"),
+            )
 
     def test_one_click_workflow_writes_separate_normal_and_bad_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

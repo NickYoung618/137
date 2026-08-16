@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from tests.slot_pose_test_support import write_isolated_slot_pose_config
+
 from tools.review_labelme_groove_pose import (
     DEFAULT_REVIEW_CONFIG,
     analyze_manual_groove_geometry,
@@ -220,8 +222,9 @@ class ManualGrooveReviewCliTests(unittest.TestCase):
             report_path = root / "pose-review.json"
             semantic_path = root / "semantic-copy.json"
             preview_path = root / "pose-preview.jpg"
+            config_path = write_isolated_slot_pose_config(root / "legacy-fixture")
             report = review_labelme_groove_pose(
-                annotation, image_path, ROOT / "config/inspection.example.json",
+                annotation, image_path, config_path,
                 report_path, semantic_path, preview_path,
                 circle_label="circle-source", groove_label="groove-source", target_contract=_target(),
             )
@@ -253,8 +256,9 @@ class ManualGrooveReviewCliTests(unittest.TestCase):
                     {"label": "groove", "shape_type": "linestrip", "points": _boundary(), "flags": {}},
                 ],
             }), encoding="utf-8")
+            config_path = write_isolated_slot_pose_config(root / "legacy-fixture")
             report = review_labelme_groove_pose(
-                annotation, image_path, ROOT / "config/inspection.example.json",
+                annotation, image_path, config_path,
                 root / "report.json", root / "semantic.json", root / "preview.jpg",
                 circle_label="arc", groove_label="groove", target_contract=_target(),
             )
@@ -277,12 +281,24 @@ class ManualGrooveReviewCliTests(unittest.TestCase):
                     {"label": "groove", "shape_type": "linestrip", "points": _boundary(), "flags": {}},
                 ],
             }), encoding="utf-8")
+            config_path = write_isolated_slot_pose_config(root / "legacy-fixture")
             report = review_labelme_groove_pose(
-                annotation, None, ROOT / "config/inspection.example.json",
+                annotation, None, config_path,
                 root / "report.json", root / "semantic.json", root / "preview.jpg",
                 circle_label="arc", groove_label="groove", target_contract=_target(),
             )
             self.assertEqual("labelme_imageData", report["source"]["imageSource"])
+
+    def test_cli_fixture_does_not_reference_server_asset_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config_path = write_isolated_slot_pose_config(root / "legacy-fixture")
+            serialized = config_path.read_text(encoding="utf-8")
+            server_only_root = str(Path("/", "home", "ubuntu", "disk", "gyj"))
+            self.assertNotIn(server_only_root, serialized)
+            config = json.loads(serialized)
+            for key in ("source_path", "annotation_path", "reference_path"):
+                self.assertTrue(Path(config["legacy_asset"][key]).is_relative_to(root))
 
 
 if __name__ == "__main__":

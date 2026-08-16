@@ -159,3 +159,11 @@
 - Mac独立构建队列同样选中`normal:part-008`的`147`（rank 1）与`145`（rank 2），并正确排除part-006/019。Mac `review-queue.json` SHA-256为`b7946f853e7100bd0a52668928203765d0085b6ec6f0c6ec6817574c8570b8da`，联系表SHA-256为`d6cee826fcbddbf0e66062d60756161860dc54b78e7f4f31fce39ea92a58397c`。这些是独立Git外产物，不要求与服务器渲染文件哈希相同；可审计的核心是分支/配置哈希、输入manifest和队列选择语义。
 - Mac外置相对证据目录为`initial-mvp-021-mac-fc9210d/complete-groove-review/review-bundle`，仍不进Git。人工尚未确认145/147的两墙同源、端点、无遮挡或fixture污染，所以Mac门只证明可复现性与fail-closed一致，不证明完整槽真值、姿态精度或识别率。
 - 下一步仅是人工查看145/147并回答四个已版本化审阅问题。在此之前不根据AUTO图调参、不提升为真值、不合并main。
+
+## Cross-platform Test-asset Isolation after Mac Full-suite Feedback
+
+- Mac全量报告`Ran 394`，其中`4 errors`、`16 skip`且没有其他assertion failure。四个error同一根因：`tests/test_manual_groove_pose_review.py`三项和`tests/test_slot_pose_batch.py`一项直接使用服务器示例配置中的外置legacy资产路径。未设置Mac `PATH`时的uv child-process error已由Mac确认为调用环境问题，与槽逻辑分开记录。
+- 新增`tests/slot_pose_test_support.py`，每个相关测试在系统临时目录生成可动态加载的最小legacy Python模块、参考图、LabelMe标注、实际SHA-256和隔离配置。人工槽复核测试仅调用fixture的Kasa/robust拟圆；批处理连续性测试显式mock单图检测结果，只验证“缺图后继续下一任务”的原始责任。
+- 三个原人工复核用例和一个原批处理用例不再把config/inspection.example.json作为运行配置。新回归还检查临时配置的source/annotation/reference全部位于临时目录，且不含服务器专用资产根。
+- 服务器聚焦门`17/17`通过；最终全量门`423 tests in 117.458s`，全部通过。本修复未改生产代码、`config/inspection.example.json`、任何资产SHA、检测门限、默认开关或PLC边界。
+- Mac下一步是在更新后保持`PATH`包含其uv安装目录，重跑全量单测。此复跑只裁决跨平台测试资产隔离，不需要重跑140张BMP，也不触发算法调参或main合并。
