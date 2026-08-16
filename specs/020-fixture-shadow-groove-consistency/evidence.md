@@ -47,6 +47,29 @@ incomplete 20、inconsistent 3。该结果说明门控生效但明显偏保守�
 - 019结果：4b792c7f9a2828401b7db90cc8e394da56bb3f5eb9b39b066bb971458cbd4fb0。
 - 020结果：ddec89ed31e86206dc69a74e9072c8d42645636f0f2772d355d239466ed94694。
 
+## Mac 140张原始BMP三折配对证据
+
+以下为2026-08-16由Mac执行端回传的现场证据；服务器未同步原始BMP或逐条结果，因此本节记录为
+USER_REPORTED_MAC_VALIDATION，不冒充服务器独立复算。Mac在独立020-mac-validation分支检出
+db2f7a0f2fe5d31f9c85a4a0e06c55e5a8e31190，未合并main；使用robustness-019-server的三折
+validation manifests回放140张原始BMP，sealed part-006不在输入中。外置产物标识为Mac 009工作区下的
+fixture-shadow-020目录，绝对路径不写入Git。
+
+- 019实验配置SHA-256前缀e96adf07，020实验配置SHA-256前缀04cc44cc；当前仅收到前缀，未伪造完整哈希。
+- 019自动valid为33/140：part-019为20张，part-008为13张；其余107张保持既有fail-closed。
+- 020自动valid为0/140：把上述33张全部拒绝为GROOVE_SOURCE_INCONSISTENT，统一失败硬门为
+  source_consistency:edge_contrast_asymmetry。
+- part-019的contrastNormalizedDifference约0.1272至0.1380。该组此前已由人工确认存在“真槽一侧+固定
+  阴影一侧”的混合配对，因此20/20被阻断是明确false-positive回归证据，但仍不是整体准确率。
+- part-008的13张contrastNormalizedDifference约0.1731至0.1927，也被020拒绝；该组没有人工真值，当前
+  既不能称为误杀，也不能称为正确拒绝，更不能用它调整0.12门限。
+- 本次结果证明当前020硬门足以拦截已知part-019混合配对，同时也证明它对无标签样本极保守。自动valid从
+  33降为0不等于准确率提高；生产默认继续关闭，main继续不合并。
+
+发布裁决维持不变：先完成part-015/019/021共6帧LabelMe，明确real_groove_boundary、两处
+fixture_shadow区域、两侧壁物理来源和槽口端点，再在标签上裁决门限与重叠分解。禁止依据本批无真值拒绝率
+继续调参。
+
 ## 性能与资源
 
 共享服务器为2 CPU、约7.5 GiB，测试期间其他项目dotnet任务令load average从约1.4升到12.3，端到端成对墙钟
@@ -73,7 +96,7 @@ CPU/内存和顺序反转结果后再裁决；不得以当前被污染墙钟宣�
 
 1. part-019至少2帧必须人工标注真实槽边界和两处固定阴影；在此之前只有已知混合配对反例，没有完整真值。
 2. part-015/021槽阴影重叠分解必须在各2帧标签上验证；当前模板没有人工确认的局部剖面，因此分解默认关闭。
-3. 服务器没有140张Mac原始BMP；part-008/009/014/023上游门和part-015/019/021只能由Mac按原折执行。
+3. 服务器仍没有140张Mac原始BMP；Mac三折配对已经执行，但服务器只有用户回传统计，不能独立复算逐条结果。
 4. 020在25张JPEG上过度拒绝，不能调参后直接宣称泛化；需要按物理零件分折且人工确认混合配对。
 5. 性能P95增量需在负载受控环境重新成对测量。
 6. part-006保持封存，禁止读取、重跑或调参。
@@ -81,7 +104,7 @@ CPU/内存和顺序反转结果后再裁决；不得以当前被污染墙钟宣�
 ## SpecKit一致性分析
 
 implement后重新检查spec.md、plan.md、tasks.md、配置/诊断契约和实现：33/33项FR与13/13项SC均有任务、
-测试或明确BLOCKED证据；43项任务中T001至T042已执行，T043仅等待功能分支提交与推送。未发现会导致默认行为
+测试或明确BLOCKED证据；43/43项任务均已执行。未发现会导致默认行为
 改变、固定角屏蔽、真值泄漏或main误合并的Critical/High矛盾。配置术语已统一为fixture_shadow_model与
 sidewall_source_consistency，结果诊断使用fixtureShadowEvidence与grooveSourceConsistency。唯一未关闭的工程门是
 SC-012端到端P95环境证据；唯一未关闭的业务门是Mac原始BMP人工标签与混合配对复核，均已保留为BLOCKED，
