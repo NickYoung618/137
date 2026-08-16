@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-main-housing-registration-summary/2",
+  "title": "Registration stability batch summary v2",
+  "type": "object",
+  "required": ["schemaVersion", "dataset", "algorithm", "referenceImage", "imageCount", "technical", "registration", "failureReasons", "stability", "diagnosticsJsonlSha256"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-main-housing-registration-summary/2"},
+    "dataset": {"type": "object"},
+    "algorithm": {"type": "object"},
+    "referenceImage": {"type": "object"},
+    "imageCount": {"type": "integer", "minimum": 1},
+    "technical": {"type": "object"},
+    "registration": {"type": "object"},
+    "failureReasons": {"type": "object"},
+    "stability": {
+      "type": "object",
+      "required": ["eligibleRecordCount", "targetCenterXPx", "targetCenterYPx", "targetCenterXRatio", "targetCenterYRatio", "targetRadiusPx", "targetRadiusRatio", "scale", "rotationDeg", "rotationScore", "rotationMargin", "instanceSelectionMargin", "edgeCoverageRatio", "circularResidualRatio"],
+      "properties": {
+        "eligibleRecordCount": {"type": "integer", "minimum": 0},
+        "targetCenterXPx": {"$ref": "#/$defs/linear"},
+        "targetCenterYPx": {"$ref": "#/$defs/linear"},
+        "targetCenterXRatio": {"$ref": "#/$defs/linear"},
+        "targetCenterYRatio": {"$ref": "#/$defs/linear"},
+        "targetRadiusPx": {"$ref": "#/$defs/linear"},
+        "targetRadiusRatio": {"$ref": "#/$defs/linear"},
+        "scale": {"$ref": "#/$defs/linear"},
+        "rotationDeg": {"$ref": "#/$defs/circular"},
+        "rotationScore": {"$ref": "#/$defs/linear"},
+        "rotationMargin": {"$ref": "#/$defs/linear"},
+        "instanceSelectionMargin": {"$ref": "#/$defs/linear"},
+        "edgeCoverageRatio": {"$ref": "#/$defs/linear"},
+        "circularResidualRatio": {"$ref": "#/$defs/linear"}
+      },
+      "additionalProperties": false
+    },
+    "diagnosticsJsonlSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "nullableNumber": {"type": ["number", "null"]},
+    "linear": {
+      "type": "object",
+      "required": ["count", "minimum", "maximum", "mean", "median", "p05", "p95", "medianAbsoluteDeviation"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "minimum": {"$ref": "#/$defs/nullableNumber"},
+        "maximum": {"$ref": "#/$defs/nullableNumber"},
+        "mean": {"$ref": "#/$defs/nullableNumber"},
+        "median": {"$ref": "#/$defs/nullableNumber"},
+        "p05": {"$ref": "#/$defs/nullableNumber"},
+        "p95": {"$ref": "#/$defs/nullableNumber"},
+        "medianAbsoluteDeviation": {"$ref": "#/$defs/nullableNumber"}
+      },
+      "additionalProperties": false
+    },
+    "circular": {
+      "type": "object",
+      "required": ["count", "circularMeanDeg", "resultantLength", "circularStdDeg", "maximumAbsoluteDeviationDeg", "medianAbsoluteDeviationDeg"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "circularMeanDeg": {"$ref": "#/$defs/nullableNumber"},
+        "resultantLength": {"$ref": "#/$defs/nullableNumber"},
+        "circularStdDeg": {"$ref": "#/$defs/nullableNumber"},
+        "maximumAbsoluteDeviationDeg": {"$ref": "#/$defs/nullableNumber"},
+        "medianAbsoluteDeviationDeg": {"$ref": "#/$defs/nullableNumber"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

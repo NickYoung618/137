@@ -63,6 +63,23 @@ class SlotPoseEvaluationTests(unittest.TestCase):
         self.assertEqual(0.5, bad["falsePositiveRate"])
         self.assertEqual(1, bad["invalidCount"])
         self.assertEqual(0, report["angleErrorDeg"]["n"])
+        self.assertEqual("CONDITIONAL", bad["poseFalsePositiveMetric"]["status"])
+
+    def test_authoritative_pose_usability_is_not_inferred_from_bad_class(self) -> None:
+        truth = [
+            {"image_sha256": "a", "truth_valid": "false", "truth_angle_deg": "", "sample": "s",
+             "condition": "bad", "dataset_class": "bad", "pose_usable": "", "authority": "", "provenance": ""},
+            {"image_sha256": "b", "truth_valid": "false", "truth_angle_deg": "", "sample": "s",
+             "condition": "bad", "dataset_class": "bad", "pose_usable": "false",
+             "authority": "pose-owner", "provenance": "review-7"},
+        ]
+        report = evaluate_results([result("a", 10.0), result("b", 20.0)], truth)
+        metric = report["bad"]["poseFalsePositiveMetric"]
+        self.assertEqual("PARTIAL", metric["status"])
+        self.assertEqual(1, metric["labeledCount"])
+        self.assertEqual(1, metric["falsePositiveCount"])
+        self.assertEqual(1.0, metric["falsePositiveRate"])
+        self.assertEqual(1, metric["unknownCount"])
 
 
 if __name__ == "__main__":

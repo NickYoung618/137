@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "a-end-face-quality-policy/1",
+  "policyId": "a-end-face-localization-default-v1",
+  "localization": {
+    "requiredFiniteMetrics": [
+      "transform.target_center_x_px",
+      "transform.target_center_y_px",
+      "transform.scale",
+      "transform.rotation_deg"
+    ],
+    "scaleRange": [0.75, 1.25],
+    "centerMarginPx": 0.0,
+    "allowedMethodPrefixes": ["circle-alignment"],
+    "orientationEvidence": {
+      "minimumRotationScore": 3.0,
+      "minimumNotchProminence": 12.0
+    },
+    "requiredFeatureLabels": []
+  }
+}

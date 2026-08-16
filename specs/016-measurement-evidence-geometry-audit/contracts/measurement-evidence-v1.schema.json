@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hole2/measurement-evidence-v1.schema.json",
+  "title": "Hole 2 measurement evidence layers",
+  "type": "object",
+  "required": ["7", "Phi12.2"],
+  "additionalProperties": false,
+  "properties": {
+    "7": {"$ref": "#/$defs/d7Target"},
+    "Phi12.2": {"$ref": "#/$defs/phiTarget"}
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false
+    },
+    "pointList": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/point"}
+    },
+    "d7Target": {
+      "type": "object",
+      "required": ["rawEdgeEvidence", "fittedGeometry", "measurementAnnotation"],
+      "properties": {
+        "rawEdgeEvidence": {
+          "type": "object",
+          "required": ["semantics", "evidenceAvailable", "boundaries"],
+          "properties": {
+            "semantics": {"const": "neck_outer_contour_edges"},
+            "evidenceAvailable": {"type": "boolean"},
+            "boundaries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["side", "pointsPx", "transitionPairsPx"],
+                "properties": {
+                  "side": {"enum": ["A", "B"]},
+                  "pointsPx": {"$ref": "#/$defs/pointList"},
+                  "transitionPairsPx": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "prefixItems": [
+                        {"$ref": "#/$defs/point"},
+                        {"$ref": "#/$defs/point"}
+                      ],
+                      "items": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "fittedGeometry": {
+          "type": "object",
+          "required": ["type", "isDetectedContour", "boundaries"],
+          "properties": {
+            "type": {"const": "parallel_lines"},
+            "isDetectedContour": {"const": false},
+            "boundaries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["side", "segmentPointsPx"],
+                "properties": {
+                  "side": {"enum": ["A", "B"]},
+                  "segmentPointsPx": {"$ref": "#/$defs/pointList"},
+                  "lineEquation": {
+                    "type": ["array", "null"],
+                    "items": {"type": "number"},
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        "measurementAnnotation": {
+          "type": "object",
+          "required": ["type", "pointsPx", "valuePx"],
+          "properties": {
+            "type": {"const": "perpendicular_distance"},
+            "pointsPx": {"$ref": "#/$defs/pointList"},
+            "valuePx": {"type": "number"}
+          }
+        }
+      }
+    },
+    "phiTarget": {
+      "type": "object",
+      "required": ["rawEdgeEvidence", "fittedGeometry", "measurementAnnotation"],
+      "properties": {
+        "rawEdgeEvidence": {
+          "type": "object",
+          "required": ["semantics", "evidenceAvailable", "arcSegments"],
+          "properties": {
+            "semantics": {"const": "outer_contour_calibrated_visible_arc"},
+            "evidenceAvailable": {"type": "boolean"},
+            "arcSegments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["side", "pointsPx"],
+                "properties": {
+                  "side": {"const": "reference_left"},
+                  "pointsPx": {"$ref": "#/$defs/pointList"}
+                }
+              }
+            }
+          }
+        },
+        "fittedGeometry": {
+          "type": "object",
+          "required": ["type", "centerPx", "radiusPx", "isDetectedContour"],
+          "properties": {
+            "type": {"const": "circle_model"},
+            "centerPx": {"$ref": "#/$defs/point"},
+            "radiusPx": {"type": "number", "exclusiveMinimum": 0},
+            "isDetectedContour": {"const": false}
+          }
+        },
+        "measurementAnnotation": {
+          "type": "object",
+          "required": ["type", "valuePx"],
+          "properties": {
+            "type": {"const": "diameter"},
+            "valuePx": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      }
+    }
+  }
+}

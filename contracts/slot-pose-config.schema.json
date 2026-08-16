@@ -76,7 +76,6 @@
         },
         "groove_recognition": {
           "type": "object",
-          "required": ["threshold_version", "n_radii", "radial_span_px", "shoulder_width_deg", "shoulder_gap_deg", "search_margin_deg", "min_local_contrast", "min_edge_contrast", "min_radial_depth_px", "min_radial_depth_ratio", "min_paired_edge_support", "min_contour_continuity", "max_width_coefficient_of_variation", "max_center_drift_ratio", "min_tangential_width_px", "max_tangential_width_px", "outer_connection_tolerance_px", "max_gap_rows", "min_groove_score", "ambiguity_margin"],
           "properties": {
             "threshold_version": {"type": "string", "minLength": 1},
             "n_radii": {"type": "integer", "minimum": 16},
@@ -186,7 +185,6 @@
         "groove_refinement": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["threshold_version", "radial_inset_min_px", "radial_inset_max_px", "radial_sample_count", "tangential_search_margin_deg", "tangential_sample_step_px", "contrast_inner_offset_px", "contrast_outer_offset_px", "min_side_points", "min_edge_contrast", "min_edge_gradient_per_px", "max_line_residual_p95_px", "max_intersection_coarse_delta_deg", "allow_endpoint_reversal", "line_consensus_min_inlier_ratio", "line_consensus_min_span_ratio", "line_consensus_min_pair_separation_ratio", "line_consensus_model_merge_deg", "line_consensus_min_support_margin", "line_consensus_max_refit_hypotheses"],
           "properties": {
             "threshold_version": {"enum": ["groove-sidewall-subpixel-v1", "groove-sidewall-subpixel-v2"]},
             "radial_inset_min_px": {"type": "number", "exclusiveMinimum": 0},
@@ -210,9 +208,17 @@
             "line_consensus_max_refit_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128}
           }
         },
+        "ambiguity_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {"const": "groove-ambiguity-resolution/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "max_candidates": {"type": "integer", "minimum": 2, "maximum": 3, "default": 3}
+          }
+        },
         "physical_outer_circle": {
           "type": "object",
-          "required": ["threshold_version", "n_angles", "min_edge_point_count", "inlier_residual_px", "min_inlier_ratio", "angular_bin_count", "min_angular_coverage", "max_residual_p95_px", "max_center_shift_px", "min_radius_ratio", "max_radius_ratio"],
           "properties": {
             "threshold_version": {"type": "string", "minLength": 1},
             "n_angles": {"type": "integer", "minimum": 36},
@@ -322,11 +328,11 @@
   "allOf": [
     {
       "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "multi_notch_roles"}}}}},
-      "then": {"properties": {"detector": {"required": ["profile", "physical_outer_circle", "role_assignment"]}}}
+      "then": {"properties": {"detector": {"required": ["profile", "role_assignment"]}}}
     },
     {
       "if": {"properties": {"detector": {"properties": {"diagnostic_mode": {"const": "single_real_groove"}}}}},
-      "then": {"properties": {"detector": {"required": ["profile", "physical_outer_circle", "groove_recognition", "single_groove_pose"]}}}
+      "then": {"properties": {"detector": {"required": ["profile", "single_groove_pose"]}}}
     },
     {
       "if": {

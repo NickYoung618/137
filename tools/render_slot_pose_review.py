@@ -55,6 +55,25 @@ def _signed_delta(value: float, reference: float) -> float:
     return (float(value) - float(reference) + 180.0) % 360.0 - 180.0
 
 
+def _guidance_record(payload: dict[str, Any], *, nested_plc: bool = False) -> dict[str, Any]:
+    plc = (payload.get("plcExecution") or {}) if nested_plc else payload
+    return {
+        "detectionStatus": payload.get("detectionStatus"),
+        "guidanceStatus": payload.get("guidanceStatus"),
+        "currentAngleDeg": payload.get("currentAngleDeg"),
+        "targetAngleDeg": payload.get("targetAngleDeg"),
+        "toleranceDeg": payload.get("toleranceDeg"),
+        "correctionRawDeg": payload.get("correctionRawDeg"),
+        "correctionDeg": payload.get("correctionDeg"),
+        "imageFrameCorrectionDeg": payload.get("imageFrameCorrectionDeg"),
+        "rotationDirection": payload.get("rotationDirection"),
+        "withinTolerance": payload.get("withinTolerance"),
+        "plcExecutionStatus": plc.get("status") if nested_plc else plc.get("plcExecutionStatus"),
+        "mechanicalCorrectionDeg": plc.get("mechanicalCorrectionDeg"),
+        "plcCommand": plc.get("plcCommand"),
+    }
+
+
 def _role_hypotheses(diagnostics: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     candidates = diagnostics.get("grooveCandidates")
     if candidates is None:
@@ -121,7 +140,8 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
     groove_refinement = diagnostics.get("grooveRefinement")
     datum_measurement = (single_groove_pose or {}).get("datumMeasurement") or {}
     target_assessment = (single_groove_pose or {}).get("targetAssessment") or {}
-    guidance = (single_groove_pose or {}).get("guidance") or {}
+    intermediate_guidance = (single_groove_pose or {}).get("guidance") or {}
+    final_result = result.get("result") or {}
     position = datum_measurement.get("position") or {}
     y_down_target = {
         "measuredDeg": datum_measurement.get("measuredFromPositiveYClockwiseDeg"),
@@ -134,29 +154,17 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "mechanicalCorrectionDeg": target_assessment.get("mechanicalCorrectionDeg"),
         "plcBlocked": "PLC_MAPPING_UNCONFIRMED" in (target_assessment.get("blockers") or []),
     }
-    guidance_record = {
-        "detectionStatus": guidance.get("detectionStatus"),
-        "guidanceStatus": guidance.get("guidanceStatus"),
-        "currentAngleDeg": guidance.get("currentAngleDeg"),
-        "targetAngleDeg": guidance.get("targetAngleDeg"),
-        "toleranceDeg": guidance.get("toleranceDeg"),
-        "correctionRawDeg": guidance.get("correctionRawDeg"),
-        "correctionDeg": guidance.get("correctionDeg"),
-        "imageFrameCorrectionDeg": guidance.get("imageFrameCorrectionDeg"),
-        "rotationDirection": guidance.get("rotationDirection"),
-        "withinTolerance": guidance.get("withinTolerance"),
-        "plcExecutionStatus": (guidance.get("plcExecution") or {}).get("status"),
-        "mechanicalCorrectionDeg": (guidance.get("plcExecution") or {}).get("mechanicalCorrectionDeg"),
-        "plcCommand": (guidance.get("plcExecution") or {}).get("plcCommand"),
-    }
+    intermediate_guidance_record = _guidance_record(intermediate_guidance, nested_plc=True)
+    is_v3_final = final_result.get("detectionStatus") in {"DETECTED", "DETECTION_FAILED"}
+    guidance_record = _guidance_record(final_result) if is_v3_final else intermediate_guidance_record
     return {
         "imageId": manifest_item["imageId"],
         "relativePath": manifest_item["relativePath"],
         "imageSha256": manifest_item["sha256"],
         "datasetClass": manifest_item.get("datasetClass"),
         "result": {
-            "valid": bool(result.get("result", {}).get("valid", False)),
-            "signedRelativeRotationDeg": result.get("result", {}).get("signedRelativeRotationDeg"),
+            "valid": bool(final_result.get("valid", False)),
+            "signedRelativeRotationDeg": final_result.get("signedRelativeRotationDeg"),
             "errorCode": (result.get("error") or {}).get("code"),
             "errorStage": (result.get("error") or {}).get("stage"),
         },
@@ -172,6 +180,8 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "singleGroovePose": single_groove_pose,
         "yDownTargetDiagnostic": y_down_target,
         "guidance": guidance_record,
+        "guidanceAuthority": "final_result" if is_v3_final else "legacy_intermediate_fallback",
+        "intermediateGuidance": intermediate_guidance_record,
         "roleSuggestion": {
             "status": role_status,
             "selectedRoleCandidateIds": selected,
@@ -190,11 +200,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "angularProfile": diagnostics.get("angularProfile"),
         "polarRotationDeg": (diagnostics.get("slot") or {}).get("polarRotationDeg"),
         "elapsedMs": diagnostics.get("elapsedMs"),
-        "failClosed": (
-            guidance_record["detectionStatus"] == "DETECTION_FAILED"
-            if guidance_record["detectionStatus"] is not None
-            else not bool(result.get("result", {}).get("valid", False))
-        ),
+        "failClosed": not bool(final_result.get("valid", False)),
     }
 
 
@@ -367,13 +373,28 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
     image.save(output_path, quality=90)
 
 
+def contact_sheet_layout(
+    image_count: int, *, tile_width: int = 600, tile_height: int = 430, max_dimension: int = 65_000,
+) -> tuple[int, int, int, int]:
+    if image_count <= 0:
+        return 0, 0, 0, 0
+    minimum_columns = max(1, math.ceil(image_count * tile_height / max_dimension))
+    maximum_columns = max(1, max_dimension // tile_width)
+    columns = min(maximum_columns, max(3 if image_count >= 3 else image_count, minimum_columns))
+    rows = math.ceil(image_count / columns)
+    if rows * tile_height > max_dimension:
+        raise ValueError(f"contact sheet cannot fit {image_count} images within JPEG dimension limit")
+    return columns, rows, columns * tile_width, rows * tile_height
+
+
 def render_contact_sheet(overlays: list[tuple[str, Path]], output_path: Path) -> None:
     if not overlays:
         return
     tile_width, tile_height = 600, 430
-    columns = min(3, len(overlays))
-    rows = math.ceil(len(overlays) / columns)
-    sheet = Image.new("RGB", (columns * tile_width, rows * tile_height), "#191919")
+    columns, rows, sheet_width, sheet_height = contact_sheet_layout(
+        len(overlays), tile_width=tile_width, tile_height=tile_height,
+    )
+    sheet = Image.new("RGB", (sheet_width, sheet_height), "#191919")
     draw = ImageDraw.Draw(sheet)
     font = ImageFont.load_default(size=18)
     for index, (image_id, path) in enumerate(overlays):
@@ -447,6 +468,14 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         (record.get("guidance") or {}).get("rotationDirection") or "not_available"
         for record in records
     )
+    intermediate_detection_statuses = Counter(
+        (record.get("intermediateGuidance") or {}).get("detectionStatus") or "not_available"
+        for record in records
+    )
+    intermediate_guidance_statuses = Counter(
+        (record.get("intermediateGuidance") or {}).get("guidanceStatus") or "not_available"
+        for record in records
+    )
     physical_circle_accepted_count = sum(
         (record.get("physicalOuterCircle") or {}).get("status") == "accepted" for record in records
     )
@@ -471,6 +500,9 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         "detectionStatusCounts": dict(sorted(detection_statuses.items())),
         "guidanceStatusCounts": dict(sorted(guidance_statuses.items())),
         "rotationDirectionCounts": dict(sorted(rotation_directions.items())),
+        "intermediateGuidanceAuthoritative": False,
+        "intermediateDetectionStatusCounts": dict(sorted(intermediate_detection_statuses.items())),
+        "intermediateGuidanceStatusCounts": dict(sorted(intermediate_guidance_statuses.items())),
         "physicalOuterCircleAcceptedCount": physical_circle_accepted_count,
         "circleLocalizationStatusCounts": dict(sorted(localization_statuses.items())),
         "records": records,

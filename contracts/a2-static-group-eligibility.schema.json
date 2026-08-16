@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2-static-group-eligibility.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "minimumFrames", "groupingExplicit", "groups", "summary"],
+  "properties": {
+    "schemaVersion": {"const": "a2-static-group-eligibility/1"},
+    "minimumFrames": {"type": "integer", "minimum": 20},
+    "groupingExplicit": {"const": true},
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sampleId", "conditionId", "datasetClass", "frameCount", "status", "authoritative", "exclusionReasons", "relativePaths", "sourceImageSha256s"],
+        "properties": {
+          "sampleId": {"type": "string", "minLength": 1},
+          "conditionId": {"type": "string", "minLength": 1},
+          "datasetClass": {"enum": ["normal", "bad"]},
+          "frameCount": {"type": "integer", "minimum": 1},
+          "status": {"enum": ["ELIGIBLE", "EXCLUDED"]},
+          "authoritative": {"type": "boolean"},
+          "exclusionReasons": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "relativePaths": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "sourceImageSha256s": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "minItems": 1}
+        },
+        "additionalProperties": true
+      }
+    },
+    "summary": {"type": "object"}
+  },
+  "additionalProperties": false
+}

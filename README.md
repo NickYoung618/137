@@ -1,12 +1,10 @@
-# 137壳体 A端面槽姿态引导算法
+# 137 壳体检测算法
 
-本仓库已完成Spec Kit功能`002-slot-pose-estimation`的服务器MVP：复用历史A端面视觉核心，新增只读
-适配、角度契约、质量门控、fail-closed、合成回归、Manifest和评估工具。它不是另写的一套圆/极坐标/
-槽检测算法，也未修改孔2或`/home/ubuntu/disk/gyj`下任何文件。
+本仓库承载 137 壳体 A 端面、孔2柱面/端面检测与槽姿态引导；三类算法保持独立入口、配置和规格。
 
-## 复用代码与新写代码
+## 检测核心来源
 
-只读复用资产：
+### 槽姿态
 
 - `/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py`
 - SHA-256：`36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35`
@@ -15,7 +13,21 @@
   `estimate_rotation_by_notch`、`estimate_rotation_by_polar`、`estimate_global_transform`、
   `build_reference_model`、`load_detection_gray`。
 
-本仓库新写部分：
+### 孔2交付状态
+
+当前已完成数据无关工具链、配置模板和现有 `hole_2` 算法适配。尺寸7已按确认语义实现
+双边界拟合，Φ12.2已提供半径和显式像素直径列。正式毫米标定、20张重复性验证和生产
+OK/NG仍等待真实图片、图纸确认及验收数据。
+
+### A端面尺寸
+
+`algorithms/end_face/core.py` 原样来自桌面算法包
+`/home/ubuntu/disk/zzx/算法/算法.zip` 内的 `A端面/repeatability_evaluation.py`，
+SHA-256 为 `f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc`。
+权威核心没有被改写；新增代码提供独立调用、质量分层、严格 JSON 契约、批量评估，以及核心之外的
+19/30 参考梯度候选。候选有独立状态和失败保护，不会写回核心量测。
+
+## 槽姿态引导
 
 - `algorithms/slot_pose/legacy_adapter.py`：哈希校验、只读动态加载、既有函数编排、质量门控和角度换算。
 - `algorithms/slot_pose/contract.py`、`main.py`：v2结果契约、fail-closed和单图CLI。
@@ -168,6 +180,10 @@ uv run python tools/run_a2_acceptance.py \
 
 无需A2即可先在Mac验证历史源码适配链（标注和参考图由工具生成的小图提供）：
 
+LabelMe 标注、参考图、待测原图和压缩包均为外置资产，不提交 Git。
+
+## 安装与测试
+
 ```bash
 uv sync
 uv run python -m unittest discover -s tests -v
@@ -179,10 +195,7 @@ uv run python algorithms/slot_pose/main.py \
   --config /tmp/slot-pose-synthetic/synthetic-config.json --task-id mac-smoke --strict
 ```
 
-Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skipped`；这与算法失败不同。完整A2验证需要
-另建本机配置，不能直接修改并提交服务器默认模板。
-
-## 生产阻塞（不能由算法默认值代替）
+## 槽姿态生产阻塞
 
 - B-001 已关闭：每件只有1个真实凹槽，另外2个外观暗区为遮挡阴影。
 - B-002 数据负责人：根据采集记录确认A2条件组、物理样品、split及与历史参考图的工位/视角/方向映射。
@@ -195,3 +208,304 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
 
 剩余关闭顺序：B-002 → 冻结Mac原始BMP验证集/人工参考规程 → B-004验收 → B-005上线。关闭前可以
 输出版本化图像帧测量和最短引导量，但不能宣称生产精度、把图像方向等同于执行机方向或向PLC写入。
+
+## 008回放完整性与数据集隔离
+
+008修复的是验收可信度和有证据的歧义恢复，不使用700张回放反向调圆/槽阈值：
+
+- review、CSV、叠加图和统计以顶层v3最终结果为准；质量拒绝即使保留中间槽角，也只能计入
+  `DETECTION_FAILED/NOT_AVAILABLE`，中间几何另列为非权威诊断。
+- `datasetClass`、产品判定、图像质量和`poseUsable`分开；只有带authority/provenance的显式
+  `poseUsable=false`标签才能形成权威误引导率，“坏图目录”本身只有条件统计意义。
+- `configSha256`标识源文件字节，`effectiveConfigSha256`标识运行时展开默认后的路径无关行为；
+  `tools/materialize_slot_pose_config.py`可在不读图时展开并核对。
+- 多粗槽候选可选地逐一经过现有亚像素物理精修，仅唯一幸存者可恢复。该开关默认关闭，等待独立标注验证。
+- 当前数据分层：合成测试+唯一人工标注为development；700张为已检查、锁定的acceptance回归；
+  独立validation/test尚不存在，需新增物理样品和逐图复核标注。25张同源JPEG不能充当独立validation。
+
+命令和剩余BLOCKED见`specs/008-a2-replay-integrity-hardening/quickstart.md`。
+
+## 009多组静态重复性与过渡盲测
+
+009不改圆、真槽、槽壁或85°引导算法，只修复评估数据流：
+
+- canonical inventory统一相对一个显式A2数据根；只处理清单列出的图，normal根不会递归重复扫入`坏/`。
+- inventory draft允许sample/condition/repeat为空，但绝不能直接冒充confirmed grouping。正式分组CSV必须逐图同SHA覆盖，
+  带物理sample、固定condition、连续repeat和非算法authority/provenance。
+- 采集负责人可只确认精简的`confirmed-segments.csv`；`tools/materialize_a2_grouping.py`会在不读取算法结果的前提下
+  校验无重叠、完整覆盖，再展开成逐图confirmed grouping。
+- 每个静态condition必须同一零件、同一次摆放/装夹、同角度/工况且至少20帧。报告逐组环形角极差、样本标准差、
+  P95绝对残差、检测有效率、圆心/半径/槽口中点波动和耗时P50/P95/max，再池化组内中心化残差做总体汇总。
+- normal 481–498与499–500为同一sample的两个不同condition，分别18帧和2帧，数据保留但不进入正式静态汇总。
+- bad组缺少badReason/poseUsable权威语义时只保留诊断，不能进入权威静态汇总。
+- 过渡盲测按完整sample的源图SHA集合确定性选择，绝不读取算法结果。当前700张已被查看，因此锁固定标为
+  `NON_STRICT_TRANSITIONAL`；工具同时导出排除该sample的development Manifest，并用一次性包装器阻止重复执行。
+
+Mac完整命令、输出路径和判读见`specs/009-a2-static-repeatability-governance/quickstart.md`。常用入口：
+
+```bash
+uv run python tools/materialize_a2_grouping.py --help
+uv run python tools/prepare_a2_evaluation.py --help
+uv run python tools/freeze_transition_blind.py --help
+uv run python tools/evaluate_static_repeatability.py --help
+uv run python tools/run_transitional_blind_once.py --help
+```
+
+需要顺/逆时针调整仍是检测成功；只有几何不可用才是`DETECTION_FAILED`。本工具不产生PLC命令，也不把重复性
+数值自动判为生产PASS/FAIL。
+
+## A端面单图 CLI
+
+标注中的 `imagePath` 必须能相对标注文件解析到外置参考图：
+
+```bash
+uv run python algorithms/end_face/main.py \
+  --annotation /path/to/sample_1_label.json \
+  --image /path/to/target.bmp \
+  --quality-policy config/end_face_quality.example.json \
+  --short-line-candidate-config config/end_face_short_line_candidate.v1.json \
+  --output /tmp/a-end-face-result.json \
+  --task-id inspection-001 \
+  --strict
+```
+
+`--output -` 可将 JSON 输出到标准输出。默认 `--pixel-size 1` 保留像素单位；只有传入经确认的
+物理单位/像素比例时，核心才会增加物理量字段。JSON 中的非有限检测值统一写为 `null`，不会输出
+非标准 `NaN` 或 `Infinity`。
+
+当前契约为 `a-end-face-result/3`，三个旧状态不得混用：
+
+- `technicalStatus`：检测程序是否执行完成；
+- `result.localization.valid`（同 `result.valid`）：端面中心、尺度、旋转和定位方法是否通过策略；
+- `result.measurementCompleteness.allValid`：所有带核心质量状态的特征是否均有效。
+
+每个 `featureQuality.<特征>.coreValid` 都直接来自不变核心，不会被适配层强行改有效。默认策略不把
+19、30、46、M78、80、86 等特征测量失败当成端面定位失败；如现场确认某特征属于定位必要项，必须
+在新版本策略的 `requiredFeatureLabels` 中显式加入。
+
+v3 追加 `result.shortLineCandidates`：只为 19/30 保存核心基线、独立 `candidateValid`、候选几何、
+ROI/对比度/梯度/峰值/搜索边界诊断、失败检查和 `recovered/regressed` 对照状态。候选采用二维参考
+梯度联合配准，重新估计局部位置和方向；它不覆盖 `featureQuality`、`measurements`、定位状态或旧
+`measurementCompleteness`。
+
+## LabelMe 标注语义
+
+现有 A 端面 `sample_1_label.json` 的标注与核心解释已经核对：
+
+| 稳定尺寸名 | 原始 LabelMe 标注 | 图形 | 核心解释 |
+| --- | --- | --- | --- |
+| 100 | 损坏直径字形 + `100` | `linestrip`，30 点 | 最大圆，外圆定位锚及半径/直径 |
+| 71 | 损坏直径字形 + `71` | `linestrip`，26 点 | 最小圆，内孔定位及半径/直径 |
+| 86 / 80 / M78 | 圆弧点集 | `linestrip`，85/88/85 点 | 中间环半径/直径 |
+| 46 | 两端点 | `line` | 从中心到外缘的径向长度及角度 |
+| 20 | 两端点 | `line` | 线段长度及角度 |
+| 19 / 30 | 两端点 | `line` | 短线位置、方向和长度；旧标注长度约 44.80/26.20 px |
+| 字符区域 | 四点区域 | `polygon` | 区域包围框和面积；不是定位必要项 |
+
+LabelMe 中 19/30 必须各使用一个两点 `line`，点落在真实边缘并保持既有起止方向。原文件中的损坏
+单位/直径字形不作为稳定身份，适配层统一映射为 `19`、`30`、`100` 等 canonical feature。
+
+Mac A2 可从一个物理样品、一个位置的完整 20 张中选一张代表图，手工建立域内 19/30 参考。先检查
+标注；输出 catalog 只有坐标、尺寸和 SHA，不包含嵌入的 `imageData`：
+
+```bash
+uv run python tools/inspect_short_line_labelme.py \
+  --annotation "/external/A2/development/sample_001/CORRECTED-a2-short-lines.json" \
+  --output "/external/A2/outputs/corrected-a2-short-lines-catalog.json"
+```
+
+当前先前提供的 A2 端点标注已因未吸附到真实阶梯强边而撤销，并由共享加载器按文件 SHA-256
+拒绝。它不得用于模板、调参、真值或验收；真实 19/30 比较等待新的人工复核 LabelMe。重命名或
+移动撤销文件不会绕过门禁。
+
+传入 `--short-line-labelme-reference` 后，候选局部模板来自该外置 A2 标注图；桌面核心仍使用原参考，
+其 SHA、旧量测和 `coreValid` 均不改变。`main-housing-registration-v2` 还会先枚举圆形实例、独立选择
+主壳体、稳健拟合圆心/尺度并用环形外观估计角度，再投影真实 19/30 标注做局部搜索。旧 core 端点
+只保留在对照诊断中，不参与 v2 搜索中心。候选输出 provenance 会记录 `external_labelme` 以及标注/
+图片 SHA-256。v2 缺少外置 19/30 标注时严格拒绝；v1 仍可显式选择以保持兼容。
+
+接口契约见 `contracts/a-end-face-result.schema.json`，质量分层与批量评估的 Spec Kit 规格见
+`specs/004-quality-policy-batch/`；主壳体配准增量规格见 `specs/007-main-housing-registration/`。
+
+## 批量质量评估
+
+批量工具先完整校验外置 Manifest，再复用同一参考模型逐图检测：
+
+```bash
+uv run python tools/evaluate_end_face_batch.py detect \
+  --manifest /external/a2-manifest.json \
+  --data-root /external/A2 \
+  --annotation /external/sample_1_label.json \
+  --quality-policy config/end_face_quality.example.json \
+  --short-line-candidate-config config/end_face_short_line_candidate.v1.json \
+  --short-line-labelme-reference /external/A2/development/sample_001/CORRECTED-a2-short-lines.json \
+  --output-dir outputs/a2-evaluation
+```
+
+输出 `results.jsonl` 和 `quality-summary.json`。也可用 `summarize` 子命令只传逐图结果流，在无图片的
+服务器上重算技术成功率、定位率、测量完整率、耗时和逐特征来源/原因分布。
+
+## Mac 外置 A2 注册诊断与候选比较
+
+在更正的 19/30 真值到位前，只运行无标注主壳体注册诊断：
+
+```bash
+uv run python tools/diagnose_main_housing_registration.py batch \
+  --reference-image "$HOME/Desktop/壳体项目/137/a2-labelme-development-20/representative.bmp" \
+  --manifest "$HOME/Desktop/壳体项目/137/a2-development-20-manifest.json" \
+  --data-root "$HOME/Desktop/壳体项目/137/A2" \
+  --candidate-config config/end_face_short_line_candidate.v2.json \
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-registration-v2-development-20"
+```
+
+逐帧输出只含主壳体假设、圆心/尺度/角度和门限诊断，不含候选恢复语义。批量
+`registration-summary.json` 使用 `a-end-face-main-housing-registration-summary/2`：对所有注册有效帧
+汇总圆心/半径（像素及按每帧尺寸归一化）、尺度、旋转置信度/裕量、实例选择裕量、边缘覆盖与圆拟合
+残差；线性量提供 count/min/max/mean/median/p05/p95/MAD，角度使用跨 ±180° 连续的环形统计。统计
+只用于观察漂移，不参与有效判定。以下候选比较命令仅在 `CORRECTED-a2-short-lines.json` 经人工强边
+核对及严格 inspect 后才可运行。
+
+既有 v2 `results.jsonl` 可直接作为不可改写基线；工具会先完整验证 Manifest 图片属性/SHA-256 和
+`imageId/taskId` 一一对应，再读取图片运行候选：
+
+```bash
+uv run python tools/compare_short_line_candidates.py compare \
+  --manifest "$HOME/Desktop/壳体项目/137/a2-development-20-manifest.json" \
+  --data-root "$HOME/Desktop/壳体项目/137/A2" \
+  --annotation "/path/to/sample_1_label.json" \
+  --results-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-v2-development-20/results.jsonl" \
+  --candidate-config config/end_face_short_line_candidate.v2.json \
+  --short-line-labelme-reference "$HOME/Desktop/壳体项目/137/A2/development/sample_001/CORRECTED-a2-short-lines.json" \
+  --development-group \
+  --output-dir "$HOME/Desktop/壳体项目/137/outputs/a2-main-housing-v2-development-20"
+```
+
+输出 `short-line-comparison.jsonl` 和 `short-line-summary.json`。无图重统计：
+
+```bash
+uv run python tools/compare_short_line_candidates.py summarize \
+  --comparison-jsonl "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-labelme-development-20/short-line-comparison.jsonl" \
+  --output "$HOME/Desktop/壳体项目/137/outputs/a2-short-line-labelme-development-20/short-line-summary-recomputed.json"
+```
+
+开发时同一样品/位置的 20 张必须全部留在 development Manifest；冻结标注 SHA 和配置 SHA 后，使用
+不含该物理样品的全样品 Manifest 做 validation/acceptance。不得把同一组 20 帧随机拆到两个集合。
+单张外置代表图只可用于注册诊断，不能据此宣称短线恢复或 25 张改善。25 张候选验收必须等更正
+标注到位，再用冻结后的 v2 配置、同一标注/图片 SHA 在 Mac 外置数据上完整运行。撤销与注册诊断
+撤销门禁见 `specs/008-revoke-invalid-anchor/`，注册稳定性统计见
+`specs/009-registration-stability/`。
+
+## 数据边界
+
+- 原图、参考图、LabelMe 大标注、RAR/ZIP 和运行输出不进入 Git。
+- `data/manifests/` 只保存小体积相对路径清单和 SHA-256。
+- 检测失败返回结构化失败 JSON；单项特征无效时保持该项 `coreValid=false`，但不默认否决定位。
+- 本 CLI 只输出 A 端面量测结果，不提供视觉引导、PLC 写入或质量 OK/NG 业务。
+
+## 孔2数据无关工具链与现拍检测
+
+项目研发原则见 [Constitution](.specify/memory/constitution.md)。本轮数据无关基础的规格、方案和
+任务记录位于 [001-data-independent-foundation](specs/001-data-independent-foundation/spec.md)。
+
+## 数据无关工具链
+
+安装固定依赖并运行测试：
+
+```bash
+uv sync
+uv run python -m unittest discover -s tests -v
+```
+
+为外置图片生成Manifest：
+
+```bash
+uv run python tools/make_manifest.py \
+  --input /path/to/hole2-data \
+  --output data/manifests/hole2-batch-001.json \
+  --dataset-id hole2-batch-001 \
+  --task hole_2 \
+  --expected-repeats 20 \
+  --reference-image /path/to/hole2-data/sample_1/pos_1/image_001.bmp
+```
+
+在服务器或Mac验证同一批原图：
+
+```bash
+uv run python tools/validate_dataset.py \
+  --manifest data/manifests/hole2-batch-001.json \
+  --data-root /path/to/hole2-data \
+  --config config/hole2_inspection.example.json \
+  --report outputs/hole2-batch-001/validation.json
+```
+
+从算法测量CSV计算静态/动态重复性：
+
+```bash
+uv run python tools/evaluate_repeatability.py \
+  --measurements outputs/hole2-batch-001/measurements.csv \
+  --config config/hole2_inspection.example.json \
+  --output-dir outputs/hole2-batch-001/repeatability
+```
+
+使用现有权威参考资产进行一图冒烟：
+
+```bash
+bash scripts/smoke_reference.sh
+```
+
+数据目录详见 [data/README.md](data/README.md)，算法适配及资产指纹见
+[algorithms/hole_2/README.md](algorithms/hole_2/README.md)。
+
+## 现拍样品姿态注册与孔2尺寸检测
+
+当前运行时只使用负责人确认的人工参考 JSON 及其配对 BMP。注册直接从该 BMP 的分布式图像
+证据估计到目标图的固定工位小角度、尺度和平移；人工 JSON 定义 `Φ12.2` 可见弧和尺寸 `7`
+两条物理边界的测量语义。退役模板不再作为底图、特征库、坐标系或任何运行时输入。
+
+检测入口不接受现拍 LabelMe；负责人确认 JSON 只能在结果冻结后由独立验收入口读取。完整
+服务器/Mac 命令、最新唯一真值哈希和证据限制见
+[011 quickstart](specs/011-latest-truth-refactor/quickstart.md)。
+
+负责人确认单图的当前结果（只代表像素几何，不代表重复性、毫米精度或生产 OK/NG）：
+
+- 注册方向 `270°`，6 个空间支持，覆盖率 `1.0`，注册有效。
+- `7`：预测 `309.2847 px`，最新真值 `310.0020 px`；长度误差 `0.7173 px`，端点最大误差 `1.5919 px`。
+- `Φ12.2`：预测直径 `541.0248 px`，最新真值拟合直径 `541.1301 px`；直径误差 `0.1053 px`，圆心误差 `2.0650 px`。
+- 检测未读取目标标注；叠加图、剖面、算法结果和验收报告全部留在仓库外。
+
+检测结果现在显式输出目标↔参考正/逆变换与技术质量状态；注册或任一
+特征失败时 CLI 返回非零且不保留伪造几何。验收报告会汇总方向、候选分数/拒绝
+原因、变换、特征质量与真实误差。Mac `2000` 正常品 + `200` 坏品的外置分组
+批量命令见 [011 quickstart](specs/011-latest-truth-refactor/quickstart.md)。
+
+`Φ12.2` 使用受控两阶段半径搜索：主下限保持 `0.88`，只有主候选在
+下界饱和时才以 `0.84` 下限恢复一次，并在质量字段中显式记录。尺寸7
+的新切线双边界失败时，只允许回退到已通过原 v6 双边界质量状态的有限结果。
+
+尺寸7的黑色轮廓带被建模为相反极性边缘对，并输出可审核的A/B边界与独立垂距线；Phi从
+权威人工参考的可见弧确定灰度相位，在目标图强制同一径向极性后稳健拟圆。审核预览用绿色
+局部弧表示真实边缘证据，并用蓝色实线整圆表示数学拟合模型；实线只是审核样式，不表示整圈均被检测。
+检测器没有写入固定像素补偿、标称尺寸或目标真值坐标。
+
+### 可变点数圆验收与 LabelMe 补圆
+
+`Φ12.2` 验收不再要求固定77点。合法输入是 `shape_type=linestrip`、至少8个有限点，
+并通过现有 `CIRCLE_RESIDUAL_PX`/`circular_residual` 圆拟合质量门；历史资产恰好77点
+仅是数据事实。
+
+仓库已有圆拟合能力，但此前没有“读取部分圆弧并写回完整 LabelMe 圆”的工具。现在可在
+Git 外置目录运行：
+
+```bash
+uv run python tools/complete_labelme_circle.py \
+  --annotation "$EXTERNAL_CIRCLE_DIR/partial-circle.json" \
+  --image "$EXTERNAL_CIRCLE_DIR/source.bmp" \
+  --config config/labelme_circle_completion.example.json \
+  --completed "$EXTERNAL_CIRCLE_DIR/completed-circle.json" \
+  --report "$EXTERNAL_CIRCLE_DIR/completion-report.json" \
+  --preview "$EXTERNAL_CIRCLE_DIR/completion-preview.jpg"
+```
+
+工具复用 Kasa 初值、稳健筛点和几何圆拟合；要求可见弧覆盖至少 `120°`，按圆周长与源点
+中位间距自动推导完整圆点数，并重复首点闭合。输出固定标记
+`auto_completed=true`、`human_verified=false`，只能作为 LabelMe 人工复核底稿，不是人工真值。

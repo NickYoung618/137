@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2-static-repeatability.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "source", "groupEligibility", "groups", "summary"],
+  "properties": {
+    "schemaVersion": {"const": "a2-static-repeatability/1"},
+    "source": {"type": "object", "required": ["manifestImageCount", "resultCount", "matchedCount", "manifestSha256", "resultsSha256"]},
+    "groupEligibility": {"type": "array"},
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sampleId", "conditionId", "eligibilityStatus", "detection", "angle", "geometry", "timing", "guidanceClass"],
+        "properties": {
+          "sampleId": {"type": "string"},
+          "conditionId": {"type": "string"},
+          "eligibilityStatus": {"enum": ["ELIGIBLE", "EXCLUDED"]},
+          "detection": {"type": "object"},
+          "angle": {"type": "object"},
+          "geometry": {"type": "object"},
+          "timing": {"type": "object"},
+          "guidanceClass": {"enum": ["TARGET_NEAR", "NEEDS_CLOCKWISE", "NEEDS_COUNTERCLOCKWISE", "MIXED_OR_UNAVAILABLE"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "summary": {"type": "object", "required": ["eligibleGroupCount", "excludedGroupCount", "authoritativeFrameCount", "pooledWithinGroupAngleResidual", "guidanceCoverage"]}
+  },
+  "additionalProperties": false
+}

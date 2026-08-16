@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "labelme-circle-completion-evidence/1",
+  "createdAt": "2026-08-15",
+  "scope": "one external partial-circle LabelMe development sample; no production accuracy or manual-truth claim",
+  "source": {
+    "annotationSha256": "73f635eecd6d14c7293978603ff4e6383a9760f97e509b3d3256e8307507f7b6",
+    "imageSha256": "70c1251471b6f4ecf8d0ef20c989b8b8f7a9cab360b167e0112cd9b5073522a8",
+    "pointCount": 55,
+    "medianAdjacentSpacingPx": 114.0175425099138,
+    "angularCoverageDeg": 216.05284962518473,
+    "radialResidualPx": {
+      "median": 1.7047808142517624,
+      "p95": 4.695070167841368,
+      "max": 5.3688971604119615
+    }
+  },
+  "qualityGates": {
+    "minimumSourcePoints": 8,
+    "maximumMedianResidualPx": 25.0,
+    "minimumArcCoverageDeg": 120.0,
+    "initialKasaCircleResidualPx": 1.7069639843236928
+  },
+  "completed": {
+    "pointCount": 92,
+    "uniquePointCount": 91,
+    "closedByRepeatedFirstPoint": true,
+    "medianAdjacentSpacingPx": 113.87356912049445,
+    "angularCoverageDeg": 360.0,
+    "radialResidualPx": {
+      "median": 0.0,
+      "p95": 3.2969182939268713e-13,
+      "max": 4.547473508864641e-13
+    },
+    "autoCompleted": true,
+    "humanVerified": false,
+    "preservedLabels": ["groove_axis", "datum_axis"],
+    "removedLabels": ["ignore_occlusion"]
+  },
+  "externalArtifactSha256": {
+    "completedAnnotation": "337bad2ae3cdf288bbc8327ca4187a7c6f0e0e6425228c009f2ba6ba78d8d8f2",
+    "completionReport": "40ca6064fec3d12d69202c9c183cdb5c3fe607cb4b34430fff1ae50ff75bbb4c",
+    "completionPreview": "240e83c754318708f12ce01f7eada9dc8f46edc4b1c4ac12bb6bb12f2538bfb9"
+  },
+  "notProven": [
+    "The auto-completed circle is not manual LabelMe truth.",
+    "One external image cannot establish production accuracy, repeatability or acceptance.",
+    "Human review is still required before any truth or acceptance use."
+  ]
+}

@@ -1,5 +1,7 @@
 # 配置约定
 
+## 槽姿态引导配置
+
 - `legacy_asset`固定历史源码、LabelMe标注和参考图的绝对路径及SHA-256；换服务器或Mac时只改路径，
   内容哈希必须继续一致。适配器在调用历史函数前校验三项资产。
 - 历史图像坐标原点在左上，方位角随图像y轴向下而顺时针增加。`mechanical_zero_image_deg`与
@@ -34,6 +36,9 @@
   检测可靠时无论当前象限均`valid=true`；图像`+Y`下半轴为0°、顺时针正，到85°取最短环形差，
   `[80,90]`闭区强制输出0°。`production_plc_mapping_confirmed=false`只阻塞机械量和PLC命令，
   不清空`imageFrameCorrectionDeg`。Git安全的显式版本片段为`closed-loop-guidance-v3.fragment.json`。
+- `detector.ambiguity_resolution`是默认关闭的有界恢复门。开启后，仅对最多3个已通过粗真槽门的候选逐个运行
+  同一套现有亚像素槽壁/外圆交点精修；恰好1个幸存才允许进入姿态，0个、多个或超限均fail-closed。
+  它禁止使用候选编号、85°目标、目录类别或验收集得分选槽；独立槽/阴影validation标签完成前不得在生产配置启用。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，
@@ -45,6 +50,56 @@
 - `mm_per_px`为统一保留字段；纯角度输出不使用。`ANGLE_PENDING.limit=null`表示只统计、不判定。
 - 静态重复性只按Manifest中显式的同一样品、工位和条件分组，以检测角减同图人工真值角的环形残差统计；
   `groupingExplicit=false`、标注不完整或有效重复不足时不得输出重复性PASS/FAIL。
+- Manifest的`split`是评估用途：development/validation/test/acceptance必须按物理样品和源图lineage隔离。
+  当前唯一人工标注只能属于development；700张已检查结果属于锁定acceptance回归，不能用来选择阈值；
+  独立validation/test在新增样品并完成复核前必须报告`NOT_AVAILABLE`。
+- 009 canonical inventory的`relative_path`统一相对一个显式`data-root`，只处理清单列出的图；不要把根下normal和
+  `坏/`拆成两个含义不同的相对路径基准。Mac若保留`A2/...`前缀，则`data-root`必须是A2的父目录。
+- `a2-canonical-inventory.template.csv`是资产清单模板，sample/condition/repeat可空；
+  `a2-confirmed-grouping.template.csv`是经负责人确认的分组契约，三字段与authority/provenance必须完整。
+  两者不可互换，空draft不得传入显式grouping路径。
+- `a2-confirmed-segments.template.csv`是人工确认的连续采集段契约；先用`tools/materialize_a2_grouping.py`
+  校验每个class的sequence范围精确覆盖inventory、没有重叠，再生成逐图grouping。段边界不得由算法结果选择。
+- 静态重复性资格要求同sample、同condition、连续至少20帧。算法失败帧保留在有效率分母；角度使用环形统计，
+  跨组只汇总各组中心化残差。bad组还要求badReason、poseUsable及非算法来源的authority/provenance。
+- normal/bad是否为同一物理零件未确认时，sampleId必须使用`normal:`/`bad:`限定，避免错误合并；确认后再由负责人
+  提供映射，不得用目录、角度或算法结果反推。
+- 过渡盲测锁只消费Manifest/资格表，不接受results参数；冻结后未来开发必须使用导出的development Manifest，
+  发布候选只通过`run_transitional_blind_once.py`执行一次。工具在调检测前独占写入execution claim，中断也不允许重跑。
+  当前700张的锁永远是非严格过渡证据。
 
 Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
 并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。
+
+## A端面与孔2配置
+
+单图 CLI 接收标注、待测图、输出路径、`pixel-size` 和版本化定位质量策略。
+`end_face_inspection.example.json` 仅记录部署时应受控的运行字段示例；`end_face_quality.example.json` 是
+默认的 `a-end-face-quality-policy/1`。
+
+- `core_source_sha256` 必须与仓库内原样复用核心一致。
+- `annotation_path`、参考图和待测图必须位于 Git 仓库外。
+- `pixel_size=1.0` 表示只输出像素量；物理标定确认前不得把它解释为毫米。
+- 本仓库不保存视觉引导、PLC 地址或机械坐标映射配置。
+- `requiredFiniteMetrics` 固定要求中心、尺度和旋转为有限值。
+- `scaleRange`、`centerMarginPx` 和 `allowedMethodPrefixes` 只判断端面定位，不修改核心测量结果。
+- `orientationEvidence` 要求 polar rotation score 或 notch prominence 至少一项过门限；默认分别为 3 和 12。
+- `requiredFeatureLabels` 默认为空；只有经现场评审确认的定位必要特征才可加入。
+- 46 的 NCC `0.55`、中间环模板 `0.35`、径向点数/残差和短线峰值规则属于核心固定条件，
+  由核心 SHA-256 约束，不在策略中覆盖。
+
+孔2运行配置以 `hole2_inspection.example.json` 为模板复制到外部工作目录，现场值不得直接覆盖模板。
+
+- `calibration.mm_per_px`：毫米/参考像素，必须来自受控标定；为 `null` 时重复性工具只输出像素。
+- `feature_mappings`：把算法CSV列映射到稳定业务特征。Φ12.2直接使用
+  `Phi12_2_diameter_px`；`Phi12_2_r`作为可追溯的拟合半径保留。
+- `tolerance.confirmed=false`：表示不得用于正式OK/NG。
+- `repeatability.tiers`：需求中的0.10、0.05、0.03 mm档；当前模板暂以极差评估，口径待确认。
+- `current_capture_registration.v1.json` 中 `Φ12.2` 主半径下限固定为 `0.88`；只有主候选在下界饱和时才以 `recovery_min_radius_scale_ratio=0.84` 执行一次恢复搜索。
+
+LabelMe 部分圆弧补全使用 `labelme_circle_completion.example.json`：
+
+- `minimumSourcePoints` 不得低于8。
+- `maximumMedianResidualPx` 不得高于核心 `CIRCLE_RESIDUAL_PX=25 px`，配置不能放宽核心门。
+- `minimumArcCoverageDeg` 默认 `120°`，用于拒绝不稳定短弧。
+- `maximumCompletedUniquePoints` 只是资源安全上限；实际点数始终由圆周长和源点中位间距推导，不是固定契约。

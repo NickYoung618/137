@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a-end-face-main-housing-registration-summary/2",
+  "title": "137 A-End-Face Main-Housing Registration Stability Summary v2",
+  "type": "object",
+  "required": ["schemaVersion", "dataset", "algorithm", "referenceImage", "imageCount", "technical", "registration", "failureReasons", "stability", "diagnosticsJsonlSha256"],
+  "properties": {
+    "schemaVersion": {"const": "a-end-face-main-housing-registration-summary/2"},
+    "dataset": {
+      "type": "object",
+      "required": ["datasetId", "datasetFingerprint", "manifestSha256"],
+      "properties": {
+        "datasetId": {"type": ["string", "null"]},
+        "datasetFingerprint": {"type": ["string", "null"]},
+        "manifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "algorithm": {"$ref": "#/$defs/algorithm"},
+    "referenceImage": {"$ref": "#/$defs/image"},
+    "imageCount": {"type": "integer", "minimum": 1},
+    "technical": {"$ref": "#/$defs/counts"},
+    "registration": {"$ref": "#/$defs/counts"},
+    "failureReasons": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "stability": {"$ref": "#/$defs/stability"},
+    "diagnosticsJsonlSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "algorithm": {
+      "type": "object",
+      "required": ["registrationVersion", "coreSourceSha256", "candidateConfigPath", "candidateConfigSha256"],
+      "properties": {
+        "registrationVersion": {"const": "main-housing-registration/2"},
+        "coreSourceSha256": {"const": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc"},
+        "candidateConfigPath": {"type": "string", "minLength": 1},
+        "candidateConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "image": {
+      "type": "object",
+      "required": ["path", "bytes", "sha256", "format", "width", "height", "mode"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "format": {"type": "string", "minLength": 1},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "mode": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": ["total", "valid", "invalid"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "valid": {"type": "integer", "minimum": 0},
+        "invalid": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "linear": {
+      "type": "object",
+      "required": ["count", "minimum", "maximum", "mean", "median", "p05", "p95", "medianAbsoluteDeviation"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "minimum": {"type": ["number", "null"]},
+        "maximum": {"type": ["number", "null"]},
+        "mean": {"type": ["number", "null"]},
+        "median": {"type": ["number", "null"]},
+        "p05": {"type": ["number", "null"]},
+        "p95": {"type": ["number", "null"]},
+        "medianAbsoluteDeviation": {"type": ["number", "null"], "minimum": 0}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"count": {"const": 0}}},
+          "then": {
+            "properties": {
+              "minimum": {"type": "null"},
+              "maximum": {"type": "null"},
+              "mean": {"type": "null"},
+              "median": {"type": "null"},
+              "p05": {"type": "null"},
+              "p95": {"type": "null"},
+              "medianAbsoluteDeviation": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "minimum": {"type": "number"},
+              "maximum": {"type": "number"},
+              "mean": {"type": "number"},
+              "median": {"type": "number"},
+              "p05": {"type": "number"},
+              "p95": {"type": "number"},
+              "medianAbsoluteDeviation": {"type": "number"}
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "circular": {
+      "type": "object",
+      "required": ["count", "circularMeanDeg", "resultantLength", "circularStdDeg", "maximumAbsoluteDeviationDeg", "medianAbsoluteDeviationDeg"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "circularMeanDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "resultantLength": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "circularStdDeg": {"type": ["number", "null"], "minimum": 0},
+        "maximumAbsoluteDeviationDeg": {"type": ["number", "null"], "minimum": 0, "maximum": 180},
+        "medianAbsoluteDeviationDeg": {"type": ["number", "null"], "minimum": 0, "maximum": 180}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"count": {"const": 0}}},
+          "then": {
+            "properties": {
+              "circularMeanDeg": {"type": "null"},
+              "resultantLength": {"type": "null"},
+              "circularStdDeg": {"type": "null"},
+              "maximumAbsoluteDeviationDeg": {"type": "null"},
+              "medianAbsoluteDeviationDeg": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "resultantLength": {"type": "number"}
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "stability": {
+      "type": "object",
+      "required": ["eligibleRecordCount", "targetCenterXPx", "targetCenterYPx", "targetCenterXRatio", "targetCenterYRatio", "targetRadiusPx", "targetRadiusRatio", "scale", "rotationDeg", "rotationScore", "rotationMargin", "instanceSelectionMargin", "edgeCoverageRatio", "circularResidualRatio"],
+      "properties": {
+        "eligibleRecordCount": {"type": "integer", "minimum": 0},
+        "targetCenterXPx": {"$ref": "#/$defs/linear"},
+        "targetCenterYPx": {"$ref": "#/$defs/linear"},
+        "targetCenterXRatio": {"$ref": "#/$defs/linear"},
+        "targetCenterYRatio": {"$ref": "#/$defs/linear"},
+        "targetRadiusPx": {"$ref": "#/$defs/linear"},
+        "targetRadiusRatio": {"$ref": "#/$defs/linear"},
+        "scale": {"$ref": "#/$defs/linear"},
+        "rotationDeg": {"$ref": "#/$defs/circular"},
+        "rotationScore": {"$ref": "#/$defs/linear"},
+        "rotationMargin": {"$ref": "#/$defs/linear"},
+        "instanceSelectionMargin": {"$ref": "#/$defs/linear"},
+        "edgeCoverageRatio": {"$ref": "#/$defs/linear"},
+        "circularResidualRatio": {"$ref": "#/$defs/linear"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

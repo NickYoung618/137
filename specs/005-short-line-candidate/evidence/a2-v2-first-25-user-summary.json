@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "user-reported-a2-summary/2",
+  "reportedAt": "2026-08-14",
+  "source": {
+    "environment": "Mac local compatible environment",
+    "description": "Mac local $HOME/Desktop/壳体项目/137 outputs/a2-v2-first-25/quality-summary.json",
+    "serverArtifactAvailable": false,
+    "perImageJsonlAvailableOnServer": false,
+    "manifestSha256": null,
+    "datasetFingerprint": null
+  },
+  "imageCount": 25,
+  "technical": {"valid": 25, "total": 25},
+  "localization": {"valid": 25, "total": 25},
+  "measurementCompleteness": {"valid": 0, "total": 25},
+  "timing": {"meanMs": 2010.36},
+  "coreInvalidCounts": {
+    "19": 25,
+    "30": 25,
+    "46": 9,
+    "M78": 4,
+    "80": 4,
+    "86": 3
+  },
+  "coreValidCounts": {
+    "19": 0,
+    "30": 0,
+    "46": 16,
+    "M78": 21,
+    "80": 21,
+    "86": 22
+  },
+  "coreFailureReasons": {
+    "19": {"short_line_lateral_edge_not_found": 25},
+    "30": {"short_line_lateral_edge_not_found": 25}
+  },
+  "limitations": [
+    "This file records user-reported aggregate evidence only.",
+    "It is not a server rerun and contains no inferred per-image diagnostics.",
+    "No image, archive, or runtime JSONL is included."
+  ]
+}

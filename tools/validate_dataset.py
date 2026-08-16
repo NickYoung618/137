@@ -119,6 +119,18 @@ def validate_manifest(
             add_issue(errors, "DATASET_CLASS", f"invalid datasetClass for {relative_value}: {dataset_class!r}", image_id)
         elif sample and position:
             group_classes[(sample, position)].add(str(dataset_class))
+        split = str(item.get("split", "unassigned"))
+        if split not in {"unassigned", "development", "tuning", "validation", "test", "acceptance"}:
+            add_issue(errors, "EVALUATION_PURPOSE", f"invalid split/evaluation purpose for {relative_value}: {split!r}", image_id)
+        if item.get("productDisposition", "UNKNOWN") not in {"PASS", "FAIL", "UNKNOWN"}:
+            add_issue(errors, "PRODUCT_DISPOSITION", f"invalid productDisposition for {relative_value}", image_id)
+        if item.get("imageDisposition", "UNKNOWN") not in {"USABLE", "UNUSABLE", "UNKNOWN"}:
+            add_issue(errors, "IMAGE_DISPOSITION", f"invalid imageDisposition for {relative_value}", image_id)
+        pose_usable = item.get("poseUsable")
+        if pose_usable not in {True, False, None}:
+            add_issue(errors, "POSE_USABLE", f"invalid poseUsable for {relative_value}", image_id)
+        if pose_usable is not None and (not item.get("semanticsAuthority") or not item.get("semanticsProvenance")):
+            add_issue(errors, "POSE_USABILITY_PROVENANCE", f"poseUsable requires authority and provenance for {relative_value}", image_id)
 
     for sample, splits in sorted(sample_splits.items()):
         if len(splits) > 1:

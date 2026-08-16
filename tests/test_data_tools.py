@@ -66,7 +66,7 @@ class DataToolTests(unittest.TestCase):
                 directory = root / split / "sample_1" / "pos_1"
                 directory.mkdir(parents=True)
                 Image.new("L", (8, 6), 10).save(directory / f"{split}.bmp")
-            manifest = build_manifest(root, "split-leak", "slot_pose", 2, "sample_1", "pos_1")
+            manifest = build_manifest(root, "split-leak", "a_end_face", 2, "sample_1", "pos_1")
             report = validate_manifest(manifest, root)
             self.assertFalse(report["valid"])
             self.assertIn("SPLIT_LEAKAGE", {item["code"] for item in report["errors"]})
@@ -108,6 +108,72 @@ class DataToolTests(unittest.TestCase):
             self.assertEqual([1, 2], [item["repeatIndex"] for item in manifest["images"]])
             report = validate_manifest(manifest, root)
             self.assertIn("REPEAT_COUNT", {issue["code"] for issue in report["errors"]})
+
+    def test_explicit_semantics_are_path_exact_and_pose_usability_is_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative in ("任意目录/a.bmp", "nested/b.bmp"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("L", (8, 6), 10).save(path)
+            semantics = {
+                "任意目录/a.bmp": {
+                    "dataset_class": "bad", "bad_reason": "surface_qc",
+                    "product_disposition": "FAIL", "image_disposition": "USABLE",
+                    "pose_usable": "", "authority": "quality-owner", "provenance": "review-1",
+                },
+                "nested/b.bmp": {
+                    "dataset_class": "normal", "bad_reason": "",
+                    "product_disposition": "PASS", "image_disposition": "USABLE",
+                    "pose_usable": "true", "authority": "pose-owner", "provenance": "review-2",
+                },
+            }
+            manifest = build_manifest(
+                root, "semantic", "slot_pose", 1, "s", "c", semantics_records=semantics,
+            )
+            by_path = {item["relativePath"]: item for item in manifest["images"]}
+            self.assertEqual("bad", by_path["任意目录/a.bmp"]["datasetClass"])
+            self.assertIsNone(by_path["任意目录/a.bmp"]["poseUsable"])
+            self.assertTrue(by_path["nested/b.bmp"]["poseUsable"])
+            self.assertTrue(manifest["policy"]["semanticsExplicit"])
+            self.assertTrue(validate_manifest(manifest, root)["valid"])
+
+            missing = dict(semantics)
+            missing.pop("nested/b.bmp")
+            with self.assertRaisesRegex(ValueError, "semantics record missing"):
+                build_manifest(root, "missing", "slot_pose", 1, "s", "c", semantics_records=missing)
+
+    def test_acceptance_purpose_is_explicit_and_sample_lineage_cannot_leak(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index in range(2):
+                Image.new("L", (8, 6), 10 + index).save(root / f"f{index}.bmp")
+            grouping = {
+                "f0.bmp": {"sample_id": "same", "condition_id": "c", "split": "validation"},
+                "f1.bmp": {"sample_id": "same", "condition_id": "c", "split": "acceptance"},
+            }
+            manifest = build_manifest(root, "purpose", "slot_pose", 1, "x", "y", grouping_records=grouping)
+            report = validate_manifest(manifest, root)
+            self.assertFalse(report["valid"])
+            self.assertIn("SPLIT_LEAKAGE", {item["code"] for item in report["errors"]})
+    def test_manifest_can_force_development_split_when_input_is_the_split_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / "sample_dev" / "a2"
+            directory.mkdir(parents=True)
+            for index in range(1, 3):
+                Image.new("L", (8, 6), index).save(directory / f"image_{index:03d}.bmp")
+            manifest = build_manifest(
+                root,
+                "forced-development",
+                "a_end_face",
+                2,
+                "unused",
+                "unused",
+                forced_split="development",
+            )
+        self.assertEqual({"development"}, {item["split"] for item in manifest["images"]})
+        self.assertEqual({"sample_dev"}, {item["sampleId"] for item in manifest["images"]})
 
 
 if __name__ == "__main__":

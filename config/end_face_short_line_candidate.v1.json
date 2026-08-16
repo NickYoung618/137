@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "a-end-face-short-line-candidate-config/1",
+  "candidateId": "reference-gradient-registration-v1",
+  "algorithmVersion": "1.0.0",
+  "features": ["19", "30"],
+  "template": {
+    "alongExtensionPx": 6.0,
+    "halfWidthPx": 12.0,
+    "sampleStepPx": 1.0
+  },
+  "search": {
+    "coarse": {
+      "angleRadiusDeg": 8.0,
+      "angleStepDeg": 1.0,
+      "longitudinalRadiusPx": 8.0,
+      "longitudinalStepPx": 2.0,
+      "lateralRadiusPx": 24.0,
+      "lateralStepPx": 2.0
+    },
+    "fine": {
+      "angleRadiusDeg": 1.0,
+      "angleStepDeg": 0.25,
+      "longitudinalRadiusPx": 2.0,
+      "longitudinalStepPx": 0.5,
+      "lateralRadiusPx": 2.0,
+      "lateralStepPx": 0.5
+    }
+  },
+  "gates": {
+    "minimumPredictionLengthPx": 4.0,
+    "maximumPredictionLengthPx": 80.0,
+    "minimumCoverageRatio": 0.98,
+    "minimumTemplateStd": 2.0,
+    "minimumRoiContrast": 8.0,
+    "minimumGradientP90": 2.0,
+    "minimumCorrelation": 0.45,
+    "minimumRobustZ": 2.0,
+    "minimumSeparatedPeakGap": 0.015,
+    "separationAngleDeg": 4.0,
+    "separationLongitudinalPx": 6.0,
+    "separationLateralPx": 6.0,
+    "maximumAngleCorrectionDeg": 7.75
+  }
+}

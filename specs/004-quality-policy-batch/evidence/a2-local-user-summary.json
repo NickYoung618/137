@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "user-reported-a2-summary/1",
+  "reportedAt": "2026-08-13",
+  "sourceEnvironment": "local-137-compatible-environment",
+  "sourceArchiveHint": "Desktop/HousingProject/A2.rar",
+  "rawImagesTransferred": false,
+  "manifestSha256": null,
+  "perImageResultsAvailableOnServer": false,
+  "imageCount": 25,
+  "technicalSucceeded": 25,
+  "legacyOverallValid": 0,
+  "meanElapsedMs": 2630.5,
+  "measurementFieldCountPerImage": 192,
+  "invalidFeatureCounts": {
+    "19": 25,
+    "30": 18,
+    "46": 11,
+    "M78": 13,
+    "80": 13,
+    "86": 12
+  },
+  "referenceObservation": {
+    "technicalSucceeded": true,
+    "invalidFeatures": ["19", "30"]
+  },
+  "limitations": [
+    "No A2 images are present in this repository.",
+    "No per-image A2 result stream or Manifest fingerprint was provided in this feedback.",
+    "Counts are acceptance evidence reported by the user, not a server-side rerun."
+  ]
+}
