@@ -61,6 +61,49 @@ def minimal_single_groove_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_fixture_shadow_extensions_default_off_and_are_path_identity_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text(json.dumps(minimal_single_groove_config()), encoding="utf-8")
+            loaded = load_config(path)
+            fixture = loaded["detector"]["fixture_shadow_model"]
+            source = loaded["detector"]["sidewall_source_consistency"]
+            self.assertFalse(fixture["enabled"])
+            self.assertFalse(fixture["enable_overlap_decomposition"])
+            self.assertFalse(source["enabled"])
+            identity = effective_config_identity(loaded)
+            self.assertIn("fixture_shadow_model", identity["detector"])
+            self.assertIn("sidewall_source_consistency", identity["detector"])
+
+    def test_fixture_shadow_extensions_are_restricted_and_strictly_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy = minimal_config()
+            legacy["detector"]["fixture_shadow_model"] = {"enabled": True}
+            path = root / "legacy.json"
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "single_real_groove"):
+                load_config(path)
+
+            single = minimal_single_groove_config()
+            single["detector"]["sidewall_source_consistency"] = {
+                "enabled": True,
+                "max_contrast_normalized_difference": 1.5,
+            }
+            path = root / "invalid.json"
+            path.write_text(json.dumps(single), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "max_contrast"):
+                load_config(path)
+
+    def test_source_consistency_requires_refinement_v2_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_single_groove_config()
+            config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "refinement v2"):
+                load_config(path)
+
     def test_effective_config_hash_ignores_paths_and_explicit_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -115,6 +158,12 @@ class SlotPoseContractTests(unittest.TestCase):
                 angle_deg=62.166, confidence=0.9,
             )
             validate_result(payload)
+            if jsonschema is not None:
+                schema = json.loads(
+                    (Path(__file__).parents[1] / "contracts" / "slot-pose-result.schema.json")
+                    .read_text(encoding="utf-8")
+                )
+                jsonschema.Draft202012Validator(schema).validate(payload)
             self.assertEqual("slot-pose-result/3", payload["schemaVersion"])
             self.assertTrue(payload["result"]["valid"])
             self.assertEqual("DETECTED_NEEDS_ADJUSTMENT", payload["result"]["guidanceStatus"])
@@ -202,6 +251,7 @@ class SlotPoseContractTests(unittest.TestCase):
             "TARGET_SEMANTICS_UNCONFIRMED",
             "ROLE_ASSIGNMENT_FAILED", "ROLE_ASSIGNMENT_AMBIGUOUS",
             "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS",
+            "GROOVE_SOURCE_INCONSISTENT", "FIXTURE_SHADOW_TEMPLATE_INCOMPLETE",
             "PHYSICAL_OUTER_CIRCLE_FAILED", "HOUSING_CIRCLE_NOT_FOUND", "HOUSING_CIRCLE_AMBIGUOUS",
             "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED",
             "PLC_MAPPING_UNCONFIRMED", "GROOVE_REFINEMENT_FAILED",

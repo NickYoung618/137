@@ -148,7 +148,10 @@ class RobustnessAuditTests(unittest.TestCase):
         self.assertEqual(4, len(first))
         self.assertTrue(all(item["humanVerified"] is False for item in first))
         self.assertTrue(all("algorithm" not in json.dumps(item).lower() for item in first))
-        required = {"outer_circle_visible_arc", "real_groove_open_boundary", "groove_sidewalls", "groove_mouth_endpoints", "occlusion_shadow_regions"}
+        required = {
+            "outer_circle_visible_arc", "real_groove_boundary", "groove_sidewalls",
+            "groove_mouth_endpoints", "fixture_shadow_a_region", "fixture_shadow_b_region",
+        }
         self.assertTrue(all(required.issubset(item["requiredShapes"]) for item in first))
         unsafe = list(rows)
         unsafe[0] = {**unsafe[0], "relative_path": "../escape.bmp"}

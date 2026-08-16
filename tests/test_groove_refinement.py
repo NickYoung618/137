@@ -92,6 +92,27 @@ def v2_config(**overrides: object) -> dict:
 
 
 class GrooveRefinementTests(unittest.TestCase):
+    def test_refined_sides_preserve_canonical_local_gray_and_gradient_profiles(self) -> None:
+        center, radius = (260.35, 251.65), 185.4
+        result = refine_groove_opening(
+            groove_image(170.18, 179.72, center=center, radius=radius), center, radius,
+            candidate(170.0, 180.0), bilinear_sample, parabolic_peak, v2_config(),
+        )
+        self.assertEqual("accepted", result["status"], result)
+        for side_name in ("startSide", "endSide"):
+            evidence = result[side_name]["profileEvidence"]
+            self.assertEqual("metal_to_dark", evidence["canonicalDirection"])
+            self.assertEqual(
+                len(evidence["rawCanonicalGrayProfile"]),
+                len(evidence["normalizedCanonicalGrayProfile"]),
+            )
+            self.assertGreaterEqual(len(evidence["rawCanonicalGrayProfile"]), 9)
+            self.assertEqual(
+                len(evidence["radialPositionsNormalized"]),
+                len(evidence["edgeContrastProfile"]),
+            )
+            self.assertTrue(all(0.0 <= value <= 1.0 for value in evidence["normalizedCanonicalGrayProfile"]))
+
     def test_subpixel_sidewalls_intersect_circle_and_recover_midpoint(self) -> None:
         center, radius = (260.35, 251.65), 185.4
         result = refine_groove_opening(

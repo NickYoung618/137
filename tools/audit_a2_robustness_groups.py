@@ -20,10 +20,11 @@ SHA_RE = re.compile(r'"sha256"\s*:\s*"([0-9a-f]{64})"')
 SHA256_VALUE_RE = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED_SHAPES = [
     "outer_circle_visible_arc",
-    "real_groove_open_boundary",
+    "real_groove_boundary",
     "groove_sidewalls",
     "groove_mouth_endpoints",
-    "occlusion_shadow_regions",
+    "fixture_shadow_a_region",
+    "fixture_shadow_b_region",
 ]
 
 

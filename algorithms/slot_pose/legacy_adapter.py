@@ -16,12 +16,17 @@ import numpy as np
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
 from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
 from algorithms.slot_pose.full_frame_circle_locator import locate_full_frame_circle
+from algorithms.slot_pose.fixture_shadow import (
+    analyze_fixture_shadows,
+    build_fixture_overlap_evaluation_candidates,
+)
 from algorithms.slot_pose.groove_recognition import recognize_grooves
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.groove_resolution import resolve_groove_candidates
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
 from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
+from algorithms.slot_pose.sidewall_consistency import assess_sidewall_source_consistency
 
 
 REQUIRED_FUNCTIONS = (
@@ -180,11 +185,23 @@ class LegacyAEndFaceAdapter:
             int(profile_config["n_radii"]),
             int(profile_config["n_angles"]),
         )
+        one_dimensional_profile = polar.mean(axis=0)
         candidates, summary = extract_dark_candidates(
-            polar.mean(axis=0),
+            one_dimensional_profile,
             profile_config,
             self.config["detector"].get("dark_candidate_robustness"),
         )
+        raw_candidates = [candidate.to_dict() for candidate in candidates]
+        fixture_evidence = analyze_fixture_shadows(
+            one_dimensional_profile,
+            raw_candidates,
+            self.config["detector"].get("fixture_shadow_model"),
+        )
+        residual_candidates = list(fixture_evidence["residualCandidates"])
+        evaluation_view = build_fixture_overlap_evaluation_candidates(
+            raw_candidates, fixture_evidence,
+        )
+        evaluation_candidates = evaluation_view["candidates"]
         pairing_config = self.config["detector"].get("pairing")
         pairing = assess_pairs(candidates, pairing_config) if isinstance(pairing_config, dict) else None
         profile_diagnostics.update({
@@ -198,7 +215,13 @@ class LegacyAEndFaceAdapter:
         })
         return {
             "angularProfile": profile_diagnostics,
-            "candidates": [candidate.to_dict() for candidate in candidates],
+            "candidates": raw_candidates,
+            "evaluationCandidates": evaluation_candidates,
+            "decompositionCandidates": residual_candidates,
+            "fixtureShadowEvidence": fixture_evidence,
+            "fixtureOverlapEvaluation": {
+                key: value for key, value in evaluation_view.items() if key != "candidates"
+            },
             "candidateSummary": summary,
             "pairing": pairing,
         }
@@ -509,12 +532,16 @@ class LegacyAEndFaceAdapter:
                 else len(detector["role_assignment"]["assignments"])
             )
             recognition, groove_candidates = self._recognize_target_grooves(
-                target_gray, groove_center, groove_outer_radius, scale, target_roles["candidates"], minimum_required,
+                target_gray, groove_center, groove_outer_radius, scale,
+                target_roles["evaluationCandidates"], minimum_required,
             )
             diagnostics.update({
                 "angularProfile": target_roles["angularProfile"],
                 "candidates": target_roles["candidates"],
                 "rawCandidates": target_roles["candidates"],
+                "decompositionCandidates": target_roles["decompositionCandidates"],
+                "fixtureShadowEvidence": target_roles["fixtureShadowEvidence"],
+                "fixtureOverlapEvaluation": target_roles["fixtureOverlapEvaluation"],
                 "candidateSummary": target_roles["candidateSummary"],
                 "grooveRecognition": recognition,
                 "grooveCandidates": groove_candidates,
@@ -531,7 +558,7 @@ class LegacyAEndFaceAdapter:
                 }
                 pose_recognition_status = recognition["status"]
                 def refine_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
-                    return refine_groove_opening(
+                    refinement = refine_groove_opening(
                         target_gray,
                         groove_center,
                         groove_outer_radius,
@@ -541,10 +568,30 @@ class LegacyAEndFaceAdapter:
                         detector["groove_refinement"],
                         pixel_scale=scale,
                     )
+                    source_consistency = assess_sidewall_source_consistency(
+                        refinement,
+                        detector.get("sidewall_source_consistency"),
+                    )
+                    output = {**refinement, "sourceConsistency": source_consistency}
+                    if source_consistency["status"] == "rejected":
+                        return {
+                            **output,
+                            "physicalRefinementStatus": refinement["status"],
+                            "status": "failed",
+                            "failedChecks": list(dict.fromkeys(
+                                list(refinement.get("failedChecks") or [])
+                                + [
+                                    f"source_consistency:{value}"
+                                    for value in source_consistency["failedChecks"]
+                                ]
+                            )),
+                        }
+                    return output
 
                 if is_refined and len(groove_candidates) == 1:
                     refinement = refine_candidate(groove_candidates[0])
                     diagnostics["grooveRefinement"] = refinement
+                    diagnostics["grooveSourceConsistency"] = refinement.get("sourceConsistency")
                     groove_candidates = [{
                         **groove_candidates[0],
                         "refinedStartDeg": (
@@ -567,6 +614,7 @@ class LegacyAEndFaceAdapter:
                         selected = resolution["survivors"][0]
                         refinement = selected["grooveRefinement"]
                         diagnostics["grooveRefinement"] = refinement
+                        diagnostics["grooveSourceConsistency"] = refinement.get("sourceConsistency")
                         groove_candidates = [{
                             **selected,
                             "refinedStartDeg": refinement["openingEndpointProfileDeg"][0],
@@ -576,8 +624,10 @@ class LegacyAEndFaceAdapter:
                         pose_recognition_status = "accepted"
                     else:
                         diagnostics["grooveRefinement"] = None
+                        diagnostics["grooveSourceConsistency"] = None
                 elif is_refined:
                     diagnostics["grooveRefinement"] = None
+                    diagnostics["grooveSourceConsistency"] = None
                 single_pose = build_single_groove_pose(
                     groove_candidates,
                     groove_center,
@@ -592,15 +642,32 @@ class LegacyAEndFaceAdapter:
                 if single_pose["status"] != "accepted":
                     resolution_status = (diagnostics.get("grooveResolution") or {}).get("status")
                     if resolution_status == "none_survived":
-                        code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
-                        message = "no ambiguous coarse groove candidate passed physical sidewall refinement"
-                    elif is_refined and isinstance(diagnostics.get("grooveRefinement"), dict) and diagnostics["grooveRefinement"]["status"] == "failed":
-                        code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
-                        failed_checks = diagnostics["grooveRefinement"].get("failedChecks") or ["unknown"]
-                        message = (
-                            "single real groove subpixel refinement failed; checks="
-                            + ",".join(map(str, failed_checks))
+                        attempts = (diagnostics.get("grooveResolution") or {}).get("attempts") or []
+                        source_rejected = any(
+                            any(str(value).startswith("source_consistency:") for value in
+                                ((attempt.get("refinement") or {}).get("failedChecks") or []))
+                            for attempt in attempts
                         )
+                        if source_rejected:
+                            code, stage = "GROOVE_SOURCE_INCONSISTENT", "groove_source_consistency"
+                            message = "no ambiguous coarse candidate passed sidewall source consistency"
+                        else:
+                            code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
+                            message = "no ambiguous coarse groove candidate passed physical sidewall refinement"
+                    elif is_refined and isinstance(diagnostics.get("grooveRefinement"), dict) and diagnostics["grooveRefinement"]["status"] == "failed":
+                        failed_checks = diagnostics["grooveRefinement"].get("failedChecks") or ["unknown"]
+                        if any(str(value).startswith("source_consistency:") for value in failed_checks):
+                            code, stage = "GROOVE_SOURCE_INCONSISTENT", "groove_source_consistency"
+                            message = (
+                                "single real groove sidewalls are not from one physical source; checks="
+                                + ",".join(map(str, failed_checks))
+                            )
+                        else:
+                            code, stage = "GROOVE_REFINEMENT_FAILED", "groove_refinement"
+                            message = (
+                                "single real groove subpixel refinement failed; checks="
+                                + ",".join(map(str, failed_checks))
+                            )
                     else:
                         code = (
                             "GROOVE_RECOGNITION_AMBIGUOUS"

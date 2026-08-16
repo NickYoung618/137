@@ -409,6 +409,36 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual("accepted", diagnostics["grooveRefinement"]["status"])
         self.assertEqual("slot-single-real-groove-pose/3", diagnostics["singleGroovePose"]["schemaVersion"])
 
+    def test_v3_source_inconsistency_is_explicit_and_clears_guidance(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        path = self.root / "single-v3-source-inconsistent.json"
+        write_json(path, config)
+        rejected = {
+            "schemaVersion": "groove-sidewall-source-consistency/1",
+            "thresholdVersion": "sidewall-source-consistency-v1",
+            "enabled": True,
+            "status": "rejected",
+            "metrics": {"contrastNormalizedDifference": 0.18},
+            "checks": [],
+            "failedChecks": ["edge_contrast_asymmetry"],
+        }
+        with patch(
+            "algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency",
+            return_value=rejected,
+        ):
+            payload = run(self.images / "one-real-two-shadows.png", path, "single:v3:source")
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_SOURCE_INCONSISTENT", payload["error"]["code"])
+        self.assertEqual("groove_source_consistency", payload["error"]["stage"])
+        self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
+        self.assertEqual("rejected", payload["diagnostics"]["grooveSourceConsistency"]["status"])
+
     def test_v3_zero_or_multiple_grooves_are_detection_failures(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3

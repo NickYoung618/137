@@ -367,10 +367,11 @@ def _side_points(
     bilinear_sample: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
     parabolic_peak: Callable[[list[float], int], float],
     config: dict[str, Any],
-) -> tuple[list[tuple[float, float]], list[float], list[float]]:
+) -> tuple[list[tuple[float, float]], list[float], list[float], list[dict[str, Any]]]:
     points: list[tuple[float, float]] = []
     contrasts: list[float] = []
     gradients: list[float] = []
+    observations: list[dict[str, Any]] = []
     margin_deg = float(config["tangential_search_margin_deg"])
     target_step_px = float(config["tangential_sample_step_px"])
     inner_offset = float(config["contrast_inner_offset_px"])
@@ -415,7 +416,50 @@ def _side_points(
         ))
         contrasts.append(contrast)
         gradients.append(strength)
-    return points, contrasts, gradients
+        local_offsets = np.linspace(-outer_offset, outer_offset, 17, dtype=float)
+        canonical_offsets = local_offsets if polarity == "falling" else -local_offsets
+        local_profile = np.interp(refined_tangent + canonical_offsets, tangent, values)
+        observations.append({
+            "radiusPx": float(radius),
+            "contrast": contrast,
+            "gradient": strength,
+            "metalLevel": before_level if polarity == "falling" else after_level,
+            "grooveLevel": after_level if polarity == "falling" else before_level,
+            "canonicalGrayProfile": [float(value) for value in local_profile],
+        })
+    return points, contrasts, gradients, observations
+
+
+def _profile_evidence(
+    observations: list[dict[str, Any]], all_radii: np.ndarray,
+) -> dict[str, Any] | None:
+    if not observations:
+        return None
+    profiles = np.asarray([item["canonicalGrayProfile"] for item in observations], dtype=float)
+    raw_profile = np.median(profiles, axis=0)
+    low, high = float(np.min(raw_profile)), float(np.max(raw_profile))
+    normalized = (
+        np.zeros_like(raw_profile) if high - low <= 1e-9
+        else (raw_profile - low) / (high - low)
+    )
+    outer, inner = float(np.max(all_radii)), float(np.min(all_radii))
+    span = max(outer - inner, 1e-9)
+    radial = [(outer - float(item["radiusPx"])) / span for item in observations]
+    coverage = max(radial) - min(radial) if len(radial) > 1 else 0.0
+    return {
+        "schemaVersion": "groove-sidewall-local-profile/1",
+        "canonicalDirection": "metal_to_dark",
+        "radialPositionsNormalized": [float(value) for value in radial],
+        "edgeContrastProfile": [float(item["contrast"]) for item in observations],
+        "edgeGradientProfile": [float(item["gradient"]) for item in observations],
+        "metalLevelProfile": [float(item["metalLevel"]) for item in observations],
+        "grooveLevelProfile": [float(item["grooveLevel"]) for item in observations],
+        "metalLevelMedian": float(np.median([item["metalLevel"] for item in observations])),
+        "grooveLevelMedian": float(np.median([item["grooveLevel"] for item in observations])),
+        "rawCanonicalGrayProfile": [float(value) for value in raw_profile],
+        "normalizedCanonicalGrayProfile": [float(value) for value in normalized],
+        "radialCoverage": float(coverage),
+    }
 
 
 def _circle_intersection(
@@ -531,15 +575,17 @@ def refine_groove_opening(
     intersections: list[tuple[float, float]] = []
     endpoint_angles: list[float] = []
     for name, coarse, polarity in (("startSide", start, "falling"), ("endSide", end, "rising")):
-        points, contrasts, gradients = _side_points(
+        points, contrasts, gradients, observations = _side_points(
             array, center, radii, coarse, polarity, bilinear_sample, parabolic_peak, merged,
         )
+        profile_evidence = _profile_evidence(observations, radii)
         if len(points) < int(merged["min_side_points"]):
             failures.append(f"{name}_insufficient_support")
             sides[name] = {
                 "supportPointCount": len(points), "sampledPointCount": int(len(radii)),
                 "edgeContrastMedian": None if not contrasts else float(np.median(contrasts)),
                 "edgeGradientMedianPerPx": None if not gradients else float(np.median(gradients)),
+                "profileEvidence": profile_evidence,
                 "line": None, "lineResidualPx": None, "points": [list(point) for point in points],
             }
             continue
@@ -558,6 +604,7 @@ def refine_groove_opening(
                     "rejectedPointCount": len(points),
                     "edgeContrastMedian": float(np.median(contrasts)),
                     "edgeGradientMedianPerPx": float(np.median(gradients)),
+                    "profileEvidence": profile_evidence,
                     "lineFitStrategy": "deterministic-consensus-tls-v2",
                     "lineConsensusGatePx": float(merged["max_line_residual_p95_px"]) * pixel_scale,
                     "lineInlierRatio": decision["inlierRatio"],
@@ -588,6 +635,7 @@ def refine_groove_opening(
                 "sampledPointCount": int(len(radii)), "rejectedPointCount": int(len(rejected)),
                 "edgeContrastMedian": float(np.median(contrasts)),
                 "edgeGradientMedianPerPx": float(np.median(gradients)),
+                "profileEvidence": profile_evidence,
                 "lineFitStrategy": "deterministic-consensus-tls-v2",
                 "lineConsensusGatePx": float(merged["max_line_residual_p95_px"]) * pixel_scale,
                 "lineInlierRatio": decision["inlierRatio"],
@@ -627,6 +675,7 @@ def refine_groove_opening(
                 "sampledPointCount": int(len(radii)),
                 "edgeContrastMedian": float(np.median(contrasts)),
                 "edgeGradientMedianPerPx": float(np.median(gradients)),
+                "profileEvidence": profile_evidence,
                 "line": {"a": line[0], "b": line[1], "c": line[2]},
                 "lineResidualPx": residual_summary,
                 "points": [[float(value) for value in point] for point in kept],

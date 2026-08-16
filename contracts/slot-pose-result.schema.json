@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "slot-pose-result.schema.json",
-  "title": "A端面槽姿态算法结果 v2",
+  "title": "A端面槽姿态算法结果 v2/v3",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "taskId", "createdAtUtc", "image", "algorithm", "result", "technicalStatus", "error", "diagnostics"],
   "properties": {
-    "schemaVersion": {"const": "slot-pose-result/2"},
+    "schemaVersion": {"enum": ["slot-pose-result/2", "slot-pose-result/3"]},
     "taskId": {"type": "string", "minLength": 1},
     "createdAtUtc": {"type": "string", "format": "date-time"},
     "image": {
@@ -56,7 +56,22 @@
         "valid": {"type": "boolean"},
         "referenceFrame": {"type": "string", "minLength": 1},
         "targetFrame": {"type": "string", "minLength": 1},
-        "positiveDirection": {"type": ["string", "null"], "enum": ["cw", "ccw", null]}
+        "positiveDirection": {"type": ["string", "null"], "enum": ["cw", "ccw", null]},
+        "detectionStatus": {"enum": ["DETECTED", "DETECTION_FAILED"]},
+        "guidanceStatus": {"enum": ["DETECTED_NEEDS_ADJUSTMENT", "DETECTED_IN_POSITION", "NOT_AVAILABLE"]},
+        "currentAngleDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "targetAngleDeg": {"type": "number"},
+        "toleranceDeg": {"type": "number", "minimum": 0},
+        "correctionRawDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "correctionDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "imageFrameCorrectionDeg": {"type": ["number", "null"], "minimum": -180, "exclusiveMaximum": 180},
+        "rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE", "NONE", null]},
+        "withinTolerance": {"type": ["boolean", "null"]},
+        "mechanicalCorrectionDeg": {"type": ["number", "null"]},
+        "plcCommand": {"type": ["object", "null"]},
+        "plcExecutionStatus": {"type": "string", "minLength": 1},
+        "plcExecutionAuthoritative": {"type": "boolean"},
+        "plcBlockers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
       }
     },
     "technicalStatus": {"enum": ["succeeded", "failed"]},
@@ -68,7 +83,7 @@
           "additionalProperties": false,
           "required": ["code", "message", "stage"],
           "properties": {
-            "code": {"enum": ["INPUT_INVALID", "ASSET_MISMATCH", "FACE_NOT_FOUND", "SLOT_NOT_FOUND", "SLOT_ROTATION_INCONSISTENT", "SLOT_FIT_FAILED", "SLOT_PAIR_NOT_FOUND", "SLOT_PAIR_AMBIGUOUS", "PHYSICAL_OUTER_CIRCLE_FAILED", "HOUSING_CIRCLE_NOT_FOUND", "HOUSING_CIRCLE_AMBIGUOUS", "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS", "GROOVE_REFINEMENT_FAILED", "ROLE_ASSIGNMENT_FAILED", "ROLE_ASSIGNMENT_AMBIGUOUS", "RING_TRUNCATED", "QUALITY_REJECTED", "TARGET_SEMANTICS_UNCONFIRMED", "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED", "POSE_CONVENTION_UNCONFIRMED", "PLC_MAPPING_UNCONFIRMED", "ANGLE_OUT_OF_RANGE", "INTERNAL_ERROR"]},
+            "code": {"enum": ["INPUT_INVALID", "ASSET_MISMATCH", "FACE_NOT_FOUND", "SLOT_NOT_FOUND", "SLOT_ROTATION_INCONSISTENT", "SLOT_FIT_FAILED", "SLOT_PAIR_NOT_FOUND", "SLOT_PAIR_AMBIGUOUS", "PHYSICAL_OUTER_CIRCLE_FAILED", "HOUSING_CIRCLE_NOT_FOUND", "HOUSING_CIRCLE_AMBIGUOUS", "GROOVE_RECOGNITION_FAILED", "GROOVE_RECOGNITION_AMBIGUOUS", "GROOVE_REFINEMENT_FAILED", "GROOVE_SOURCE_INCONSISTENT", "FIXTURE_SHADOW_TEMPLATE_INCOMPLETE", "ROLE_ASSIGNMENT_FAILED", "ROLE_ASSIGNMENT_AMBIGUOUS", "RING_TRUNCATED", "QUALITY_REJECTED", "TARGET_SEMANTICS_UNCONFIRMED", "DATUM_DEFINITION_UNCONFIRMED", "FEATURE_MAPPING_UNCONFIRMED", "OUTPUT_PURPOSE_UNCONFIRMED", "POSE_CONVENTION_UNCONFIRMED", "PLC_MAPPING_UNCONFIRMED", "ANGLE_OUT_OF_RANGE", "INTERNAL_ERROR"]},
             "message": {"type": "string", "minLength": 1},
             "stage": {"type": "string", "minLength": 1}
           }
@@ -93,6 +108,21 @@
           "technicalStatus": {"const": "failed"},
           "error": {"type": "object"},
           "result": {"properties": {"signedRelativeRotationDeg": {"type": "null"}, "confidence": {"type": "null"}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"schemaVersion": {"const": "slot-pose-result/3"}}, "required": ["schemaVersion"]},
+      "then": {
+        "properties": {
+          "result": {
+            "required": [
+              "detectionStatus", "guidanceStatus", "currentAngleDeg", "targetAngleDeg", "toleranceDeg",
+              "correctionRawDeg", "correctionDeg", "imageFrameCorrectionDeg", "rotationDirection",
+              "withinTolerance", "mechanicalCorrectionDeg", "plcCommand", "plcExecutionStatus",
+              "plcExecutionAuthoritative", "plcBlockers"
+            ]
+          }
         }
       }
     }

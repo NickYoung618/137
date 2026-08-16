@@ -15,7 +15,8 @@
 `SLOT_ROTATION_INCONSISTENT`、`SLOT_FIT_FAILED`、`QUALITY_REJECTED`、
 `SLOT_PAIR_NOT_FOUND`、`SLOT_PAIR_AMBIGUOUS`、`RING_TRUNCATED`、`TARGET_SEMANTICS_UNCONFIRMED`、
 `PHYSICAL_OUTER_CIRCLE_FAILED`、`GROOVE_RECOGNITION_FAILED`、`GROOVE_RECOGNITION_AMBIGUOUS`、
-`GROOVE_REFINEMENT_FAILED`、
+`GROOVE_REFINEMENT_FAILED`、`GROOVE_SOURCE_INCONSISTENT`、
+`FIXTURE_SHADOW_TEMPLATE_INCOMPLETE`、
 `ROLE_ASSIGNMENT_FAILED`、`ROLE_ASSIGNMENT_AMBIGUOUS`、`DATUM_DEFINITION_UNCONFIRMED`、
 `FEATURE_MAPPING_UNCONFIRMED`、`OUTPUT_PURPOSE_UNCONFIRMED`、
 `POSE_CONVENTION_UNCONFIRMED`、`PLC_MAPPING_UNCONFIRMED`、`ANGLE_OUT_OF_RANGE`、`INTERNAL_ERROR`。
@@ -44,3 +45,16 @@
 
 这些字段只解释检测证据，不是人工真值。增强开关关闭时，既有有效/失败判定不变；增强开启后，0个或多个
 真槽、分布式圆污染、覆盖不足或重拟合漂移仍必须fail-closed并清空所有姿态角。
+
+## 020固定阴影与槽双侧壁同源性诊断
+
+020继续使用开放的diagnostics扩展点，不改变顶层Schema版本。fixtureShadowEvidence记录两处相机坐标固定
+阴影模板的逐候选匹配、成对完整性、相似性和局部灰度/梯度剖面。固定角仅是nuisance prior，绝不是
+ignore mask；原始候选必须完整保留，candidateSuppressionApplied恒为false。
+
+grooveSourceConsistency记录槽两侧壁的灰度跃迁幅值差、梯度差、归一化局部剖面差/相关性、径向覆盖、
+端点结构和每项硬门结果。任何一项不可信都以GROOVE_SOURCE_INCONSISTENT安全失败，不能把真槽一侧与
+工装阴影另一侧拼成开口。槽与阴影重叠时只允许比较固定模板预测信号与额外残差；没有经人工复核的模板剖面、
+没有唯一残差假设或缺少一处固定阴影时，必须输出不完整/歧义证据，不能按31度或328度直接删除候选。
+
+两个020开关默认关闭。当前阈值和无真值回放只能作为诊断实验，不能称为生产准确率或已修复。

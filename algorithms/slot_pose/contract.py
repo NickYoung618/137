@@ -1,4 +1,4 @@
-"""Stable v2 output contract and angle semantics for A-face slot pose."""
+"""Stable v2/v3 output contract and angle semantics for A-face slot pose."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from tools.dataset_common import inspect_image
 SCHEMA_VERSION = "slot-pose-result/2"
 SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.11.0"
+ALGORITHM_VERSION = "0.12.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -31,6 +31,8 @@ ERROR_CODES = {
     "GROOVE_RECOGNITION_FAILED",
     "GROOVE_RECOGNITION_AMBIGUOUS",
     "GROOVE_REFINEMENT_FAILED",
+    "GROOVE_SOURCE_INCONSISTENT",
+    "FIXTURE_SHADOW_TEMPLATE_INCOMPLETE",
     "PHYSICAL_OUTER_CIRCLE_FAILED",
     "HOUSING_CIRCLE_NOT_FOUND",
     "HOUSING_CIRCLE_AMBIGUOUS",
@@ -106,6 +108,26 @@ def load_config(config_path: Path) -> dict[str, Any]:
         "legacy_single_notch", "paired_notches_centerline", "multi_notch_roles", "single_real_groove",
     }:
         raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
+    from algorithms.slot_pose.fixture_shadow import merged_fixture_shadow_config
+    from algorithms.slot_pose.sidewall_consistency import merged_sidewall_consistency_config
+
+    fixture_shadow = merged_fixture_shadow_config(detector.get("fixture_shadow_model"))
+    source_consistency = merged_sidewall_consistency_config(
+        detector.get("sidewall_source_consistency")
+    )
+    if mode != "single_real_groove":
+        if fixture_shadow["enabled"]:
+            raise ValueError(
+                "detector.fixture_shadow_model can only be enabled in single_real_groove mode"
+            )
+        if source_consistency["enabled"]:
+            raise ValueError(
+                "detector.sidewall_source_consistency can only be enabled in single_real_groove mode"
+            )
+    if mode == "single_real_groove" or "fixture_shadow_model" in detector:
+        detector["fixture_shadow_model"] = fixture_shadow
+    if mode == "single_real_groove" or "sidewall_source_consistency" in detector:
+        detector["sidewall_source_consistency"] = source_consistency
     if "dark_candidate_robustness" in detector and mode != "single_real_groove":
         from algorithms.slot_pose.angular_profile import merged_dark_candidate_robustness_config
 
@@ -203,6 +225,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
             detector["groove_refinement"] = merged_groove_refinement_config(
                 detector.get("groove_refinement")
             )
+            if (
+                detector["sidewall_source_consistency"]["enabled"]
+                and detector["groove_refinement"]["threshold_version"]
+                != "groove-sidewall-subpixel-v2"
+            ):
+                raise ValueError(
+                    "detector.sidewall_source_consistency requires groove refinement v2"
+                )
     return config
 
 

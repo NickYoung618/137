@@ -90,6 +90,84 @@
             "min_interval_overlap_ratio": {"type": "number", "minimum": 0, "maximum": 1}
           }
         },
+        "fixture_shadow_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version", "enabled", "coordinate_frame_id", "threshold_version",
+            "profile_sample_count", "profile_window_half_width_deg",
+            "pair_max_prominence_normalized_difference",
+            "pair_max_deficit_normalized_difference", "pair_max_profile_mae",
+            "enable_overlap_decomposition", "max_overlap_hypotheses",
+            "min_residual_level", "min_residual_width_deg",
+            "residual_dedup_center_deg", "templates"
+          ],
+          "properties": {
+            "schema_version": {"const": "fixture-shadow-model/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "coordinate_frame_id": {"const": "image-x-right-y-down-clockwise/1"},
+            "threshold_version": {"type": "string", "minLength": 1},
+            "profile_sample_count": {"type": "integer", "minimum": 9, "maximum": 129},
+            "profile_window_half_width_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 90},
+            "pair_max_prominence_normalized_difference": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "pair_max_deficit_normalized_difference": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "pair_max_profile_mae": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "enable_overlap_decomposition": {"type": "boolean", "default": false},
+            "max_overlap_hypotheses": {"type": "integer", "minimum": 1, "maximum": 8},
+            "min_residual_level": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "min_residual_width_deg": {"type": "number", "exclusiveMinimum": 0},
+            "residual_dedup_center_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 30},
+            "templates": {
+              "type": "array", "minItems": 2, "maxItems": 2,
+              "items": {"$ref": "#/$defs/fixtureShadowTemplate"}
+            }
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"enable_overlap_decomposition": {"const": true}}, "required": ["enable_overlap_decomposition"]},
+              "then": {
+                "properties": {
+                  "templates": {
+                    "items": {
+                      "allOf": [
+                        {"$ref": "#/$defs/fixtureShadowTemplate"},
+                        {
+                          "properties": {
+                            "human_verified": {"const": true},
+                            "intensity_profile": {"minItems": 9},
+                            "gradient_profile": {"minItems": 9}
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "sidewall_source_consistency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version", "enabled", "threshold_version",
+            "max_contrast_normalized_difference",
+            "max_gradient_normalized_difference", "max_normalized_profile_mae",
+            "min_normalized_profile_correlation",
+            "max_radial_coverage_difference", "max_endpoint_structure_difference"
+          ],
+          "properties": {
+            "schema_version": {"const": "groove-sidewall-source-consistency/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "threshold_version": {"type": "string", "minLength": 1},
+            "max_contrast_normalized_difference": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_gradient_normalized_difference": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_normalized_profile_mae": {"type": "number", "minimum": 0, "maximum": 1},
+            "min_normalized_profile_correlation": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_radial_coverage_difference": {"type": "number", "minimum": 0, "maximum": 1},
+            "max_endpoint_structure_difference": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
         "groove_recognition": {
           "type": "object",
           "properties": {
@@ -350,6 +428,32 @@
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fixtureShadowTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "template_id", "center_deg", "max_center_drift_deg", "half_width_deg",
+        "max_half_width_delta_deg", "prominence_reference",
+        "max_prominence_normalized_difference", "deficit_area_reference",
+        "max_deficit_normalized_difference", "intensity_profile",
+        "gradient_profile", "template_source", "human_verified"
+      ],
+      "properties": {
+        "template_id": {"type": "string", "minLength": 1},
+        "center_deg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "max_center_drift_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 30},
+        "half_width_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 90},
+        "max_half_width_delta_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 90},
+        "prominence_reference": {"type": "number", "exclusiveMinimum": 0},
+        "max_prominence_normalized_difference": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "deficit_area_reference": {"type": "number", "exclusiveMinimum": 0},
+        "max_deficit_normalized_difference": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+        "intensity_profile": {"type": "array", "maxItems": 129, "items": {"type": "number"}},
+        "gradient_profile": {"type": "array", "maxItems": 129, "items": {"type": "number"}},
+        "template_source": {"type": "string", "minLength": 1},
+        "human_verified": {"type": "boolean"}
+      }
+    },
     "roleRule": {
       "type": "object",
       "required": ["expected_reference_azimuth_deg", "max_deviation_deg"],
