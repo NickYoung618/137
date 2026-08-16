@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2-transitional-blind-execution.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "blindStatus", "strictUnseenClaimed", "selectedSampleId", "blindManifestSha256", "lockPayloadSha256", "configFileSha256", "resultsFileSha256", "resultCount", "validCount", "executionCount", "executedAtUtc", "absolutePathsStored"],
+  "properties": {
+    "schemaVersion": {"const": "a2-transitional-blind-execution/1"},
+    "blindStatus": {"const": "NON_STRICT_TRANSITIONAL"},
+    "strictUnseenClaimed": {"const": false},
+    "selectedSampleId": {"type": "string", "minLength": 1},
+    "blindManifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "lockPayloadSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "configFileSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "resultsFileSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "resultCount": {"type": "integer", "minimum": 0},
+    "validCount": {"type": "integer", "minimum": 0},
+    "executionCount": {"const": 1},
+    "executedAtUtc": {"type": "string", "minLength": 1},
+    "absolutePathsStored": {"const": false}
+  },
+  "additionalProperties": false
+}

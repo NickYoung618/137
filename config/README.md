@@ -51,6 +51,20 @@
 - Manifest的`split`是评估用途：development/validation/test/acceptance必须按物理样品和源图lineage隔离。
   当前唯一人工标注只能属于development；700张已检查结果属于锁定acceptance回归，不能用来选择阈值；
   独立validation/test在新增样品并完成复核前必须报告`NOT_AVAILABLE`。
+- 009 canonical inventory的`relative_path`统一相对一个显式`data-root`，只处理清单列出的图；不要把根下normal和
+  `坏/`拆成两个含义不同的相对路径基准。Mac若保留`A2/...`前缀，则`data-root`必须是A2的父目录。
+- `a2-canonical-inventory.template.csv`是资产清单模板，sample/condition/repeat可空；
+  `a2-confirmed-grouping.template.csv`是经负责人确认的分组契约，三字段与authority/provenance必须完整。
+  两者不可互换，空draft不得传入显式grouping路径。
+- `a2-confirmed-segments.template.csv`是人工确认的连续采集段契约；先用`tools/materialize_a2_grouping.py`
+  校验每个class的sequence范围精确覆盖inventory、没有重叠，再生成逐图grouping。段边界不得由算法结果选择。
+- 静态重复性资格要求同sample、同condition、连续至少20帧。算法失败帧保留在有效率分母；角度使用环形统计，
+  跨组只汇总各组中心化残差。bad组还要求badReason、poseUsable及非算法来源的authority/provenance。
+- normal/bad是否为同一物理零件未确认时，sampleId必须使用`normal:`/`bad:`限定，避免错误合并；确认后再由负责人
+  提供映射，不得用目录、角度或算法结果反推。
+- 过渡盲测锁只消费Manifest/资格表，不接受results参数；冻结后未来开发必须使用导出的development Manifest，
+  发布候选只通过`run_transitional_blind_once.py`执行一次。工具在调检测前独占写入execution claim，中断也不允许重跑。
+  当前700张的锁永远是非严格过渡证据。
 
 Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
 并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。

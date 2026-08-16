@@ -211,3 +211,32 @@ Mac没有服务器绝对路径时，权威服务器参考图用例会显示`skip
   独立validation/test尚不存在，需新增物理样品和逐图复核标注。25张同源JPEG不能充当独立validation。
 
 命令和剩余BLOCKED见`specs/008-a2-replay-integrity-hardening/quickstart.md`。
+
+## 009多组静态重复性与过渡盲测
+
+009不改圆、真槽、槽壁或85°引导算法，只修复评估数据流：
+
+- canonical inventory统一相对一个显式A2数据根；只处理清单列出的图，normal根不会递归重复扫入`坏/`。
+- inventory draft允许sample/condition/repeat为空，但绝不能直接冒充confirmed grouping。正式分组CSV必须逐图同SHA覆盖，
+  带物理sample、固定condition、连续repeat和非算法authority/provenance。
+- 采集负责人可只确认精简的`confirmed-segments.csv`；`tools/materialize_a2_grouping.py`会在不读取算法结果的前提下
+  校验无重叠、完整覆盖，再展开成逐图confirmed grouping。
+- 每个静态condition必须同一零件、同一次摆放/装夹、同角度/工况且至少20帧。报告逐组环形角极差、样本标准差、
+  P95绝对残差、检测有效率、圆心/半径/槽口中点波动和耗时P50/P95/max，再池化组内中心化残差做总体汇总。
+- normal 481–498与499–500为同一sample的两个不同condition，分别18帧和2帧，数据保留但不进入正式静态汇总。
+- bad组缺少badReason/poseUsable权威语义时只保留诊断，不能进入权威静态汇总。
+- 过渡盲测按完整sample的源图SHA集合确定性选择，绝不读取算法结果。当前700张已被查看，因此锁固定标为
+  `NON_STRICT_TRANSITIONAL`；工具同时导出排除该sample的development Manifest，并用一次性包装器阻止重复执行。
+
+Mac完整命令、输出路径和判读见`specs/009-a2-static-repeatability-governance/quickstart.md`。常用入口：
+
+```bash
+uv run python tools/materialize_a2_grouping.py --help
+uv run python tools/prepare_a2_evaluation.py --help
+uv run python tools/freeze_transition_blind.py --help
+uv run python tools/evaluate_static_repeatability.py --help
+uv run python tools/run_transitional_blind_once.py --help
+```
+
+需要顺/逆时针调整仍是检测成功；只有几何不可用才是`DETECTION_FAILED`。本工具不产生PLC命令，也不把重复性
+数值自动判为生产PASS/FAIL。

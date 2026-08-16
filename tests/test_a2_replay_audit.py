@@ -67,7 +67,7 @@ class ReplayAuditTests(unittest.TestCase):
         self.assertEqual("FAILED", report["status"])
         self.assertTrue(report["consistencyErrors"])
 
-    def test_repeatability_requires_explicit_groups_and_uses_circular_range(self) -> None:
+    def test_repeatability_requires_explicit_groups_and_at_least_twenty_frames(self) -> None:
         manifest = {"datasetId": "set", "policy": {"groupingExplicit": True}, "images": [
             {"imageId": "a", "relativePath": "a.bmp", "sha256": "a", "datasetClass": "normal", "split": "validation", "sampleId": "part", "conditionId": "same"},
             {"imageId": "b", "relativePath": "b.bmp", "sha256": "b", "datasetClass": "normal", "split": "validation", "sampleId": "part", "conditionId": "same"},
@@ -79,8 +79,23 @@ class ReplayAuditTests(unittest.TestCase):
         second["result"].update({"currentAngleDeg": -179.5, "correctionRawDeg": -95.5, "correctionDeg": -95.5,
                                  "imageFrameCorrectionDeg": -95.5, "signedRelativeRotationDeg": -95.5})
         report = audit_replay(manifest, [first, second])
-        self.assertEqual("EVALUATED", report["repeatability"]["status"])
-        self.assertAlmostEqual(1.0, report["repeatability"]["groups"][0]["circularRangeDeg"])
+        self.assertEqual("NOT_EVALUATED", report["repeatability"]["status"])
+        self.assertEqual(20, report["repeatability"]["minimumFrames"])
+
+        images = []
+        results = []
+        for index in range(20):
+            digest = f"repeat-{index}"
+            images.append({"imageId": digest, "relativePath": f"r/{index}.bmp", "sha256": digest,
+                           "datasetClass": "normal", "split": "validation", "sampleId": "part", "conditionId": "same"})
+            repeated = payload(digest, True, "DETECTED_NEEDS_ADJUSTMENT", "COUNTERCLOCKWISE")
+            repeated["result"].update({"currentAngleDeg": 179.5 if index % 2 == 0 else -179.5,
+                                       "correctionRawDeg": -94.5, "correctionDeg": -94.5,
+                                       "imageFrameCorrectionDeg": -94.5, "signedRelativeRotationDeg": -94.5})
+            results.append(repeated)
+        complete = audit_replay({"datasetId": "set", "policy": {"groupingExplicit": True}, "images": images}, results)
+        self.assertEqual("EVALUATED", complete["repeatability"]["status"])
+        self.assertAlmostEqual(1.0, complete["repeatability"]["groups"][0]["circularRangeDeg"])
 
     def test_700_record_json_audit_is_bounded_and_does_not_read_images(self) -> None:
         images = []

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2-transitional-blind-lock.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "blindStatus", "priorExposure", "selection", "selectedSampleId", "selectedConditionIds", "selectedImageCount", "selectedImageSha256s", "sourceManifestSha256", "blindManifestSha256", "developmentManifestSha256", "createdAtUtc", "lockPayloadSha256", "maxExecutionCount", "executionCount", "strictUnseenClaimed"],
+  "properties": {
+    "schemaVersion": {"const": "a2-transitional-blind-lock/1"},
+    "blindStatus": {"const": "NON_STRICT_TRANSITIONAL"},
+    "priorExposure": {"const": true},
+    "selection": {"type": "object", "required": ["algorithm", "version", "salt", "candidateSampleCount", "selectedRankKey"]},
+    "selectedSampleId": {"type": "string", "minLength": 1},
+    "selectedConditionIds": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+    "selectedImageCount": {"type": "integer", "minimum": 1},
+    "selectedImageSha256s": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "minItems": 1, "uniqueItems": true},
+    "sourceManifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "blindManifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "developmentManifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "createdAtUtc": {"type": "string", "minLength": 1},
+    "lockPayloadSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "maxExecutionCount": {"const": 1},
+    "executionCount": {"const": 0},
+    "strictUnseenClaimed": {"const": false},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

@@ -102,14 +102,15 @@ def audit_replay(manifest: dict[str, Any], results: list[dict[str, Any]]) -> dic
             if payload.get("result", {}).get("valid") is True and isinstance(angle, (int, float)):
                 grouped[(str(item.get("sampleId")), str(item.get("conditionId") or item.get("position")))].append(float(angle))
         for (sample, condition), angles in sorted(grouped.items()):
-            if len(angles) >= 2:
+            if len(angles) >= 20:
                 repeatability_groups.append({
                     "sampleId": sample, "conditionId": condition, "count": len(angles),
                     "circularRangeDeg": _circular_range(angles),
                 })
     repeatability = {
         "status": "EVALUATED" if repeatability_groups else "NOT_EVALUATED",
-        "reason": None if repeatability_groups else "EXPLICIT_PHYSICAL_SAMPLE_AND_CONDITION_GROUPS_REQUIRED",
+        "reason": None if repeatability_groups else "EXPLICIT_PHYSICAL_SAMPLE_AND_CONDITION_WITH_AT_LEAST_20_VALID_FRAMES_REQUIRED",
+        "minimumFrames": 20,
         "groups": repeatability_groups,
     }
 

@@ -1,0 +1,4 @@
+dataset_class,start_capture_sequence,end_capture_sequence,sample_id,condition_id,split,grouping_authority,grouping_provenance
+normal,1,20,normal:part-001,fixed-pose,unassigned,capture_owner,review-YYYYMMDD
+normal,481,498,normal:part-025,pre-rotation-481-498,unassigned,capture_owner,review-YYYYMMDD
+normal,499,500,normal:part-025,post-rotation-499-500,unassigned,capture_owner,review-YYYYMMDD
