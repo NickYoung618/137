@@ -291,14 +291,31 @@ class ManualGrooveReviewCliTests(unittest.TestCase):
 
     def test_cli_fixture_does_not_reference_server_asset_root(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             config_path = write_isolated_slot_pose_config(root / "legacy-fixture")
             serialized = config_path.read_text(encoding="utf-8")
             server_only_root = str(Path("/", "home", "ubuntu", "disk", "gyj"))
             self.assertNotIn(server_only_root, serialized)
             config = json.loads(serialized)
             for key in ("source_path", "annotation_path", "reference_path"):
-                self.assertTrue(Path(config["legacy_asset"][key]).is_relative_to(root))
+                self.assertTrue(Path(config["legacy_asset"][key]).resolve().is_relative_to(root))
+
+    def test_cli_fixture_containment_handles_symlinked_temp_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            physical_root = temporary_root / "physical"
+            physical_root.mkdir()
+            logical_root = temporary_root / "logical"
+            try:
+                logical_root.symlink_to(physical_root, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"directory symlink unavailable: {exc}")
+            config_path = write_isolated_slot_pose_config(logical_root / "legacy-fixture")
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            for key in ("source_path", "annotation_path", "reference_path"):
+                self.assertTrue(
+                    Path(config["legacy_asset"][key]).resolve().is_relative_to(logical_root.resolve())
+                )
 
 
 if __name__ == "__main__":

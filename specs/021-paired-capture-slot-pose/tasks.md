@@ -153,3 +153,7 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 
 - [x] T069 为tests/test_manual_groove_pose_review.py和tests/test_slot_pose_batch.py建立临时目录自包含legacy最小资产/配置helper，移除对config/inspection.example.json中服务器绝对路径的直接依赖，并增加服务器专用gyj资产根不存在时仍可运行的回归 per SC-006/SC-008/plan: Target Platform (partial)
 - [x] T070 运行聚焦与服务器全量测试、diff/媒体/绝对路径污染门，在evidence记录Mac的390 pass/16 skip/4同根因error及修复后复跑要求，提交并推送021分支且不合main per SC-008/Constitution IV (partial)
+
+## Phase 14: Convergence - macOS符号路径规范化
+
+- [x] T071 修正tests/test_manual_groove_pose_review.py的临时资产包含断言，在比较前对根目录和资产路径同时resolve，并用临时symlink root回归覆盖macOS逻辑临时路径与规范物理路径的等价语义；运行聚焦/全量/污染门、记录证据并推送021，不改helper输出或任何生产路径 per SC-008/plan: Target Platform (partial)
