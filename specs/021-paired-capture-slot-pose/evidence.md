@@ -192,3 +192,13 @@
 - 全部39份JSON Schema结构检查通过；paired/review/queue三个CLI帮助命令通过；diff、审计ID覆盖、JSON解析、大文件、媒体/JSONL、现场绝对路径和门限/默认值污染门全部通过。
 - 本轮没有读取或重跑sealed part-006，没有重跑140/700张，没有根据145/147 AUTO结果调参，没有改0.12、0.5°、默认配置、main或PLC。
 - 除此次规格/契约/测试收敛外，人工复核前没有可安全继续的核心算法改动。下一道门仍是145/147的同源双壁、完整可见性、真实槽肩端点和fixture污染人工裁决；定量精度还需像素级槽壁/端点与独立圆心真值。
+
+## Mac Independent Completion-audit Gate at 6f12585
+
+- Mac独立验证分支021-mac-validation已干净快进到6f12585664a69b79e20e85734dac2124f37cb4d0，验证前后工作树均保持干净。
+- 021六模块聚焦套件共运行63项，结果OK；其中1项按平台条件skip，0 failure、0 error，耗时4.922s。
+- 全量discover共运行397项，结果OK；其中16项按平台条件skip，0 failure、0 error，耗时14.788s。
+- 仓库全部39份JSON Schema均通过Draft 2020-12结构检查；run_paired_slot_pose.py、prepare_slot_pose_prefill_review.py、build_complete_groove_review_queue.py三个CLI帮助门和git diff --check均通过。
+- 测试中出现的“trace output must be outside the Git worktree”文字是被断言覆盖的预期fail-closed拒绝路径，不是测试失败。
+- 本提交只改变manifest先验校验、Spec和测试，没有改变图像检测、任何阈值或默认开关，因此不重跑140张原始BMP是有证据支持的最小验证策略。
+- 该Mac门只证明跨平台契约和工程门通过，不改变真实数据结论。part-008 145/147仍需人工确认完整同源双壁、槽肩端点和fixture污染；确认前不得调参、声明真实准确率或合并main，PLC继续未授权。

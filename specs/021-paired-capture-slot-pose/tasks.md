@@ -164,3 +164,7 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - [x] T073 [P] [US1] 先在 tests/test_paired_capture_slot_pose.py 增加Schema拒绝重复captureIndex、跨平台绝对/逃逸路径和CONFIRMED缺参数测试，再收紧 contracts/paired-capture-manifest.schema.json 与运行时路径一致性 per FR-001-FR-003/FR-017/SC-001
 - [x] T074 建立 specs/021-paired-capture-slot-pose/completion-audit.md，对FR-001—FR-070和SC-001—SC-025逐条标记已证实、历史矛盾已纠正、缺真值证据与可安全继续项，不推断part-008 145/147真值 per Constitution I/IV
 - [x] T075 运行聚焦/全量/Schema/CLI/diff/媒体/绝对路径污染门，更新 specs/021-paired-capture-slot-pose/evidence.md，提交并推送021功能分支，不读sealed part-006、不调门限、不合main、不碰PLC per SC-008/SC-009/SC-025
+
+## Phase 16: Independent Mac Gate - completion audit
+
+- [x] T076 将Mac对6f12585的六模块、全量、39份Schema、三个CLI与diff独立通过结果记录到 specs/021-paired-capture-slot-pose/evidence.md 和 completion-audit.md；明确预期trace拒绝文本不是失败、无需重跑140 BMP且145/147人工门不变，只提交推送021分支，不合main、不碰PLC per SC-008/SC-009/SC-025

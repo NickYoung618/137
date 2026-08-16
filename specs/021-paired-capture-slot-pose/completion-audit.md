@@ -108,7 +108,7 @@
 | SC-005 | PROVEN_SYNTHETIC | P/S：单帧usable、顺/逆、80/90已测；缺真实对。 |
 | SC-006 | PROVEN | E：默认关闭和服务器/Mac全量无回退。 |
 | SC-007 | PROVEN | R/E：374/369完整审阅包与禁止元素测试通过。 |
-| SC-008 | PROVEN | E：服务器424/424、Mac发现396/396且16 skip，Schema/CLI/污染门通过。 |
+| SC-008 | PROVEN | E：完成审计提交的服务器425项与Mac 397项均通过；Mac 16项平台skip，39份Schema、CLI和污染门通过。 |
 | SC-009 | GUARDRAIL_PROVEN + MISSING_EXTERNAL_EVIDENCE | 没有真实双拍/确认参数，所以正确结论就是不宣称准确率、不合main。 |
 | SC-010 | PROVEN | R：NOT_MATCHED/PAIR_INCOMPLETE与flags合成测试通过。 |
 | SC-011 | PROVEN_SYNTHETIC | L：方形槽、fixture跨源、多解、缺边、31/328已覆盖。 |
@@ -125,7 +125,7 @@
 | SC-022 | PROVEN | L/S/E：374结构无experimentalCandidate/端点/中点/引导。 |
 | SC-023 | PROVEN_SYNTHETIC | S：完整双壁运行时语义无回退；真实完整双壁尚待人工裁决。 |
 | SC-024 | PROVEN | R/E：140张按sample对账，排除part-006/019，Mac/服务器均选147、145。 |
-| SC-025 | PROVEN | E：Schema/CLI/全量门通过，默认、0.12、0.5°、main和PLC不变。 |
+| SC-025 | PROVEN | E：6f12585的服务器/Mac全量、39份Schema及CLI门通过，默认、0.12、0.5°、main和PLC不变。 |
 
 ## 被证据否定或纠正的旧理解
 
