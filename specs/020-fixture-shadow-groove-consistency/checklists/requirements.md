@@ -30,4 +30,5 @@
 
 - Core 480-frame and strict 302-frame statistics were independently reproduced.
 - Relaxed 365/413 lacks its angle-window definition and remains non-normative.
-- Production activation remains blocked pending manual labels and Mac original-BMP validation.
+- Mac original-BMP paired replay is recorded; production activation remains blocked pending the six structured manual labels.
+- Fixture-pair similarity is explicitly diagnostic, not a production hard gate; the arc-shadow versus square-groove observation is marked provisional pending six LabelMe frames.
