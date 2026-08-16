@@ -205,9 +205,9 @@
 - **FR-035**: 局部诊断 MUST 把当前start/end仅视为待验证anchor；对每个anchor同时向coarse raw candidate内侧与外侧枚举墙候选，原start/end MUST NOT 作为不可越过的搜索边界。
 - **FR-036**: 每个墙对假设 MUST 检查物理槽宽、两壁近似直且平行、径向深度/覆盖及差异、相邻外圆槽口端点、局部暗开口连续支持、槽肩/角点结构、边缘对比/梯度及归一化剖面同源性；跨越另一暗区或fixture证据的组合 MUST 拒绝。
 - **FR-037**: 只有恰好一个假设通过且唯一性门成立时 MAY 输出`experimentalCandidate`；该候选 MUST 标记authoritative=false、posePromotionAllowed=false，原`GROOVE_SOURCE_INCONSISTENT`、valid=false、机械/PLC空值保持不变。
-- **FR-038**: 零个通过返回LOCAL_SECOND_WALL_NOT_FOUND，多个通过返回MULTIPLE_LOCAL_OPENINGS；不得回填0度、旧角或权威姿态。
+- **FR-038**: 零个完整墙对通过时，若没有墙状像素证据则返回LOCAL_SECOND_WALL_NOT_FOUND；若至少一个墙cluster存在但未建立完整同源唯一槽口，则返回PARTIALLY_OBSERVED并遵循FR-062—FR-065；多个完整通过解返回MULTIPLE_LOCAL_OPENINGS。任一分支均不得回填0度、旧角或权威姿态。
 - **FR-039**: 局部搜索 MUST 与相机固定角无关；合成测试 MUST 覆盖31°和328°附近的同一方形槽可被搜索，而非被屏蔽。
-- **FR-040**: 局部诊断 MUST 分字段区分CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS和SOURCE_INCONSISTENT，并输出failureStage；不得把不同阶段统一包装成识别失败。
+- **FR-040**: 局部诊断 MUST 分字段区分CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、PARTIALLY_OBSERVED/PARTIAL_GROOVE_OBSERVATION、MULTIPLE_LOCAL_OPENINGS和SOURCE_INCONSISTENT，并输出failureStage；不得把不同阶段统一包装成识别失败。
 - **FR-041**: 候选评估 MUST 标明分层layer和hardGate；局部区间/槽宽、直壁平行性、径向覆盖、同一外圆端点、暗开口连续性和侧壁来源矛盾均为硬拒绝，score只能排序证据，不能覆盖硬门。
 - **FR-042**: 合成验证 MUST 量化任意旋转、0/360环绕、31°/328°、曝光/模糊、fixture对比与宽度不对称、部分重叠场景的两端点误差、槽中点角误差和fail-closed；单张132112_4只作development参考，不产生准确率声明。
 - **FR-043**: 每个side search seed MUST 输出seed角、搜索窗口、极性、检测点数、拟合状态、拒绝阶段、failedChecks、拟合交点角、seed到拟合角差、直线参数及有限线段端点；不得只保留最终代表边。

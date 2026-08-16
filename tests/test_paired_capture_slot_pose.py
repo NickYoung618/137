@@ -126,6 +126,11 @@ class PairedCaptureContractTests(unittest.TestCase):
         broken = json.loads(json.dumps(manifest)); broken["pairs"][0]["rotation"]["guess"] = 1
         with self.assertRaisesRegex(ValueError, "unknown"):
             validate_paired_manifest(broken)
+        for unsafe in ("/private/a2/1.bmp", "A2/../1.bmp", "C:\\A2\\1.bmp", "\\\\server\\A2\\1.bmp"):
+            broken = json.loads(json.dumps(manifest))
+            broken["pairs"][0]["captures"][0]["relativePath"] = unsafe
+            with self.subTest(unsafe=unsafe), self.assertRaisesRegex(ValueError, "safe and relative"):
+                validate_paired_manifest(broken)
 
     def test_unconfirmed_null_parameters_are_valid_contract(self) -> None:
         manifest = {
@@ -188,6 +193,45 @@ class PairedCaptureContractTests(unittest.TestCase):
         jsonschema.Draft202012Validator(
             json.loads((root / "paired-slot-pose-result.schema.json").read_text(encoding="utf-8"))
         ).validate(detected)
+
+    @unittest.skipIf(jsonschema is None, "jsonschema is installed by the explicit Schema gate")
+    def test_manifest_schema_rejects_unsafe_or_incomplete_pairs_before_runtime(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "contracts"
+        validator = jsonschema.Draft202012Validator(json.loads(
+            (root / "paired-capture-manifest.schema.json").read_text(encoding="utf-8")
+        ))
+        valid = {"schemaVersion": "paired-capture-manifest/1", "datasetId": "x", "pairs": [pair()]}
+        validator.validate(valid)
+
+        duplicate_index = json.loads(json.dumps(valid))
+        duplicate_index["pairs"][0]["captures"][1]["captureIndex"] = 1
+        absolute_path = json.loads(json.dumps(valid))
+        absolute_path["pairs"][0]["captures"][0]["relativePath"] = "/private/a2/1.bmp"
+        parent_escape = json.loads(json.dumps(valid))
+        parent_escape["pairs"][0]["captures"][0]["relativePath"] = "A2/../1.bmp"
+        windows_absolute = json.loads(json.dumps(valid))
+        windows_absolute["pairs"][0]["captures"][0]["relativePath"] = "C:\\A2\\1.bmp"
+        incomplete_confirmed = json.loads(json.dumps(valid))
+        incomplete_confirmed["pairs"][0]["rotation"]["nominalRotationDeg"] = None
+
+        for name, payload in (
+            ("duplicate_index", duplicate_index),
+            ("absolute_path", absolute_path),
+            ("parent_escape", parent_escape),
+            ("windows_absolute", windows_absolute),
+            ("incomplete_confirmed", incomplete_confirmed),
+        ):
+            with self.subTest(name=name), self.assertRaises(jsonschema.ValidationError):
+                validator.validate(payload)
+
+        unconfirmed = json.loads(json.dumps(valid))
+        unconfirmed["pairs"][0]["rotation"].update({
+            "parameterStatus": "UNCONFIRMED",
+            "nominalRotationDeg": None,
+            "rotationDirection": None,
+            "rotationToleranceDeg": None,
+        })
+        validator.validate(unconfirmed)
 
 
 class CandidateExtractionTests(unittest.TestCase):

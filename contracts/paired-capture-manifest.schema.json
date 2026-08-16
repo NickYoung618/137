@@ -20,7 +20,11 @@
       "required": ["captureIndex", "relativePath", "imageSha256"],
       "properties": {
         "captureIndex": {"enum": [1, 2]},
-        "relativePath": {"type": "string", "minLength": 1},
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/|\\\\|[A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+        },
         "imageSha256": {"$ref": "#/$defs/sha"},
         "captureTimestamp": {"type": ["string", "null"]}
       }
@@ -34,7 +38,22 @@
         "rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE", null]},
         "rotationToleranceDeg": {"type": ["number", "null"], "minimum": 0, "maximum": 30},
         "conventionId": {"const": "image-x-right-y-down-clockwise/1"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"parameterStatus": {"const": "CONFIRMED"}},
+            "required": ["parameterStatus"]
+          },
+          "then": {
+            "properties": {
+              "nominalRotationDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+              "rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE"]},
+              "rotationToleranceDeg": {"type": "number", "minimum": 0, "maximum": 30}
+            }
+          }
+        }
+      ]
     },
     "pair": {
       "type": "object", "additionalProperties": false,
@@ -45,7 +64,27 @@
         "rotation": {"$ref": "#/$defs/rotation"},
         "captures": {
           "type": "array", "minItems": 2, "maxItems": 2,
-          "items": {"$ref": "#/$defs/capture"}
+          "items": {"$ref": "#/$defs/capture"},
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["captureIndex"],
+                "properties": {"captureIndex": {"const": 1}}
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["captureIndex"],
+                "properties": {"captureIndex": {"const": 2}}
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
         }
       }
     }

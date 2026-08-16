@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +117,13 @@ def _validate_sha(value: Any, name: str) -> str:
     return value
 
 
+def _is_safe_relative_path(value: str) -> bool:
+    """Use platform-independent path rules for portable A2 manifests."""
+    if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", value):
+        return False
+    return ".." not in re.split(r"[\\/]", value)
+
+
 def validate_paired_manifest(manifest: dict[str, Any]) -> None:
     if not isinstance(manifest, dict) or manifest.get("schemaVersion") != PAIRED_MANIFEST_SCHEMA_VERSION:
         raise ValueError("unsupported paired manifest schemaVersion")
@@ -155,7 +163,10 @@ def validate_paired_manifest(manifest: dict[str, Any]) -> None:
             if unknown_capture:
                 raise ValueError(f"paired manifest capture has unknown fields: {unknown_capture}")
             relative = capture.get("relativePath")
-            if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            if (
+                not isinstance(relative, str) or not relative
+                or Path(relative).is_absolute() or not _is_safe_relative_path(relative)
+            ):
                 raise ValueError(f"pair {pair_id} relativePath must be safe and relative")
             sha = _validate_sha(capture.get("imageSha256"), "imageSha256")
             if relative in seen_paths or sha in seen_shas:

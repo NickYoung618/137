@@ -55,7 +55,9 @@ all enumerated hypotheses and failed checks. `UNIQUE_DIAGNOSTIC` may carry an ex
 but `authoritative=false` and `posePromotionAllowed=false` are invariants. The surrounding slot result
 remains `GROOVE_SOURCE_INCONSISTENT`, `valid=false`, with no pose promotion or PLC command.
 Failure inventory distinguishes `CANDIDATE_MISSING`, `LOCAL_SECOND_WALL_NOT_FOUND`,
-`MULTIPLE_LOCAL_OPENINGS` and `SOURCE_INCONSISTENT`. Every hypothesis check names its evidence layer
+`PARTIALLY_OBSERVED`, `MULTIPLE_LOCAL_OPENINGS` and `SOURCE_INCONSISTENT`. `LOCAL_SECOND_WALL_NOT_FOUND`
+means that no wall-like pixel cluster survived; `PARTIALLY_OBSERVED` means wall-like evidence exists but
+no complete same-source unique opening was established. Every hypothesis check names its evidence layer
 and whether it is a hard gate; a numerical score is diagnostic ranking only and cannot override a gate.
 
 Version 2 added no threshold or authority change. It exposed `anchorEvidence`, every seed's search window,

@@ -182,3 +182,13 @@
 - 服务器`424/424`与Mac `396`个发现用例（其中`16 skip`）的数量差异已归因于平台条件；Mac跨平台资产与符号路径问题关闭。
 - 同算法`fc9210d`的140张原始BMP回放与part-008 145/147队列早已在Mac独立复现，本测试修正没有改算法，所以不重跑数据是正确的。
 - 021仍与main隔离且PLC未授权。唯一下一道门是人工查看145/147：两条AUTO墙是否同属一个无遮挡真实方形槽、端点是否在真实外圆槽肩、是否有fixture边污染。人工确认前不宣称姿态准确率、不调门限、不合并main。
+
+## Requirement-by-requirement Completion Audit after 30a7045
+
+- 新增completion-audit.md，对FR-001—FR-070和SC-001—SC-025各自恰好一行对账。自动覆盖检查为FR=70、SC=25，无缺号、重号或NEEDS CLARIFICATION。
+- 审计发现FR-038/FR-040的早期失败清单与FR-062—FR-065的PARTIALLY_OBSERVED冲突。规格现澄清为：0墙状证据才是NOT_FOUND；有墙cluster但无完整同源唯一开口是PARTIAL；多个完整解是MULTIPLE。当前运行时原本已符合此语义，本轮没有改候选或门限。
+- paired manifest Schema现在与运行时一致地拒绝重复captureIndex、POSIX/Windows/UNC绝对路径、父目录逃逸路径和CONFIRMED缺失旋转参数；UNCONFIRMED空参数仍是合法的非权威输入。
+- TDD证据：新Schema测试在修改前以5个预期失败证明缺口；修复后021聚焦6个模块77项全部通过，仓库全量425 tests in 116.095s全部通过。
+- 全部39份JSON Schema结构检查通过；paired/review/queue三个CLI帮助命令通过；diff、审计ID覆盖、JSON解析、大文件、媒体/JSONL、现场绝对路径和门限/默认值污染门全部通过。
+- 本轮没有读取或重跑sealed part-006，没有重跑140/700张，没有根据145/147 AUTO结果调参，没有改0.12、0.5°、默认配置、main或PLC。
+- 除此次规格/契约/测试收敛外，人工复核前没有可安全继续的核心算法改动。下一道门仍是145/147的同源双壁、完整可见性、真实槽肩端点和fixture污染人工裁决；定量精度还需像素级槽壁/端点与独立圆心真值。
