@@ -9,6 +9,7 @@ import numpy as np
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.local_second_wall import (
     DEFAULT_LOCAL_SECOND_WALL_CONFIG,
+    _cluster_side_searches,
     diagnose_local_second_wall,
     merged_local_second_wall_config,
 )
@@ -111,6 +112,30 @@ class LocalSecondWallTests(unittest.TestCase):
         self.assertEqual(1, output["passedHypothesisCount"])
         self.assertTrue(output["sideSearchCandidates"])
         self.assertTrue(all("failedChecks" in item for item in output["sideSearchCandidates"]))
+        self.assertEqual(2, len(output["anchorEvidence"]))
+        self.assertTrue(all(item["lineSegment"] is not None for item in output["anchorEvidence"]))
+        self.assertEqual("coarse_raw_dark_candidate", output["localInterval"]["source"])
+        self.assertTrue(all(
+            "searchWindowDeg" in item and "rejectionStage" in item
+            and "fitToSeedDeltaDeg" in item and "lineSegment" in item
+            and "mergeDisposition" in item
+            for item in output["sideSearchCandidates"]
+        ))
+        accepted_search_ids = {
+            item["searchCandidateId"] for item in output["sideSearchCandidates"]
+            if item["searchStatus"] == "accepted"
+        }
+        clustered_search_ids = {
+            candidate_id
+            for cluster in output["sideSearchMergeClusters"]
+            for candidate_id in cluster["memberSearchCandidateIds"]
+        }
+        self.assertEqual(accepted_search_ids, clustered_search_ids)
+        self.assertEqual(
+            len(output["rawHypotheses"]),
+            sum(item["memberCount"] for item in output["hypothesisMergeClusters"]),
+        )
+        self.assertEqual(len(output["hypotheses"]), len(output["hypothesisMergeClusters"]))
         self.assertEqual([], output["hypotheses"][0]["failedChecks"])
         self.assertTrue(all(check["hardGate"] for check in output["hypotheses"][0]["checks"]))
         self.assertEqual(
@@ -175,6 +200,25 @@ class LocalSecondWallTests(unittest.TestCase):
         self.assertGreaterEqual(output["passedHypothesisCount"], 2)
         self.assertIsNone(output["experimentalCandidate"])
         self.assertEqual(["multiple_same_opening_second_walls"], output["failedChecks"])
+
+    def test_side_merge_trace_preserves_members_and_does_not_merge_distinct_angles(self) -> None:
+        candidates = []
+        for index, angle in enumerate((10.0, 10.3, 11.0), start=1):
+            candidates.append({
+                "searchCandidateId": f"rising-wall-search-{index:03d}",
+                "searchStatus": "accepted", "seedDeg": angle,
+                "polarity": "rising", "intersectionAngleDeg": angle,
+            })
+        representatives, clusters = _cluster_side_searches(candidates, "rising", 0.5)
+        self.assertEqual(2, len(representatives))
+        self.assertEqual([2, 1], [item["memberCount"] for item in clusters])
+        self.assertEqual(
+            {item["searchCandidateId"] for item in candidates},
+            {value for item in clusters for value in item["memberSearchCandidateIds"]},
+        )
+        self.assertEqual("REPRESENTATIVE", candidates[0]["mergeDisposition"])
+        self.assertEqual("SUPPRESSED_MEMBER", candidates[1]["mergeDisposition"])
+        self.assertEqual("REPRESENTATIVE", candidates[2]["mergeDisposition"])
 
     def test_no_second_wall_in_local_interval_fails_closed(self) -> None:
         image = groove_image(170.0, 210.0, center=CENTER, radius=RADIUS)
@@ -296,7 +340,8 @@ class LocalSecondWallTests(unittest.TestCase):
         image = groove_image(170.18, 179.72, center=CENTER, radius=RADIUS)
         output = diagnose_local_second_wall(
             image, CENTER, RADIUS, candidate(168.0, 182.0), refine(image, 170.0, 180.0),
-            bilinear_sample, parabolic_peak, v2_config(), source_config(), diagnostic_config(),
+            bilinear_sample, parabolic_peak, v2_config(), source_config(),
+            diagnostic_config(scan_step_deg=7.0, max_scan_seeds=3),
         )
         jsonschema.validate(output, result_schema)
 

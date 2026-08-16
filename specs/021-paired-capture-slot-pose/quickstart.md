@@ -120,6 +120,37 @@ part-006，也不要用本实验结果调020门限：
 `summary.json`报告的是实验候选形成率与fail-closed分布；在多图人工真值完成前不得称precision、accuracy或
 “识别率提升”。part-019已知混合边负例必须保持顶层无效；如实验候选形成，只能用简化审阅材料人工裁决。
 
+## 374/369逐seed根因trace（不需要原图）
+
+拉取最新021后，可先直接读取8ff3889已经生成的三折JSONL，不重跑任何BMP。工具只按basename抽取算法字段，
+输出不含绝对路径、图片像素或人工真值：
+
+    uv run python tools/extract_local_second_wall_trace.py \
+      --results "$A2_WORK/local-second-wall-021/three-fold/fold-01.jsonl" \
+      --results "$A2_WORK/local-second-wall-021/three-fold/fold-02.jsonl" \
+      --results "$A2_WORK/local-second-wall-021/three-fold/fold-03.jsonl" \
+      --image-name Pic_2026_08_13_132433_374.bmp \
+      --image-name Pic_2026_08_13_132433_369.bmp \
+      --output "$A2_WORK/local-second-wall-021/part-019-374-369-trace-8ff3889.json"
+
+旧结果可回答各seed的拟合角、线参数和失败检查；要获得diagnostic/2新增的anchor、拒绝阶段和merge cluster，
+只需用同一SHA为`79960702...`的实验配置重跑374/369两张，不需要再跑140张。生成二图manifest的方法见上文
+“默认关闭的局部第二壁诊断”，输出到：
+
+    "$A2_WORK/local-second-wall-021/part-019-374-369-results-v2.jsonl"
+
+然后再次导出：
+
+    uv run python tools/extract_local_second_wall_trace.py \
+      --results "$A2_WORK/local-second-wall-021/part-019-374-369-results-v2.jsonl" \
+      --image-name Pic_2026_08_13_132433_374.bmp \
+      --image-name Pic_2026_08_13_132433_369.bmp \
+      --output "$A2_WORK/local-second-wall-021/part-019-374-369-trace-v2.json"
+
+判读顺序：先看`localInterval`是否覆盖混合大暗区，再比较两个`anchorEvidence`；随后按极性查看
+`searchOutcomeSummary`和`sideSearchCandidates[].rejectionStage`，最后核对
+`sideSearchMergeClusters`及`hypothesisMergeClusters`成员守恒。不得因为输出接近0.12就放宽门限。
+
 ## 判读
 
 - `status=DETECTED`：双拍几何有效且图像引导可用；PLC仍阻断。

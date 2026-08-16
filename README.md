@@ -118,6 +118,8 @@ RAW/SIMPLIFIED两栏联系表和精简`AUTO_` LabelMe预填。simplified只显�
 `detector.local_second_wall_diagnostic`是另一个默认不存在/关闭的实验开关：仅在020同源性拒绝后，
 复用现有亚像素侧壁和灰度剖面，在同一局部暗开口枚举第二壁。即使唯一实验候选形成，顶层仍保持
 `GROOVE_SOURCE_INCONSISTENT`、`valid=false`，不得产生权威姿态或PLC命令。
+`tools/extract_local_second_wall_trace.py`可从Git外JSONL按文件basename导出不含原图和绝对路径的
+逐seed/拟合/归并trace，用于判断另一真壁是未生成、生成后被拒绝还是被错误归并；该工具不允许调门限。
 
 ## 007单真槽闭环图像引导
 

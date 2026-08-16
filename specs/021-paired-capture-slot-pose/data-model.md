@@ -76,6 +76,11 @@
 - hypotheses[].checks[]：layer、hardGate、metric value/threshold/passed；score不得覆盖失败hardGate
 - status：DISABLED、NOT_EVALUATED、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS、SOURCE_INCONSISTENT、UNIQUE_DIAGNOSTIC
 - failureStage、errorCode：CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS、SOURCE_INCONSISTENT
+- anchorEvidence[]：anchorSide、endpointAngleDeg、requiredOppositePolarity、line、lineSegment、support/contrast/gradient/profile
+- sideSearchCandidates[]新增searchWindowDeg、rejectionStage、fitToSeedDeltaDeg、lineSegment、mergeClusterId、mergeDisposition
+- sideSearchMergeClusters[]：polarity、representative、members/suppressed、seed/fitted angles、fittedAngleSpreadDeg、mergeThresholdDeg、selectionRule
+- rawHypotheses[]与hypothesisMergeClusters[]：归并前假设全集、归并成员和最终代表；不得只输出归并后假设
+- searchOutcomeSummary：每极性seed/accepted/rejection counts、cluster count/sizes和NO_EDGE_SIGNAL/SINGLE_EDGE_ATTRACTOR/MULTIPLE_EDGE_CLUSTERS
 
 ## State Transitions
 

@@ -20,6 +20,7 @@
 - Q: 374/369人工反馈能证明什么？ → A: 只能证明上方方形缺口是真槽所在区域、019命中至少一侧且另一侧跨到右上阴影；这是一条语义负例，不是像素级侧壁、端点或fixture区域真值。
 - Q: 能否在该负例上直接放宽020门限？ → A: 不能。新增独立、默认关闭的局部第二侧壁诊断；它枚举同一局部开口内的侧壁假设并保持原020失败状态，只有人工标签和分件验证后才讨论生产选择。
 - Q: 双拍和单帧当前哪个优先？ → A: 双拍保留为最终架构，但不等待现场旋转参数；当前开发主线是单帧真实槽区域、第二侧壁和槽口端点定位。审阅表达只完成证据语义修正，不继续扩展可视化。
+- Q: Mac 140张回放后能否把0.12放宽到0.14？ → A: 绝对不能。33个运行局部诊断的记录全部仍为SOURCE_INCONSISTENT；part-019的唯一假设复现已知混合边。稳定和接近阈值不证明正确，应先查粗区间、anchor、逐seed吸附、生成拒绝阶段和merge cluster。
 
 ## User Scenarios & Testing
 
@@ -174,6 +175,10 @@
 - **FR-040**: 局部诊断 MUST 分字段区分CANDIDATE_MISSING、LOCAL_SECOND_WALL_NOT_FOUND、MULTIPLE_LOCAL_OPENINGS和SOURCE_INCONSISTENT，并输出failureStage；不得把不同阶段统一包装成识别失败。
 - **FR-041**: 候选评估 MUST 标明分层layer和hardGate；局部区间/槽宽、直壁平行性、径向覆盖、同一外圆端点、暗开口连续性和侧壁来源矛盾均为硬拒绝，score只能排序证据，不能覆盖硬门。
 - **FR-042**: 合成验证 MUST 量化任意旋转、0/360环绕、31°/328°、曝光/模糊、fixture对比与宽度不对称、部分重叠场景的两端点误差、槽中点角误差和fail-closed；单张132112_4只作development参考，不产生准确率声明。
+- **FR-043**: 每个side search seed MUST 输出seed角、搜索窗口、极性、检测点数、拟合状态、拒绝阶段、failedChecks、拟合交点角、seed到拟合角差、直线参数及有限线段端点；不得只保留最终代表边。
+- **FR-044**: side candidate merge MUST 输出每个cluster的极性、代表candidate、全部member/suppressed candidateId、seed角、拟合角、角扩展、merge阈值和选择规则；未拟合seed必须显式标记未进入cluster。
+- **FR-045**: anchor MUST 输出来源侧、原始端点角、原始直线/点数/对比/梯度/径向剖面和所需相反极性；粗local interval MUST 明确标记来源为coarse raw dark candidate，以便判断搜索域是否跨真槽与fixture。
+- **FR-046**: pre-merge hypotheses与最终hypothesis merge cluster MUST 分开输出；诊断摘要 MUST 按极性统计seed、拟合成功、失败阶段、cluster数量/大小并区分NO_EDGE_SIGNAL、SINGLE_EDGE_ATTRACTOR和MULTIPLE_EDGE_CLUSTERS。
 
 ### Key Entities
 
@@ -204,6 +209,7 @@
 - **SC-011**: 局部第二壁合成测试100%覆盖唯一方形槽成功、fixture跨源拒绝、多解、缺边和31°/328°；所有假设均可审计failedChecks。
 - **SC-012**: 实验关闭时全量测试输出与020行为不变；实验开启且唯一诊断候选形成时，顶层仍为GROOVE_SOURCE_INCONSISTENT、valid=false且无权威姿态/PLC命令。
 - **SC-013**: 受控曝光/模糊和任意旋转方形槽中，两端点误差各小于0.15°、中点角误差小于0.10°；fixture不对称/部分重叠不得形成跨源权威配对，零解/多解保持显式失败。
+- **SC-014**: 合成trace测试100%证明每个seed可追溯到拒绝阶段或一个merge cluster、cluster成员无丢失、pre/post-merge假设可对账；Mac可从JSONL导出374/369脱敏trace而不读取或复制原图。
 
 ## Assumptions
 

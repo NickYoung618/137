@@ -98,7 +98,7 @@ def merged_local_second_wall_config(config: dict[str, Any] | None) -> dict[str, 
 
 def _base(config: dict[str, Any], status: str) -> dict[str, Any]:
     return {
-        "schemaVersion": "local-second-wall-diagnostic/1",
+        "schemaVersion": "local-second-wall-diagnostic/2",
         "thresholdVersion": config["threshold_version"],
         "enabled": bool(config["enabled"]),
         "status": status,
@@ -106,7 +106,12 @@ def _base(config: dict[str, Any], status: str) -> dict[str, Any]:
         "errorCode": None,
         "authoritative": False,
         "posePromotionAllowed": False,
+        "anchorEvidence": [],
         "sideSearchCandidates": [],
+        "sideSearchMergeClusters": [],
+        "searchOutcomeSummary": {},
+        "rawHypotheses": [],
+        "hypothesisMergeClusters": [],
         "hypotheses": [],
         "experimentalCandidate": None,
     }
@@ -216,29 +221,160 @@ def _candidate_side(
     )
     base = {
         "seedDeg": float(seed_deg), "polarity": polarity,
+        "searchWindowDeg": {
+            "startDeg": wrap_360_deg(seed_deg - float(refinement_config["tangential_search_margin_deg"])),
+            "endDeg": wrap_360_deg(seed_deg + float(refinement_config["tangential_search_margin_deg"])),
+            "halfWidthDeg": float(refinement_config["tangential_search_margin_deg"]),
+        },
         "detectedPointCount": len(points), "profileEvidence": profile,
         "edgeContrastMedian": None if not contrasts else float(np.median(contrasts)),
         "edgeGradientMedianPerPx": None if not gradients else float(np.median(gradients)),
         "searchStatus": str(decision["status"]), "failedCheck": decision["failedCheck"],
     }
     if decision["status"] != "accepted":
-        return {**base, "intersectionAngleDeg": None, "line": None, "points": []}
+        if len(points) < int(refinement_config["min_side_points"]):
+            rejection_stage = "EDGE_SAMPLING"
+        elif decision["failedCheck"] == "intersection":
+            rejection_stage = "OUTER_CIRCLE_INTERSECTION"
+        else:
+            rejection_stage = "LINE_CONSENSUS"
+        return {
+            **base, "rejectionStage": rejection_stage,
+            "fitToSeedDeltaDeg": None, "intersectionAngleDeg": None,
+            "line": None, "lineSegment": None, "points": [],
+        }
     mask = np.asarray(decision["inlierMask"], dtype=bool)
     kept = np.asarray(points, dtype=float)[mask]
     line = decision["line"]
+    direction = np.asarray((-float(line[1]), float(line[0])), dtype=float)
+    projected = kept @ direction
+    first, last = kept[int(np.argmin(projected))], kept[int(np.argmax(projected))]
     return {
-        **base, "supportPointCount": int(len(kept)),
+        **base, "rejectionStage": None,
+        "supportPointCount": int(len(kept)),
         "sampledPointCount": int(len(radii)),
         "lineInlierRatio": float(decision["inlierRatio"]),
         "lineLongitudinalCoverage": float(decision["longitudinalCoverage"]),
         "lineResidualPx": {"p95": float(decision["residualP95Px"])},
         "line": {"a": float(line[0]), "b": float(line[1]), "c": float(line[2])},
+        "lineSegment": {
+            "start": {"x": float(first[0]), "y": float(first[1])},
+            "end": {"x": float(last[0]), "y": float(last[1])},
+        },
         "points": [[float(value) for value in point] for point in kept],
         "intersectionAngleDeg": float(decision["intersectionAngleDeg"]),
+        "fitToSeedDeltaDeg": float(
+            (float(decision["intersectionAngleDeg"]) - float(seed_deg) + 180.0) % 360.0 - 180.0
+        ),
         "intersection": {
             "x": float(decision["intersection"][0]),
             "y": float(decision["intersection"][1]),
         },
+    }
+
+
+def _side_line_segment(side: dict[str, Any]) -> dict[str, Any] | None:
+    line, points = side.get("line"), side.get("points")
+    if not isinstance(line, dict) or not isinstance(points, list) or len(points) < 2:
+        return None
+    try:
+        array = np.asarray(points, dtype=float)
+        direction = np.asarray((-float(line["b"]), float(line["a"])), dtype=float)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if array.ndim != 2 or array.shape[1] != 2 or not np.isfinite(array).all():
+        return None
+    projected = array @ direction
+    first, last = array[int(np.argmin(projected))], array[int(np.argmax(projected))]
+    return {
+        "start": {"x": float(first[0]), "y": float(first[1])},
+        "end": {"x": float(last[0]), "y": float(last[1])},
+    }
+
+
+def _cluster_side_searches(
+    candidates: list[dict[str, Any]], polarity: str, merge_deg: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Preserve the v1 greedy representative behavior and expose every merge."""
+    accepted = [item for item in candidates if item.get("intersectionAngleDeg") is not None]
+    accepted.sort(key=lambda item: (float(item["intersectionAngleDeg"]), float(item["seedDeg"])))
+    working: list[dict[str, Any]] = []
+    for side in candidates:
+        side["mergeClusterId"] = None
+        side["mergeDisposition"] = "NOT_CLUSTERED_FIT_REJECTED"
+    for side in accepted:
+        selected = next((
+            cluster for cluster in working
+            if circular_distance_deg(
+                float(side["intersectionAngleDeg"]),
+                float(cluster["representative"]["intersectionAngleDeg"]),
+            ) <= merge_deg
+        ), None)
+        if selected is None:
+            selected = {"representative": side, "members": []}
+            working.append(selected)
+        selected["members"].append(side)
+    clusters: list[dict[str, Any]] = []
+    representatives: list[dict[str, Any]] = []
+    for index, cluster in enumerate(working, start=1):
+        identifier = f"{polarity}-merge-cluster-{index:03d}"
+        representative = cluster["representative"]
+        members = cluster["members"]
+        representative["mergeClusterId"] = identifier
+        representative["mergeDisposition"] = "REPRESENTATIVE"
+        for member in members:
+            member["mergeClusterId"] = identifier
+            if member is not representative:
+                member["mergeDisposition"] = "SUPPRESSED_MEMBER"
+        reference_angle = float(representative["intersectionAngleDeg"])
+        deltas = [
+            (float(item["intersectionAngleDeg"]) - reference_angle + 180.0) % 360.0 - 180.0
+            for item in members
+        ]
+        clusters.append({
+            "clusterId": identifier,
+            "polarity": polarity,
+            "representativeSearchCandidateId": representative["searchCandidateId"],
+            "representativeAngleDeg": reference_angle,
+            "memberSearchCandidateIds": [item["searchCandidateId"] for item in members],
+            "suppressedSearchCandidateIds": [
+                item["searchCandidateId"] for item in members if item is not representative
+            ],
+            "memberSeedDeg": [float(item["seedDeg"]) for item in members],
+            "memberFittedAngleDeg": [float(item["intersectionAngleDeg"]) for item in members],
+            "fittedAngleSpreadDeg": float(max(deltas) - min(deltas)),
+            "memberCount": len(members),
+            "mergeThresholdDeg": float(merge_deg),
+            "selectionRule": "lowest_fitted_angle_then_seed_v1_compatible",
+        })
+        representatives.append(representative)
+    return representatives, clusters
+
+
+def _search_summary(
+    candidates: list[dict[str, Any]], clusters: list[dict[str, Any]], polarity: str,
+) -> dict[str, Any]:
+    selected = [item for item in candidates if item["polarity"] == polarity]
+    accepted = [item for item in selected if item["searchStatus"] == "accepted"]
+    failures: dict[str, int] = {}
+    for item in selected:
+        stage = str(item.get("rejectionStage") or "ACCEPTED")
+        failures[stage] = failures.get(stage, 0) + 1
+    matching_clusters = [item for item in clusters if item["polarity"] == polarity]
+    if not accepted:
+        classification = "NO_EDGE_SIGNAL"
+    elif len(matching_clusters) == 1:
+        classification = "SINGLE_EDGE_ATTRACTOR"
+    else:
+        classification = "MULTIPLE_EDGE_CLUSTERS"
+    return {
+        "polarity": polarity,
+        "seedCount": len(selected),
+        "acceptedFitCount": len(accepted),
+        "rejectionStageCounts": failures,
+        "mergeClusterCount": len(matching_clusters),
+        "mergeClusterSizes": [int(item["memberCount"]) for item in matching_clusters],
+        "classification": classification,
     }
 
 
@@ -285,6 +421,9 @@ def diagnose_local_second_wall(
     result["localInterval"] = {
         "startDeg": local_start, "endDeg": local_end, "spanDeg": local_span,
         "marginDeg": float(merged["local_interval_margin_deg"]),
+        "source": "coarse_raw_dark_candidate",
+        "coarseCandidateId": coarse_candidate.get("candidateId"),
+        "initialRefinedEndpointProfileDeg": initial_refinement.get("openingEndpointProfileDeg"),
     }
     refinement = merged_groove_refinement_config(refinement_config)
     minimum_inset = float(refinement["radial_inset_min_px"]) * pixel_scale
@@ -309,6 +448,26 @@ def diagnose_local_second_wall(
         if isinstance(side, dict) and isinstance(side.get("line"), dict):
             anchors.append((name, side, polarity))
     result["anchorSides"] = [name for name, _, _ in anchors]
+    endpoint_angles = initial_refinement.get("openingEndpointProfileDeg")
+    for name, side, required_polarity in anchors:
+        endpoint_index = 0 if name == "startSide" else 1
+        endpoint_angle = None
+        if isinstance(endpoint_angles, list) and len(endpoint_angles) > endpoint_index:
+            try:
+                endpoint_angle = float(endpoint_angles[endpoint_index]) % 360.0
+            except (TypeError, ValueError):
+                endpoint_angle = None
+        result["anchorEvidence"].append({
+            "anchorSide": name,
+            "endpointAngleDeg": endpoint_angle,
+            "requiredOppositePolarity": required_polarity,
+            "line": side.get("line"),
+            "lineSegment": _side_line_segment(side),
+            "supportPointCount": side.get("supportPointCount"),
+            "edgeContrastMedian": side.get("edgeContrastMedian"),
+            "edgeGradientMedianPerPx": side.get("edgeGradientMedianPerPx"),
+            "profileEvidence": side.get("profileEvidence"),
+        })
     if not anchors:
         result["failureStage"] = "candidate_anchor"
         result["errorCode"] = "CANDIDATE_MISSING"
@@ -321,6 +480,7 @@ def diagnose_local_second_wall(
     seeds = [wrap_360_deg(local_start + local_span * index / (seed_count - 1)) for index in range(seed_count)]
     searched: dict[str, list[dict[str, Any]]] = {}
     all_searches: list[dict[str, Any]] = []
+    side_clusters: list[dict[str, Any]] = []
     for polarity in {item[2] for item in anchors}:
         raw_sides = [
             _candidate_side(
@@ -335,22 +495,22 @@ def diagnose_local_second_wall(
                 str(side.get("failedCheck") or "side_search_not_accepted")
             ]
             all_searches.append(side)
-        accepted = [item for item in raw_sides if item.get("intersectionAngleDeg") is not None]
-        accepted.sort(key=lambda item: (float(item["intersectionAngleDeg"]), float(item["seedDeg"])))
-        distinct: list[dict[str, Any]] = []
-        for side in accepted:
-            if any(
-                circular_distance_deg(float(side["intersectionAngleDeg"]), float(existing["intersectionAngleDeg"]))
-                <= float(merged["candidate_merge_deg"])
-                for existing in distinct
-            ):
-                continue
-            distinct.append(side)
-        searched[polarity] = distinct
+        representatives, clusters = _cluster_side_searches(
+            raw_sides, polarity, float(merged["candidate_merge_deg"]),
+        )
+        searched[polarity] = representatives
+        side_clusters.extend(clusters)
     result["sideSearchCandidates"] = sorted(
         all_searches,
         key=lambda item: (str(item["polarity"]), float(item["seedDeg"])),
     )
+    result["sideSearchMergeClusters"] = sorted(
+        side_clusters, key=lambda item: (str(item["polarity"]), str(item["clusterId"])),
+    )
+    result["searchOutcomeSummary"] = {
+        polarity: _search_summary(all_searches, side_clusters, polarity)
+        for polarity in sorted({str(item["polarity"]) for item in all_searches})
+    }
     hypotheses: list[dict[str, Any]] = []
     for anchor_name, anchor, other_polarity in anchors:
         try:
@@ -446,10 +606,13 @@ def diagnose_local_second_wall(
                 (dark_fraction if dark_fraction is not None else -1.0) - float(merged["min_opening_dark_fraction"]),
             ]
             hypotheses.append({
-                "hypothesisId": "",
+                "hypothesisId": None,
+                "rawHypothesisId": "",
                 "anchorSide": anchor_name,
                 "anchorAngleDeg": anchor_angle,
                 "candidateSeedDeg": float(candidate_side["seedDeg"]),
+                "candidateSearchId": candidate_side["searchCandidateId"],
+                "candidateMergeClusterId": candidate_side["mergeClusterId"],
                 "candidateAngleDeg": candidate_angle,
                 "openingEndpointProfileDeg": [start_angle, end_angle],
                 "openingWidthDeg": opening_span,
@@ -476,20 +639,56 @@ def diagnose_local_second_wall(
         not bool(item["passed"]), -float(item["score"]), str(item["anchorSide"]),
         float(item["candidateAngleDeg"]),
     ))
-    distinct: list[dict[str, Any]] = []
+    for index, hypothesis in enumerate(hypotheses, start=1):
+        hypothesis["rawHypothesisId"] = f"raw-local-wall-hypothesis-{index:03d}"
+        hypothesis["hypothesisMergeClusterId"] = None
+        hypothesis["mergeDisposition"] = "UNASSIGNED"
+    working_hypothesis_clusters: list[dict[str, Any]] = []
     for hypothesis in hypotheses:
         endpoints = hypothesis["openingEndpointProfileDeg"]
-        if any(
-            circular_distance_deg(float(endpoints[0]), float(other["openingEndpointProfileDeg"][0]))
-            <= float(merged["candidate_merge_deg"])
-            and circular_distance_deg(float(endpoints[1]), float(other["openingEndpointProfileDeg"][1]))
-            <= float(merged["candidate_merge_deg"])
-            for other in distinct
-        ):
-            continue
-        distinct.append(hypothesis)
+        selected = next((
+            cluster for cluster in working_hypothesis_clusters
+            if circular_distance_deg(
+                float(endpoints[0]),
+                float(cluster["representative"]["openingEndpointProfileDeg"][0]),
+            ) <= float(merged["candidate_merge_deg"])
+            and circular_distance_deg(
+                float(endpoints[1]),
+                float(cluster["representative"]["openingEndpointProfileDeg"][1]),
+            ) <= float(merged["candidate_merge_deg"])
+        ), None)
+        if selected is None:
+            selected = {"representative": hypothesis, "members": []}
+            working_hypothesis_clusters.append(selected)
+        selected["members"].append(hypothesis)
+    distinct: list[dict[str, Any]] = []
+    hypothesis_clusters: list[dict[str, Any]] = []
+    for index, cluster in enumerate(working_hypothesis_clusters, start=1):
+        cluster_id = f"hypothesis-merge-cluster-{index:03d}"
+        representative = cluster["representative"]
+        members = cluster["members"]
+        representative["hypothesisMergeClusterId"] = cluster_id
+        representative["mergeDisposition"] = "REPRESENTATIVE"
+        for member in members:
+            member["hypothesisMergeClusterId"] = cluster_id
+            if member is not representative:
+                member["mergeDisposition"] = "SUPPRESSED_MEMBER"
+        hypothesis_clusters.append({
+            "clusterId": cluster_id,
+            "representativeRawHypothesisId": representative["rawHypothesisId"],
+            "memberRawHypothesisIds": [item["rawHypothesisId"] for item in members],
+            "suppressedRawHypothesisIds": [
+                item["rawHypothesisId"] for item in members if item is not representative
+            ],
+            "memberCount": len(members),
+            "mergeThresholdDeg": float(merged["candidate_merge_deg"]),
+            "selectionRule": "first_ranked_hypothesis_v1_compatible",
+        })
+        distinct.append(representative)
     for index, hypothesis in enumerate(distinct, start=1):
         hypothesis["hypothesisId"] = f"local-wall-hypothesis-{index:03d}"
+    result["rawHypotheses"] = hypotheses
+    result["hypothesisMergeClusters"] = hypothesis_clusters
     result["hypotheses"] = distinct
     passed = [item for item in distinct if item["passed"]]
     if len(passed) == 1:

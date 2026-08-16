@@ -458,12 +458,15 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
             "failedChecks": ["edge_contrast_asymmetry"],
         }
         diagnostic = {
-            "schemaVersion": "local-second-wall-diagnostic/1",
+            "schemaVersion": "local-second-wall-diagnostic/2",
             "thresholdVersion": "local-second-wall-diagnostic-v1",
             "enabled": True, "status": "UNIQUE_DIAGNOSTIC",
             "failureStage": None, "errorCode": None,
             "authoritative": False, "posePromotionAllowed": False,
+            "anchorEvidence": [],
             "sideSearchCandidates": [],
+            "sideSearchMergeClusters": [], "searchOutcomeSummary": {},
+            "rawHypotheses": [], "hypothesisMergeClusters": [],
             "hypotheses": [{"hypothesisId": "local-wall-hypothesis-001", "failedChecks": []}],
             "experimentalCandidate": {
                 "hypothesisId": "local-wall-hypothesis-001", "authoritative": False,

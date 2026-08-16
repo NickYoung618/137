@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "local-second-wall-trace-export.schema.json",
+  "title": "脱敏局部第二侧壁生成trace",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseCount", "cases", "privacy", "interpretation"],
+  "properties": {
+    "schemaVersion": {"const": "local-second-wall-trace-export/1"},
+    "caseCount": {"type": "integer", "minimum": 1},
+    "cases": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": [
+          "imageName", "topLevelValid", "topLevelErrorCode", "algorithmVersion",
+          "configSha256", "effectiveConfigSha256", "localSecondWallDiagnostic"
+        ],
+        "properties": {
+          "imageName": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+          "topLevelValid": {"type": "boolean"},
+          "topLevelErrorCode": {"type": ["string", "null"]},
+          "algorithmVersion": {"type": ["string", "null"]},
+          "configSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "effectiveConfigSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "localSecondWallDiagnostic": {"type": "object"}
+        }
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["containsImagePixels", "containsAbsolutePaths", "containsHumanTruth"],
+      "properties": {
+        "containsImagePixels": {"const": false},
+        "containsAbsolutePaths": {"const": false},
+        "containsHumanTruth": {"const": false}
+      }
+    },
+    "interpretation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["uniqueDiagnosticIsAuthoritative", "thresholdTuningAllowed", "purpose"],
+      "properties": {
+        "uniqueDiagnosticIsAuthoritative": {"const": false},
+        "thresholdTuningAllowed": {"const": false},
+        "purpose": {"const": "candidate_generation_and_merge_root_cause_only"}
+      }
+    }
+  }
+}

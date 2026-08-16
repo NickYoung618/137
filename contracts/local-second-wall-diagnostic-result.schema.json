@@ -6,10 +6,11 @@
   "additionalProperties": false,
   "required": [
     "schemaVersion", "thresholdVersion", "enabled", "status", "failureStage", "errorCode", "authoritative",
-    "posePromotionAllowed", "sideSearchCandidates", "hypotheses", "experimentalCandidate"
+    "posePromotionAllowed", "anchorEvidence", "sideSearchCandidates", "sideSearchMergeClusters",
+    "searchOutcomeSummary", "rawHypotheses", "hypothesisMergeClusters", "hypotheses", "experimentalCandidate"
   ],
   "properties": {
-    "schemaVersion": {"const": "local-second-wall-diagnostic/1"},
+    "schemaVersion": {"const": "local-second-wall-diagnostic/2"},
     "thresholdVersion": {"type": "string", "minLength": 1},
     "enabled": {"type": "boolean"},
     "status": {"enum": [
@@ -25,18 +26,53 @@
     "coarseCandidateId": {"type": ["string", "null"]},
     "localInterval": {"type": "object", "additionalProperties": true},
     "anchorSides": {"type": "array", "items": {"enum": ["startSide", "endSide"]}},
+    "anchorEvidence": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
     "sideSearchCandidates": {
       "type": "array",
       "items": {
         "type": "object", "additionalProperties": true,
-        "required": ["searchCandidateId", "seedDeg", "polarity", "searchStatus", "failedChecks"],
+        "required": [
+          "searchCandidateId", "seedDeg", "searchWindowDeg", "polarity", "searchStatus",
+          "rejectionStage", "fitToSeedDeltaDeg", "line", "lineSegment", "failedChecks",
+          "mergeClusterId", "mergeDisposition"
+        ],
         "properties": {
           "searchCandidateId": {"type": "string", "minLength": 1},
           "seedDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
           "polarity": {"enum": ["falling", "rising"]},
           "searchStatus": {"type": "string", "minLength": 1},
+          "searchWindowDeg": {"type": "object"},
+          "rejectionStage": {"type": ["string", "null"]},
+          "fitToSeedDeltaDeg": {"type": ["number", "null"]},
+          "line": {"type": ["object", "null"]},
+          "lineSegment": {"type": ["object", "null"]},
+          "mergeClusterId": {"type": ["string", "null"]},
+          "mergeDisposition": {"type": "string"},
           "failedChecks": {"type": "array", "items": {"type": "string"}}
         }
+      }
+    },
+    "sideSearchMergeClusters": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": [
+          "clusterId", "polarity", "representativeSearchCandidateId",
+          "memberSearchCandidateIds", "suppressedSearchCandidateIds", "memberCount",
+          "mergeThresholdDeg", "selectionRule"
+        ]
+      }
+    },
+    "searchOutcomeSummary": {"type": "object", "additionalProperties": {"type": "object"}},
+    "rawHypotheses": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
+    "hypothesisMergeClusters": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": [
+          "clusterId", "representativeRawHypothesisId", "memberRawHypothesisIds",
+          "suppressedRawHypothesisIds", "memberCount", "mergeThresholdDeg", "selectionRule"
+        ]
       }
     },
     "hypotheses": {

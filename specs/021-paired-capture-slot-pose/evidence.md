@@ -64,3 +64,29 @@
 - Changed-content scan found no new server/Mac absolute data root, evidence root or A2 archive path. Relevant source/spec/test trees contain no file over 1 MiB and no BMP/JPEG/PNG/MP4/RAR/ZIP.
 - Server has no 140 original BMP validation set, so Mac three-fold replay remains required. The quickstart reports top-level valid, experimental candidate status and failure inventory only; it explicitly forbids calling these counts accuracy.
 - `main` and `origin/main` remain `04d179628a6f3f7f2a30d2a4884ce5ef98abfffa`; this increment is feature-branch only and must not merge main.
+
+## Mac 140-frame Replay at 8ff3889
+
+- Mac used 140 nonsealed original BMPs and the existing three validation manifests. Experimental config SHA prefix was `79960702`; server does not possess these BMPs or JSONL and did not rerun them.
+- Top-level valid remained 0/140. The earlier 33 `GROOVE_SOURCE_INCONSISTENT` frames ran local diagnostics; the other 107 failed upstream and remained `NOT_RUN`.
+- All 33 local runs were `SOURCE_INCONSISTENT`: part-019 20 frames and part-008 13 frames. Each part-019 record had 48 side search entries and one final hypothesis.
+- The only part-019 hypothesis still failed `sidewall_source_consistency / edge_contrast_asymmetry`; 374/369 contrast normalized difference remained approximately 0.127–0.138 against the unchanged 0.12 gate while other reported gates passed.
+- Human interpretation is unchanged: the hypothesis appears to reproduce the known real-wall plus upper-right fixture-shadow mixed pair. Therefore this replay is not a recovery and is positive evidence against relaxing 0.12 to 0.14.
+- Required next evidence is pre-threshold generation trace: inherited local interval, both anchors, every seed fit/rejection, side merge clusters and hypothesis merge clusters. No accuracy or valid-rate improvement is claimed.
+
+## Candidate-generation Trace Increment
+
+- Diagnostic output advances to `local-second-wall-diagnostic/2`; config schema and every numerical threshold remain unchanged. The 0.12 contrast gate, ±4° tangential search, minimum support and 0.5° merge threshold were not relaxed.
+- Each anchor now records original endpoint angle, required opposite polarity, finite line segment, support, contrast, gradient and local profile. `localInterval.source=coarse_raw_dark_candidate` makes inherited mixed intervals explicit.
+- Every seed records its search window, polarity, detected points, rejection stage (`EDGE_SAMPLING`, `LINE_CONSENSUS`, or `OUTER_CIRCLE_INTERSECTION`), fit angle/delta, line/finite segment, failed checks and merge disposition.
+- Side merge clusters preserve all member/suppressed IDs, seed/fitted angles, spread, representative and the unchanged v1-compatible selection rule. Pre-merge hypotheses and hypothesis clusters similarly permit exact member accounting.
+- Per-polarity summaries classify `NO_EDGE_SIGNAL`, `SINGLE_EDGE_ATTRACTOR`, or `MULTIPLE_EDGE_CLUSTERS`. This is diagnostic evidence only; it does not select a more permissive pose.
+- Added a path-free `local-second-wall-trace-export/1` CLI. It selects exact image basenames from one or more JSONL files and emits no image pixels, absolute paths or human truth; output is required to remain Git-external and explicitly forbids threshold tuning.
+
+## Verification for Candidate-generation Trace
+
+- Focused local-wall/trace tests: 14 tests passed. Broader focused runtime/contract/review gate: 64 tests passed; the printed Git-internal-output error is an expected negative safety test.
+- Full suite ran 409 tests. 408 passed; the only failure was the pre-existing legacy wall-clock assertion `<8.0s`, measured at 15.93s. An isolated rerun measured 16.00s and failed the same timing-only assertion.
+- During both timing measurements, an unrelated protected-repository four-worker image batch occupied all available CPUs at roughly 30% CPU per worker. The failing legacy path does not contain or execute the default-off local diagnostic. The 8-second gate was not modified or waived; a clean-load rerun remains required before claiming the full gate passed.
+- JSON parsing, all root Draft 2020-12 Schema meta-validation, Python compile, trace CLI help, diff, media/large-file and new absolute-data-path checks passed.
+- After that external batch finished, the isolated unchanged legacy timing gate passed in `3.443s` against the original `<8.0s` assertion. A clean-load authoritative rerun then executed all `409 tests` in `109.561s`; all passed. No performance threshold, detector threshold or default configuration was changed to obtain this result.

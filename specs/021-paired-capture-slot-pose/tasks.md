@@ -84,3 +84,9 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - [x] T036 [US6] 输出CANDIDATE_MISSING/LOCAL_SECOND_WALL_NOT_FOUND/MULTIPLE_LOCAL_OPENINGS/SOURCE_INCONSISTENT阶段码，所有side search候选携带failedChecks per FR-040
 - [x] T037 [US6] 在局部假设checks标注geometry/endpoint/opening/source层和hardGate，同一外圆端点残差进入硬门，score不得越门 per FR-041
 - [x] T038 [US6] 补任意旋转、环绕、曝光/模糊、fixture对比/宽度不对称及部分重叠的端点/中点误差与fail-closed测试 per FR-042/SC-013
+- [x] T039 [US6] 记录Mac 140张021回放与part-019已知负例，不放宽0.12且不称准确率 per FR-033/SC-009
+- [x] T040 [US6] 在 tests/test_local_second_wall.py 先覆盖逐seed拒绝阶段、线段、anchor evidence、cluster成员守恒和pre/post hypothesis对账 per FR-043/FR-044/FR-045/FR-046/SC-014
+- [x] T041 [US6] 在 algorithms/slot_pose/local_second_wall.py 输出diagnostic/2逐seed、anchor、side/hypothesis merge cluster和吸附摘要，不改变配置/门限/权威状态 per FR-043/FR-044/FR-045/FR-046
+- [x] T042 新增 tools/extract_local_second_wall_trace.py 与 tests/test_local_second_wall_trace.py，从JSONL按basename导出无图像/无绝对路径的374/369结构trace per SC-014
+- [x] T043 更新Schema、contract、quickstart和README，给Mac二图重跑/trace命令，保持020/双拍默认关闭和PLC阻断 per FR-020/FR-043-FR-046
+- [x] T044 运行聚焦/全量/Schema/diff/媒体与路径污染门，更新evidence、提交推送021分支，不合main per SC-006/SC-008/SC-009

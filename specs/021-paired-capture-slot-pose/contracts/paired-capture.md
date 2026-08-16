@@ -49,10 +49,21 @@ against `contracts/local-second-wall-diagnostic-config.schema.json`; `enabled=tr
 single_real_groove, refinement v2 and enabled source consistency. It runs only after physical sidewall
 refinement succeeded but source consistency rejected the pair.
 
-The output validates against `contracts/local-second-wall-diagnostic-result.schema.json`. It retains
+The `local-second-wall-diagnostic/2` output validates against
+`contracts/local-second-wall-diagnostic-result.schema.json`. It retains
 all enumerated hypotheses and failed checks. `UNIQUE_DIAGNOSTIC` may carry an experimental candidate,
 but `authoritative=false` and `posePromotionAllowed=false` are invariants. The surrounding slot result
 remains `GROOVE_SOURCE_INCONSISTENT`, `valid=false`, with no pose promotion or PLC command.
 Failure inventory distinguishes `CANDIDATE_MISSING`, `LOCAL_SECOND_WALL_NOT_FOUND`,
 `MULTIPLE_LOCAL_OPENINGS` and `SOURCE_INCONSISTENT`. Every hypothesis check names its evidence layer
 and whether it is a hard gate; a numerical score is diagnostic ranking only and cannot override a gate.
+
+Version 2 adds no threshold or authority change. It exposes `anchorEvidence`, every seed's search window,
+fit/rejection stage, line/finite segment and fit-to-seed delta; `sideSearchMergeClusters` accounts for every
+accepted fit and its suppressed members. `rawHypotheses` and `hypothesisMergeClusters` similarly preserve
+pre/post merge state. `searchOutcomeSummary` classifies each polarity as `NO_EDGE_SIGNAL`,
+`SINGLE_EDGE_ATTRACTOR` or `MULTIPLE_EDGE_CLUSTERS`.
+
+`local-second-wall-trace-export/1` is a path-free read-only projection of result JSONL. It includes basenames
+and algorithm/config hashes but no pixels, absolute paths or human truth. It is root-cause evidence only and
+sets `thresholdTuningAllowed=false`.

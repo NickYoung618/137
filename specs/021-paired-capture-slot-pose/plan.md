@@ -20,7 +20,7 @@
 
 ## Constitution Check
 
-- 规格先行：PASS。42项FR和13项SC覆盖契约、未知参数、安全失败、审阅区间语义和局部第二壁诊断。
+- 规格先行：PASS。46项FR和14项SC覆盖契约、未知参数、安全失败、审阅区间语义、局部第二壁诊断和逐seed可追溯性。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -41,6 +41,7 @@
 10. `local_second_wall.py`在实验开关开启且020因同源性失败时运行；分别锚定已有两侧，在raw暗区局部范围内用既有侧壁采样/拟合产生备选边，并按区间、平行、覆盖、端点、暗开口及剖面门枚举所有假设。
 11. 唯一实验解只写入`diagnostics.localSecondWallDiagnostic`，标记不可提升；顶层失败码、valid、姿态和PLC字段完全不变。
 12. 局部诊断按candidate anchor→side search→local geometry→mouth endpoint→opening structure→sidewall source→uniqueness分层，硬物理矛盾不可被score覆盖；错误码保留失败阶段。
+13. 诊断trace在不改任何门限的前提下保留每个seed的生成阶段、拟合线段、归并cluster和pre/post-merge假设；Git外提取工具只读JSONL，不读取原图。
 
 ## Project Structure
 
@@ -50,6 +51,7 @@
     algorithms/slot_pose/local_second_wall.py
     tools/run_paired_slot_pose.py
     tools/prepare_slot_pose_prefill_review.py
+    tools/extract_local_second_wall_trace.py
     contracts/paired-capture-manifest.schema.json
     contracts/paired-slot-pose-config.schema.json
     contracts/paired-slot-pose-result.schema.json
@@ -57,6 +59,7 @@
     tests/test_paired_capture_slot_pose.py
     tests/test_slot_pose_prefill_review.py
     tests/test_local_second_wall.py
+    tests/test_local_second_wall_trace.py
 
 **Structure Decision**: 双拍功能不进入legacy_adapter选择链；局部第二壁模块只通过legacy_adapter的诊断钩子运行且禁止改变选择结果。图像审阅独立于生产算法。
 
