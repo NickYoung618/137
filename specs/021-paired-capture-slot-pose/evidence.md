@@ -241,3 +241,11 @@
 - 七个021契约/运行时/审阅模块聚焦回归`80 tests in 35.864s`，全部通过。服务器权威全量门`428 tests in 131.585s`，全部通过。输出中的Git内trace拒绝是预期fail-closed测试，不是失败。
 - 全40份JSON Schema通过Draft 2020-12 meta-validation；Python compile、CLI help、CLI实际`exit=2`且零输出、`git diff --check`及FR/SC 78/30审计对账均通过。
 - 污染检查确认没有`algorithms/`或`config/`差异，没有媒体、JSONL、现场绝对路径或大于等于1 MiB变更文件。未重跑140张，未读sealed part-006，main与PLC未触碰。
+
+## Mac Independent Gate for Definitive Clarification A at c7fdc46
+
+- Mac仓库的`021-mac-validation`已干净fast-forward到`c7fdc46c65d2fb737770d8b02a78f6bd50da0f17`，验证前后工作树均干净。差异核对确认只涉及fixture-contamination历史契约/工具/测试和Spec 021文档，无算法、门限或PLC变更。
+- Mac聚焦`tests.test_fixture_contamination_annotation`为`3/3`通过。权威全量门为`400 tests`全通过、`16 skipped`、`0 failure`/`0 error`，耗时`15.122s`；运行环境使用Mac已有uv。
+- `contracts/`下40份根Schema全部通过Draft 2020-12 `check_schema`。dormant CLI实测`exit=2`、stdout为`0`字节、未创建output目录，stderr明确包含`DORMANT/INAPPLICABLE ... clarification A`。
+- Mac的`git diff --check`通过且`git status`干净。因该提交未改图像检测代码或门限，不重跑140张真实BMP符合既定验证边界。
+- 该Mac门关闭了“旧槽壁污染请求是否仍可执行”的跨平台风险。它不提供像素真值或准确率；下一个外部输入仍是每壁至少3个独立支持点+左/右槽口端点，最终角度精度还需同图独立外圆可见弧/圆心真值。

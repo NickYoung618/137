@@ -201,3 +201,7 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - [x] T088 [US8] 更新 specs/021-paired-capture-slot-pose/completion-audit.md、evidence.md、checklists/requirements.md和tasks.md，保留已生成两份外置LabelMe SHA但标为dormant/inapplicable，定义墙支持点+端点的下一步 per SC-026-SC-030
 - [x] T089 运行SpecKit analyze、聚焦/全量、40份Schema、CLI拒绝、diff/媒体/绝对路径/算法阈值污染门，不重跑140图、不读sealed part-006 per SC-030
 - [x] T090 提交并推送021功能分支，保持main隔离、PLC未授权，等待Mac独立验证 per SC-030
+
+## Phase 20: Independent Mac Gate - definitive clarification A
+
+- [x] T091 记录Mac对c7fdc46的3项聚焦、400项全量、16项平台skip、40份Schema、dormant CLI exit=2/stdout零字节/零输出目录及diff/status门；明确无需重跑140 BMP，仅提交推送021、不合main、不碰PLC per SC-026-SC-030

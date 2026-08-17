@@ -139,7 +139,7 @@
 | SC-027 | PROVEN | C：旧CLI函数与命令行测试100%在写出前返回DORMANT/INAPPLICABLE，输出目录不存在。 |
 | SC-028 | PROVEN | C/E：两份历史LabelMe SHA保留，已标为dormant/inapplicable，不要求删除或补画。 |
 | SC-029 | PROVEN_SPEC / MISSING_EXTERNAL_EVIDENCE | 像素复核定义不含fixture overlap，只含每墙至少3点+两端点；待人工实际绘制。 |
-| SC-030 | PROVEN | C/E：更正后工程门通过；算法、140图结果、门限、main和PLC未改。 |
+| SC-030 | PROVEN | C/E：更正后服务器428项与Mac 400项全量门、40份Schema、dormant CLI零输出拒绝均通过；算法、140图结果、门限、main和PLC未改。 |
 
 ## 被证据否定或纠正的旧理解
 
