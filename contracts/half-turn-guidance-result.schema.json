@@ -1,0 +1,16 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"half-turn-guidance-result.schema.json",
+  "type":"object","additionalProperties":false,
+  "required":["schemaVersion","requestId","sampleId","mode","status","valid","detectionStatus","verificationStatus","guidanceStatus","error","captures","hypotheses","selectedMatch","measurementSource","currentImageProfileAngleDeg","currentAngleDeg","targetAngleDeg","toleranceDeg","correctionRawDeg","correctionDeg","rotationDirection","withinTolerance","developmentOnly","authoritative","posePromotionAllowed","realPairValidationStatus","plcExecution"],
+  "properties":{
+    "schemaVersion":{"const":"half-turn-guidance-result/1"},"requestId":{"type":"string"},"sampleId":{"type":"string"},"mode":{"enum":["SINGLE_CAPTURE","HALF_TURN_PAIR"]},
+    "status":{"enum":["EXPERIMENT_DISABLED","DETECTED","FAILED"]},"valid":{"type":"boolean"},"detectionStatus":{"enum":["DETECTED","DETECTION_FAILED"]},
+    "verificationStatus":{"enum":["SINGLE_FRAME_ONLY","PAIR_VERIFIED","NOT_AVAILABLE"]},"guidanceStatus":{"enum":["DETECTED_NEEDS_ADJUSTMENT","DETECTED_IN_POSITION","NOT_AVAILABLE"]},
+    "error":{"type":["object","null"]},"captures":{"type":"array","minItems":0,"maxItems":2},"hypotheses":{"type":"array"},"selectedMatch":{"type":["object","null"]},
+    "measurementSource":{"enum":["SINGLE_CAPTURE_DIRECT","CAPTURE_2_DIRECT","CAPTURE_1_PROPAGATED_HALF_TURN",null]},
+    "currentImageProfileAngleDeg":{"type":["number","null"],"minimum":0,"exclusiveMaximum":360},"currentAngleDeg":{"type":["number","null"],"minimum":-180,"maximum":180},
+    "targetAngleDeg":{"const":85.0},"toleranceDeg":{"const":5.0},"correctionRawDeg":{"type":["number","null"],"exclusiveMinimum":-180,"maximum":180},"correctionDeg":{"type":["number","null"],"exclusiveMinimum":-180,"maximum":180},
+    "rotationDirection":{"enum":["CLOCKWISE","COUNTERCLOCKWISE","NONE",null]},"withinTolerance":{"type":["boolean","null"]},
+    "developmentOnly":{"const":true},"authoritative":{"const":false},"posePromotionAllowed":{"const":false},"realPairValidationStatus":{"enum":["NOT_APPLICABLE","MISSING"]},"plcExecution":{"type":"null"}
+  }
+}

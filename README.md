@@ -483,6 +483,18 @@ uv run python tools/compare_short_line_candidates.py summarize \
 - 检测失败返回结构化失败 JSON；单项特征无效时保持该项 `coreValid=false`，但不默认否决定位。
 - 本 CLI 只输出 A 端面量测结果，不提供视觉引导、PLC 写入或质量 OK/NG 业务。
 
+## 槽姿态180°双拍初版（实验）
+
+Spec 023新增两种输入：单图用于当前外圆/完整槽诊断并计算85°±5°调整量；双图一次输入
+同一零件旋转180°前后的两拍，用第一拍互证遮挡、以第二拍当前位置输出唯一调整量。
+半圈在几何上方向无关，硬件是否完成180°属于外部设备责任；软件只报告图像证据是否一致，
+不会擅自归因硬件。
+
+配置默认`enabled=false`，所有结果`developmentOnly=true`、`authoritative=false`、
+`posePromotionAllowed=false`且PLC为空。当前没有真实同件180°图片，只完成合成契约初版；
+不得把旋转单张图片当现场pair。命令见
+[023 quickstart](specs/023-half-turn-paired-guidance/quickstart.md)。
+
 ## 孔2数据无关工具链与现拍检测
 
 项目研发原则见 [Constitution](.specify/memory/constitution.md)。本轮数据无关基础的规格、方案和

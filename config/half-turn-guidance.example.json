@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "half-turn-guidance-config/1",
+  "enabled": false,
+  "developmentOnly": true,
+  "authoritative": false,
+  "posePromotionAllowed": false,
+  "thresholdVersion": "half-turn-pair-match-v1",
+  "maxCandidatesPerFrame": 16,
+  "maxMatchResidualDeg": 2.0,
+  "minMatchMarginDeg": 1.0,
+  "maxHalfWidthNormalizedDifference": 0.6,
+  "maxProminenceNormalizedDifference": 0.6,
+  "maxDeficitAreaNormalizedDifference": 0.6,
+  "maxProfileNormalizedMae": 0.4,
+  "targetAngleDeg": 85.0,
+  "toleranceDeg": 5.0
+}
