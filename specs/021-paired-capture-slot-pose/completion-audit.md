@@ -156,7 +156,7 @@
 | SC-033 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：无外圆与arc/center三分支通过；真实145/147标注尚待返回。 |
 | SC-034 | PROVEN | X：身份、SHA、策略、Git内/已存在输出均写前拒绝，无媒体进Git。 |
 | SC-035 | PROVEN | C/X：旧停用测试与新工具禁用fixture overlap测试同时通过。 |
-| SC-036 | PROVEN_SERVER / PENDING_MAC_GATE | X/E：服务器436项全量、41份Schema和污染门通过；待Mac独立门，期间不合main。 |
+| SC-036 | PROVEN_SERVER_AND_MAC | X/E：服务器436项与Mac 408项全量、41份Schema和污染门通过；145/147空白任务已生成，仍不合main。 |
 
 ## 被证据否定或纠正的旧理解
 

@@ -260,3 +260,12 @@
 - `contracts/`下41份根Schema全部通过Draft 2020-12 `check_schema`；新CLI根/prepare/validate help、Python compile、JSON解析和`git diff --check`均通过。
 - 污染门确认`algorithms/`与`config/`零差异，无媒体/JSONL/大文件或现场数据绝对路径进入Git。未读取sealed part-006、未重跑140 BMP、未改检测阈值、main或PLC。
 - 服务器没有生成145/147真实人工点。Mac下一步只需在已核验review bundle上生成Git外空白任务并独立落点；Mac独立测试通过前保持021功能分支隔离，不合main。
+
+## Mac Independent Gate for Clean-groove Pixel Review at e6a8ce1
+
+- Mac的`021-mac-validation`已干净fast-forward到`e6a8ce19bdd67cbbd630b4bfb61b259369ff6428`；差异核验确认只新增独立干净槽像素复核工具、契约、测试和SpecKit文档，无检测算法、阈值或PLC修改。
+- 聚焦`tests.test_clean_groove_pixel_review`与旧dormant污染工具共`11/11`通过。Mac全量为`408 tests`通过、`16 skipped`、`0 failure`/`0 error`，耗时`15.891s`。
+- `contracts/`下41份根Schema全部通过Draft 2020-12检查；`git diff --check`通过，Mac工作树干净。
+- Mac已在Git外`independent-clean-groove-pixel-e6a8ce1`目录成功生成145/147两份独立任务，逐文件确认`shapes=0`。145已在LabelMe中打开并由独立screen会话保持，尚未产生人工点坐标。
+- 因该提交不含图像检测或阈值变化，未重跑140 BMP符合既定最小验证边界。该门只证明准备工具跨平台可用，不能替代145/147人工3+3墙点、两端点或同图外圆参考。
+- 021继续与main隔离，PLC未触碰。下一步只等待145人工点标；人工结果返回前不调门限、不声明像素或姿态角准确率。

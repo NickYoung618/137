@@ -224,3 +224,7 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 
 - T092先于T093-T094；T093红门先于T095；T095完成后执行T096-T098。
 - 本阶段只使用合成临时fixture，不读取145/147原图或AUTO几何；实际Git外任务由Mac在已核验review bundle上生成。
+
+## Phase 22: Independent Mac Gate - clean-groove pixel review preparation
+
+- [x] T099 记录Mac对e6a8ce1的11项聚焦、408项全量、16项平台skip、41份Schema、diff/status门及145/147 Git外空白任务`shapes=0`证据；明确未重跑140 BMP、未改算法/阈值/PLC且下一步只等待145人工点标，提交推送021且不合main per SC-031-SC-036
