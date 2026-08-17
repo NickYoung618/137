@@ -16,7 +16,8 @@ from tools.dataset_common import inspect_image
 SCHEMA_VERSION = "slot-pose-result/2"
 SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.17.0"
+ALGORITHM_VERSION = "0.18.0"
+BUNDLED_LEGACY_MODULE = "algorithms.end_face.core"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -96,6 +97,29 @@ def load_config(config_path: Path) -> dict[str, Any]:
     for key in ("config_id", "legacy_asset", "pose", "detector"):
         if key not in config:
             raise ValueError(f"configuration field is required: {key}")
+    assets = config["legacy_asset"]
+    if not isinstance(assets, dict):
+        raise ValueError("legacy_asset configuration must be an object")
+    source_mode = assets.setdefault("source_mode", "external_file")
+    if source_mode == "external_file":
+        if not isinstance(assets.get("source_path"), str) or not assets["source_path"].strip():
+            raise ValueError("legacy_asset.source_path is required for external_file mode")
+    elif source_mode == "bundled_module":
+        if assets.get("bundled_module") != BUNDLED_LEGACY_MODULE:
+            raise ValueError(
+                f"legacy_asset.bundled_module must be {BUNDLED_LEGACY_MODULE!r}"
+            )
+        upstream = assets.get("upstream_source_sha256")
+        if (
+            not isinstance(upstream, str)
+            or len(upstream) != 64
+            or any(character not in "0123456789abcdef" for character in upstream)
+        ):
+            raise ValueError(
+                "legacy_asset.upstream_source_sha256 must be a lowercase SHA-256"
+            )
+    else:
+        raise ValueError(f"unsupported legacy_asset.source_mode: {source_mode!r}")
     pose = config["pose"]
     if not isinstance(pose, dict):
         raise ValueError("pose configuration must be an object")

@@ -2,8 +2,13 @@
 
 ## 槽姿态引导配置
 
-- `legacy_asset`固定历史源码、LabelMe标注和参考图的绝对路径及SHA-256；换服务器或Mac时只改路径，
-  内容哈希必须继续一致。适配器在调用历史函数前校验三项资产。
+- `legacy_asset.source_mode=bundled_module`是可合并默认：源码只从本仓库
+  `algorithms.end_face.core`加载，`source_sha256`校验本地文件，
+  `upstream_source_sha256`记录gyj审计源。旧配置未写`source_mode`时按
+  `external_file`兼容，但不再是可移植默认。
+- LabelMe标注和参考图仍是Git外部署资产；换服务器或Mac时只改
+  `annotation_path/reference_path`，内容哈希必须继续一致。这两项是检测参考数据，
+  不是对gyj代码目录的运行依赖。
 - 历史图像坐标原点在左上，方位角随图像y轴向下而顺时针增加。`mechanical_zero_image_deg`与
   `positive_direction=cw|ccw`必须由机械/机器人负责人确认。
 - legacy、paired、multi-role和single v1/v2在`conventions_confirmed=false`时只允许诊断候选，正式机械角为空。

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import math
 import sys
@@ -14,7 +15,11 @@ from typing import Any
 import numpy as np
 
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
-from algorithms.slot_pose.contract import sha256_file, signed_relative_angle
+from algorithms.slot_pose.contract import (
+    BUNDLED_LEGACY_MODULE,
+    sha256_file,
+    signed_relative_angle,
+)
 from algorithms.slot_pose.full_frame_circle_locator import locate_full_frame_circle
 from algorithms.slot_pose.fixture_shadow import (
     analyze_fixture_shadows,
@@ -84,8 +89,10 @@ class LegacyAEndFaceAdapter:
     def __init__(self, config: dict[str, Any]):
         self.config = config
         asset = config["legacy_asset"]
+        self.source_mode = str(asset.get("source_mode", "external_file"))
+        source_path = self._resolve_source_path(asset)
         self.paths = LegacyPaths(
-            Path(asset["source_path"]).resolve(),
+            source_path,
             Path(asset["annotation_path"]).resolve(),
             Path(asset["reference_path"]).resolve(),
         )
@@ -97,6 +104,7 @@ class LegacyAEndFaceAdapter:
         self._verify_assets()
         self.module = self._load_module()
         self._verify_inventory()
+        self.function_inventory = REQUIRED_FUNCTIONS
         try:
             self.reference_model = self.module.build_reference_model(self.paths.annotation)
         except Exception as exc:
@@ -108,6 +116,38 @@ class LegacyAEndFaceAdapter:
                 f"annotation imagePath resolves to {resolved_reference}, expected {self.paths.reference}",
             )
         self._verify_assets()
+
+    def _resolve_source_path(self, asset: dict[str, Any]) -> Path:
+        if self.source_mode == "external_file":
+            source = asset.get("source_path")
+            if not isinstance(source, str) or not source.strip():
+                raise LegacyAdapterError(
+                    "ASSET_MISMATCH",
+                    "asset_verification",
+                    "legacy_asset.source_path is required for external_file mode",
+                )
+            return Path(source).resolve()
+        if self.source_mode != "bundled_module":
+            raise LegacyAdapterError(
+                "ASSET_MISMATCH",
+                "asset_verification",
+                f"unsupported legacy source mode: {self.source_mode}",
+            )
+        module_name = asset.get("bundled_module")
+        if module_name != BUNDLED_LEGACY_MODULE:
+            raise LegacyAdapterError(
+                "ASSET_MISMATCH",
+                "asset_verification",
+                f"bundled module must be {BUNDLED_LEGACY_MODULE}",
+            )
+        spec = importlib.util.find_spec(BUNDLED_LEGACY_MODULE)
+        if spec is None or not spec.origin:
+            raise LegacyAdapterError(
+                "ASSET_MISMATCH",
+                "asset_loading",
+                f"cannot resolve bundled module: {BUNDLED_LEGACY_MODULE}",
+            )
+        return Path(spec.origin).resolve()
 
     def _verify_assets(self) -> None:
         for path, expected in self.expected_hashes.items():
@@ -125,6 +165,21 @@ class LegacyAEndFaceAdapter:
         self._verify_assets()
 
     def _load_module(self) -> ModuleType:
+        if self.source_mode == "bundled_module":
+            try:
+                module = importlib.import_module(BUNDLED_LEGACY_MODULE)
+            except Exception as exc:
+                raise LegacyAdapterError(
+                    "ASSET_MISMATCH", "asset_loading", str(exc)
+                ) from exc
+            origin = Path(str(getattr(module, "__file__", ""))).resolve()
+            if origin != self.paths.source:
+                raise LegacyAdapterError(
+                    "ASSET_MISMATCH",
+                    "asset_loading",
+                    f"bundled module resolved to {origin}, expected {self.paths.source}",
+                )
+            return module
         module_name = f"slot_pose_legacy_a_end_face_{self.expected_hashes[self.paths.source][:16]}"
         spec = importlib.util.spec_from_file_location(module_name, self.paths.source)
         if spec is None or spec.loader is None:
@@ -416,6 +471,19 @@ class LegacyAEndFaceAdapter:
             "legacyMethod": "full_frame_circle_locator" if locator_enabled else str(transform.method),
             "elapsedMs": (time.perf_counter() - started) * 1000.0,
             "functionInventory": list(REQUIRED_FUNCTIONS),
+            "legacyCoreSource": {
+                "mode": self.source_mode,
+                "module": (
+                    BUNDLED_LEGACY_MODULE
+                    if self.source_mode == "bundled_module"
+                    else None
+                ),
+                "sourceSha256": self.expected_hashes[self.paths.source],
+                "upstreamSourceSha256": self.config["legacy_asset"].get(
+                    "upstream_source_sha256"
+                ),
+                "repositoryContained": self.source_mode == "bundled_module",
+            },
         }
         if circle_localization is not None:
             diagnostics["circleLocalization"] = circle_localization

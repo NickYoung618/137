@@ -10,15 +10,29 @@
     "config_id": {"type": "string", "minLength": 1},
     "legacy_asset": {
       "type": "object",
-      "required": ["source_path", "source_sha256", "annotation_path", "annotation_sha256", "reference_path", "reference_sha256"],
+      "additionalProperties": false,
+      "required": ["source_sha256", "annotation_path", "annotation_sha256", "reference_path", "reference_sha256"],
       "properties": {
+        "source_mode": {"enum": ["external_file", "bundled_module"], "default": "external_file"},
         "source_path": {"type": "string", "minLength": 1},
+        "bundled_module": {"const": "algorithms.end_face.core"},
+        "upstream_source_sha256": {"$ref": "#/$defs/sha256"},
         "source_sha256": {"$ref": "#/$defs/sha256"},
         "annotation_path": {"type": "string", "minLength": 1},
         "annotation_sha256": {"$ref": "#/$defs/sha256"},
         "reference_path": {"type": "string", "minLength": 1},
         "reference_sha256": {"$ref": "#/$defs/sha256"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"source_mode": {"const": "bundled_module"}},
+            "required": ["source_mode"]
+          },
+          "then": {"required": ["bundled_module", "upstream_source_sha256"]},
+          "else": {"required": ["source_path"]}
+        }
+      ]
     },
     "pose": {
       "type": "object",

@@ -3,8 +3,10 @@
   "project": "137-housing-slot-pose",
   "config_id": "slot-pose-server-mvp-pending-site-v1",
   "legacy_asset": {
-    "source_path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/main.py",
-    "source_sha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
+    "source_mode": "bundled_module",
+    "bundled_module": "algorithms.end_face.core",
+    "source_sha256": "f408631e03563ac80f392ea7558b786c2e2bef61670d1f206486f883b9ff8fbc",
+    "upstream_source_sha256": "36a53cea8efd172cba0a06a4935b078ac77fd4551a509ed2c3519833fd206c35",
     "annotation_path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/annotation.json",
     "annotation_sha256": "d949f779a309dc8d3741067e863aa8918aee103f60177dad7068f1e999302390",
     "reference_path": "/home/ubuntu/disk/gyj/HousingInspectionDemo/algorithms/a_end_face/reference.bmp",

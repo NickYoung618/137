@@ -61,6 +61,43 @@ def minimal_single_groove_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_bundled_core_source_does_not_require_external_source_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["legacy_asset"].pop("source_path")
+            config["legacy_asset"].update({
+                "source_mode": "bundled_module",
+                "bundled_module": "algorithms.end_face.core",
+                "upstream_source_sha256": "1" * 64,
+            })
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertEqual("bundled_module", loaded["legacy_asset"]["source_mode"])
+            self.assertNotIn("source_path", loaded["legacy_asset"])
+
+    def test_legacy_external_source_still_requires_source_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["legacy_asset"].pop("source_path")
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "source_path"):
+                load_config(path)
+
+    def test_bundled_core_module_identity_is_fixed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            config["legacy_asset"].update({
+                "source_mode": "bundled_module",
+                "bundled_module": "another.project.module",
+                "upstream_source_sha256": "1" * 64,
+            })
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "bundled_module"):
+                load_config(path)
+
     def test_fixture_shadow_extensions_default_off_and_are_path_identity_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

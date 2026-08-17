@@ -19,7 +19,7 @@ except ImportError:
 
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config/inspection.example.json"
-DEFAULT_SOURCE = Path(json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))["legacy_asset"]["source_path"])
+DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "algorithms/end_face/core.py"
 
 
 def circle_points(cx: float, cy: float, radius: float, count: int = 180) -> list[list[float]]:
