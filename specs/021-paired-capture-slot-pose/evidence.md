@@ -218,3 +218,11 @@
 - 服务器权威全量门：`uv run --with jsonschema python -m unittest discover -s tests -q`运行`428 tests in 140.788s`，全部通过。测试中的Git内trace输出拒绝文字是预期fail-closed分支，不是失败。
 - 全40份JSON Schema通过Draft 2020-12 meta-validation；新CLI help、Python compile和`git diff --check`通过。FR/SC自动计数与审计行数均为78/30。
 - 污染门确认未修改`algorithms/`或`config/`，无BMP/JPEG/PNG/MP4/RAR/ZIP/JSONL、无新现场绝对路径、无大于等于1 MiB变更文件。sealed part-006未读取，140张未重跑。
+
+## Mac Independent Fixture-contamination Gate at cd7f3ca
+
+- Mac独立验证分支`021-mac-validation`已干净快进到`cd7f3ca6434492e31c9667a9d81f1a30797b65f1`。新增fixture contamination聚焦测试`3/3`通过。
+- Mac全量discover完成`400 tests`，其中`16`项按平台条件skip，`0 failure`/`0 error`，耗时`15.297s`。“trace output must be outside the Git worktree”仍是被测试覆盖的预期fail-closed路径，不是失败。
+- Mac在Git外真实145/147 review bundle上成功生成`fixture-contamination-review.json`及两份派生LabelMe。`normal-part-008-fixed-pose-0005.json` SHA-256为`9857f53e09359aa398c8321d25b1ea605dac803a5eb6e6a19ffb5bc09c6d9ba7`；`normal-part-008-fixed-pose-0007.json` SHA-256为`2a14bce355fe1c4ff4e6b6b81f88baa1372fa4db38fada2788cabac2e0151e7c`。
+- 两份产物均保留YES/YES/YES/YES+PARTIAL，并保留truth/tuning/runtime/PLC全部false。原始图像和源AUTO LabelMe均未覆盖。
+- 该独立门只证明工具、契约和真实外置审阅包兼容，不提供污染像素子段，不改变精度、门限或算法结论。下一个唯一外部输入仍是人工在这两份LabelMe中画出实际受污染墙子段。

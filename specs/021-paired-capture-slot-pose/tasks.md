@@ -182,3 +182,7 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - [x] T081 [US8] 更新 specs/021-paired-capture-slot-pose/quickstart.md、completion-audit.md和evidence.md，记录145/147精确语义、Mac命令及后续支持点重叠诊断边界 per FR-077-FR-078/SC-030
 - [x] T082 运行SpecKit analyze、聚焦/全量、全部Schema、CLI、diff/媒体/绝对路径/阈值污染门，不读取sealed part-006、不重跑140张 per SC-030
 - [x] T083 提交并推送021功能分支，保持main隔离、PLC未授权，等待Mac对新工具及真实外置review bundle独立验证 per SC-030
+
+## Phase 18: Independent Mac Gate - fixture contamination review
+
+- [x] T084 记录Mac对cd7f3ca的3项聚焦、400项全量、16项平台skip以及真实145/147外置派生LabelMe SHA门；确认源图/AUTO未覆盖、四项语义与全部false策略保留，仅提交推送021，不合main、不调门限、不碰PLC per SC-026-SC-030

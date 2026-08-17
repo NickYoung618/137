@@ -139,7 +139,7 @@
 | SC-027 | PROVEN | C：派生前后AUTO shape和点坐标100%相同，且无自动HUMAN shape。 |
 | SC-028 | PROVEN | C：未知ID、重复ID、AUTO SHA不一致、已有HUMAN内容和非PARTIAL回答均被拒绝。 |
 | SC-029 | PROVEN | C：只有两个允许的HUMAN linestrip标签，三个像素重叠结论保持UNCONFIRMED。 |
-| SC-030 | PROVEN | C/E：见本轮最终工程门记录；算法、140图结果、门限、main和PLC未改。 |
+| SC-030 | PROVEN | C/E：服务器428项与Mac 400项全量门通过；Mac真实review bundle成功派生两份LabelMe且未覆盖源文件；算法、140图结果、门限、main和PLC未改。 |
 
 ## 被证据否定或纠正的旧理解
 
