@@ -32,8 +32,22 @@ class CurrentCaptureContractTests(unittest.TestCase):
                 {"side": "reference_right", "pointsPx": [[170.0, 92.5], [172.5, 100.0], [170.0, 107.5]]},
             ],
             "d7.quality.candidate_boundary_evidence_target_px": [
-                {"side": "A", "rawPointsPx": [[85.0, 47.5], [85.0, 62.5]], "segmentPointsPx": [[85.0, 47.5], [85.0, 62.5]], "lineEquation": [1.0, 0.0, -85.0]},
-                {"side": "B", "rawPointsPx": [[85.0, 122.5], [85.0, 137.5]], "segmentPointsPx": [[85.0, 122.5], [85.0, 137.5]], "lineEquation": [1.0, 0.0, -85.0]},
+                {
+                    "side": "A", "rawPointsPx": [[85.0, 47.5], [85.0, 62.5]],
+                    "supportPointsPx": [[85.0, 70.0]],
+                    "supportTransitionPairsPx": [[[81.0, 70.0], [89.0, 70.0]]],
+                    "supportEvidenceMode": "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    "segmentPointsPx": [[85.0, 47.5], [85.0, 70.0]],
+                    "lineEquation": [1.0, 0.0, -85.0],
+                },
+                {
+                    "side": "B", "rawPointsPx": [[85.0, 122.5], [85.0, 137.5]],
+                    "supportPointsPx": [[85.0, 145.0]],
+                    "supportTransitionPairsPx": [[[81.0, 145.0], [89.0, 145.0]]],
+                    "supportEvidenceMode": "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    "segmentPointsPx": [[85.0, 122.5], [85.0, 145.0]],
+                    "lineEquation": [1.0, 0.0, -85.0],
+                },
             ],
         }
         features, compatible = build_feature_outputs(measurements, transform, phi_support_angles=[0.0, math.pi / 2])
@@ -74,6 +88,13 @@ class CurrentCaptureContractTests(unittest.TestCase):
         self.assertEqual(
             2, len(features["7"]["target"]["fittedGeometry"]["boundaries"])
         )
+        for boundary in features["7"]["target"]["rawEdgeEvidence"]["boundaries"]:
+            self.assertEqual(1, len(boundary["supportPointsPx"]))
+            self.assertEqual(1, len(boundary["supportTransitionPairsPx"]))
+            self.assertEqual(
+                "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                boundary["supportEvidenceMode"],
+            )
         schema = json.loads((
             Path(__file__).resolve().parents[1]
             / "specs/016-measurement-evidence-geometry-audit/contracts/measurement-evidence-v1.schema.json"

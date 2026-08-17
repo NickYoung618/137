@@ -231,17 +231,38 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
             "quality": _quality_summary(feature),
         }, ensure_ascii=False, separators=(",", ":"))
         if name == "7":
+            evidence = target.get("rawEdgeEvidence", {})
+            raw_boundaries = (
+                evidence.get("boundaries", []) if isinstance(evidence, dict) else []
+            )
+            support_by_side = {
+                str(boundary.get("side")): boundary
+                for boundary in raw_boundaries
+                if isinstance(boundary, dict) and boundary.get("side") in {"A", "B"}
+            }
             fitted = target.get("fittedGeometry", {})
             boundaries = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
             for boundary in boundaries:
                 points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
                 side = boundary.get("side") if isinstance(boundary, dict) else None
                 if isinstance(points, list) and len(points) >= 2 and side in {"A", "B"}:
+                    raw = support_by_side.get(str(side), {})
+                    primary = raw.get("pointsPx", [])
+                    extension = raw.get("supportPointsPx", [])
                     shapes.append({
                         "label": f"{version}:7:boundary:{side}",
                         "points": [[float(value) for value in point] for point in points],
                         "group_id": f"{version}:7", "description": description,
-                        "shape_type": "line", "flags": {},
+                        "shape_type": "line", "flags": {
+                            "supportEvidenceMode": raw.get("supportEvidenceMode"),
+                            "primaryPointCount": (
+                                len(primary) if isinstance(primary, list) else 0
+                            ),
+                            "extensionPointCount": (
+                                len(extension) if isinstance(extension, list) else 0
+                            ),
+                            "frozenLineExtendedForAudit": bool(extension),
+                        },
                     })
             legacy_review = (
                 fitted.get("legacyReviewBoundaries", [])
@@ -430,6 +451,26 @@ def _draw_prediction(draw: ImageDraw.ImageDraw, record: dict[str, Any], version:
             )
             _draw_solid_fit_circle(
                 draw, box, color, max(2, line_width - 1)
+            )
+    result = record.get("result")
+    feature = (
+        result.get("features", {}).get("7", {})
+        if isinstance(result, dict) else {}
+    )
+    target = feature.get("target") if isinstance(feature, dict) else None
+    evidence = target.get("rawEdgeEvidence", {}) if isinstance(target, dict) else {}
+    boundaries = evidence.get("boundaries", []) if isinstance(evidence, dict) else []
+    support_color = (255, 220, 0) if version == "old" else (170, 255, 70)
+    dot_radius = max(3, radius_marker // 2)
+    for boundary in boundaries:
+        support = boundary.get("supportPointsPx", []) if isinstance(boundary, dict) else []
+        for point in support if isinstance(support, list) else []:
+            if not isinstance(point, list) or len(point) != 2:
+                continue
+            x, y = float(point[0]), float(point[1])
+            draw.ellipse(
+                (x - dot_radius, y - dot_radius, x + dot_radius, y + dot_radius),
+                fill=support_color,
             )
 
 

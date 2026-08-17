@@ -26,6 +26,7 @@ from algorithms.hole_2.current_capture import (
     _extend_d7_paired_support,
     _fit_dominant_paired_layer,
     _paired_contour_boundary,
+    _paired_contour_support_window,
     _replay_v6_d7_review_evidence,
     _ransac_circle,
     _shared_parallel_boundary_geometry,
@@ -580,6 +581,36 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertGreaterEqual(first_diagnostic["pairSupport"], 12)
         self.assertAlmostEqual(8.0, first_diagnostic["pairWidthMedianPx"], delta=1.0)
 
+    def test_audit_support_window_preserves_paired_transition_candidate_semantics(self):
+        image = np.full((220, 240), 220.0)
+        image[90:166, 56:64] = 20.0
+        image[90:166, 136:144] = 20.0
+        image = gaussian_blur(image, 1.0)
+        config = _test_config()["d7"] | {
+            "paired_edge_strip_half_width_px": 12,
+            "paired_edge_strip_samples": 25,
+            "paired_edge_min_support": 12,
+        }
+        original: dict[str, object] = {}
+        audit: dict[str, object] = {}
+        _paired_contour_boundary(
+            image, (60.0, 100.0), (140.0, 100.0), "p1", -100.0,
+            config, original,
+        )
+        _paired_contour_support_window(
+            image, (60.0, 100.0), (140.0, 100.0), "p1", -100.0,
+            config, audit,
+        )
+        np.testing.assert_allclose(
+            original["rawContourLocusPointsPx"],
+            audit["rawContourLocusPointsPx"],
+            rtol=0.0, atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            original["transitionPairsPx"], audit["transitionPairsPx"],
+            rtol=0.0, atol=1e-12,
+        )
+
     def test_d7_audit_segment_clips_only_to_outward_paired_support(self):
         image = np.full((220, 240), 220.0)
         image[90:166, 56:64] = 20.0
@@ -596,14 +627,18 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
                 "side": "A", "rawPointsPx": [
                     [60.0, 100.0], [60.0, 106.0], [60.0, 112.0],
                 ],
-                "transitionPairsPx": [], "lineEquation": [1.0, 0.0, -60.0],
+                "transitionPairsPx": [
+                    [[56.0, y], [64.0, y]] for y in (100.0, 106.0, 112.0)
+                ], "lineEquation": [1.0, 0.0, -60.0],
                 "segmentPointsPx": [[60.0, 100.0], [60.0, 112.0]],
             },
             {
                 "side": "B", "rawPointsPx": [
                     [140.0, 100.0], [140.0, 106.0], [140.0, 112.0],
                 ],
-                "transitionPairsPx": [], "lineEquation": [1.0, 0.0, -140.0],
+                "transitionPairsPx": [
+                    [[136.0, y], [144.0, y]] for y in (100.0, 106.0, 112.0)
+                ], "lineEquation": [1.0, 0.0, -140.0],
                 "segmentPointsPx": [[140.0, 100.0], [140.0, 112.0]],
             },
         ]
@@ -616,6 +651,7 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
             evidence=evidence,
         )
         self.assertEqual(2, len(updated), diagnostics)
+        self.assertTrue(diagnostics["candidate_boundary_support_extension_complete"])
         for boundary, expected_x in zip(updated, (60.0, 140.0)):
             start, end = boundary["segmentPointsPx"]
             self.assertAlmostEqual(expected_x, start[0], places=6)
@@ -624,7 +660,11 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
             self.assertGreaterEqual(end[1], 112.0)
             self.assertLess(end[1], 170.0)
             self.assertTrue(boundary["supportClippedToNeckDirection"])
-            self.assertEqual([], boundary["supportPointsPx"])
+            self.assertGreater(len(boundary["supportPointsPx"]), 2)
+            self.assertEqual(
+                len(boundary["supportPointsPx"]),
+                len(boundary["supportTransitionPairsPx"]),
+            )
             projections = [
                 point[1] for point in (
                     boundary["rawPointsPx"] + boundary["supportPointsPx"]
@@ -656,13 +696,232 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
             dimension_points=((60.0, 100.0), (140.0, 100.0)),
             evidence=evidence,
         )
-        self.assertTrue(diagnostics["candidate_boundary_support_extension_complete"])
+        self.assertFalse(diagnostics["candidate_boundary_support_extension_complete"])
         for boundary in updated:
             self.assertEqual([], boundary["supportPointsPx"])
             self.assertAlmostEqual(6.0, math.dist(*boundary["segmentPointsPx"]), places=6)
         self.assertTrue(all(
-            side["stopReason"] == "same_semantic_support_ends_at_primary_strip"
+            side["stopReason"] in {
+                "extension_support_below_gate", "continuity_gap",
+            }
             for side in diagnostics["candidate_boundary_support_sides"]
+        ))
+
+    @staticmethod
+    def _long_support_fixture():
+        config = _test_config()["d7"] | {
+            "band_offsets_target_px": [-48.0, -24.0, 0.0, 24.0, 48.0],
+            "paired_edge_strip_half_width_px": 12,
+            "paired_edge_strip_samples": 25,
+            "paired_edge_min_support": 12,
+        }
+        evidence = [
+            {
+                "side": side,
+                "rawPointsPx": [[x, 100.0], [x, 106.0], [x, 112.0]],
+                "transitionPairsPx": [
+                    [[x - 4.0, y], [x + 4.0, y]] for y in (100.0, 106.0, 112.0)
+                ],
+                "lineEquation": [1.0, 0.0, -x],
+                "segmentPointsPx": [[x, 100.0], [x, 112.0]],
+            }
+            for side, x in (("A", 60.0), ("B", 140.0))
+        ]
+        return config, evidence
+
+    def test_d7_audit_segment_extends_only_with_contiguous_dual_side_paired_support(self):
+        config, evidence = self._long_support_fixture()
+
+        def moving_paired_window(
+            _image, p1_target, _p2_target, endpoint, _polarity, _config, diagnostics
+        ):
+            side_x = 60.0 if endpoint == "p1" else 140.0
+            window_offset = round(float(p1_target[1] - 100.0))
+            ys = (
+                list(np.arange(113.0, 125.0, 1.0))
+                if window_offset == 24 else list(np.arange(125.0, 137.0, 1.0))
+            )
+            points = [[side_x, float(y)] for y in ys]
+            pairs = [
+                [[side_x - 4.0, float(y)], [side_x + 4.0, float(y)]] for y in ys
+            ]
+            diagnostics.update({
+                "pairSupport": len(points),
+                "failureStage": None,
+                "rawContourLocusPointsPx": points,
+                "transitionPairsPx": pairs,
+            })
+            return None
+
+        before_lines = [boundary["lineEquation"][:] for boundary in evidence]
+        before_points = ((60.0, 100.0), (140.0, 100.0))
+        with patch(
+            "algorithms.hole_2.current_capture._paired_contour_support_window",
+            side_effect=moving_paired_window,
+        ):
+            updated, diagnostics = _extend_d7_paired_support(
+                np.full((240, 240), 220.0),
+                (60.0, 100.0), (140.0, 100.0), (-100.0, 100.0), config,
+                outward_direction=(0.0, 1.0), dimension_points=before_points,
+                evidence=evidence,
+            )
+
+        self.assertTrue(diagnostics["candidate_boundary_support_extension_complete"])
+        self.assertEqual(
+            "frozen_paired_line_extended_by_contiguous_outward_paired_support",
+            diagnostics["candidate_boundary_support_extension_contract"],
+        )
+        for boundary, expected_x, before_line in zip(updated, (60.0, 140.0), before_lines):
+            self.assertEqual(before_line, boundary["lineEquation"])
+            self.assertGreaterEqual(len(boundary["supportPointsPx"]), 20)
+            self.assertEqual(
+                len(boundary["supportPointsPx"]),
+                len(boundary["supportTransitionPairsPx"]),
+            )
+            self.assertGreater(boundary["segmentPointsPx"][1][1], 135.0)
+            for point in boundary["segmentPointsPx"]:
+                self.assertAlmostEqual(expected_x, point[0], places=9)
+        self.assertEqual(before_points, ((60.0, 100.0), (140.0, 100.0)))
+
+    def test_d7_audit_segment_rejects_single_side_and_far_island(self):
+        config, evidence = self._long_support_fixture()
+        original_segments = [boundary["segmentPointsPx"][:] for boundary in evidence]
+
+        def one_side_or_island(
+            _image, p1_target, _p2_target, endpoint, _polarity, _config, diagnostics
+        ):
+            window_offset = round(float(p1_target[1] - 100.0))
+            side_x = 60.0 if endpoint == "p1" else 140.0
+            if endpoint == "p1":
+                ys = list(np.arange(113.0, 137.0, 1.0))
+            else:
+                ys = list(np.arange(150.0, 158.0, 1.0)) if window_offset == 48 else []
+            diagnostics.update({
+                "pairSupport": len(ys),
+                "failureStage": "outer_contour_locus_fit_failed",
+                "rawContourLocusPointsPx": [[side_x, float(y)] for y in ys],
+                "transitionPairsPx": [
+                    [[side_x - 4.0, float(y)], [side_x + 4.0, float(y)]] for y in ys
+                ],
+            })
+            return None
+
+        with patch(
+            "algorithms.hole_2.current_capture._paired_contour_support_window",
+            side_effect=one_side_or_island,
+        ):
+            updated, diagnostics = _extend_d7_paired_support(
+                np.full((240, 240), 220.0),
+                (60.0, 100.0), (140.0, 100.0), (-100.0, 100.0), config,
+                outward_direction=(0.0, 1.0),
+                dimension_points=((60.0, 100.0), (140.0, 100.0)), evidence=evidence,
+            )
+
+        self.assertFalse(diagnostics["candidate_boundary_support_extension_complete"])
+        self.assertEqual(original_segments, [item["segmentPointsPx"] for item in updated])
+        self.assertTrue(all(item["supportPointsPx"] == [] for item in updated))
+        self.assertIn(
+            diagnostics["candidate_boundary_support_stop_reason"],
+            {"dual_side_continuity_not_met", "dual_side_extension_support_below_gate"},
+        )
+
+    def test_d7_audit_segment_rejects_points_beyond_frozen_residual_gate(self):
+        config, evidence = self._long_support_fixture()
+        original_segments = [boundary["segmentPointsPx"][:] for boundary in evidence]
+
+        def wrong_layer(
+            _image, _p1_target, _p2_target, endpoint, _polarity, _config, diagnostics
+        ):
+            x = (60.0 if endpoint == "p1" else 140.0) + 4.0
+            ys = list(np.arange(113.0, 137.0, 1.0))
+            diagnostics.update({
+                "pairSupport": len(ys), "failureStage": None,
+                "rawContourLocusPointsPx": [[x, float(y)] for y in ys],
+                "transitionPairsPx": [
+                    [[x - 4.0, float(y)], [x + 4.0, float(y)]] for y in ys
+                ],
+            })
+            return None
+
+        with patch(
+            "algorithms.hole_2.current_capture._paired_contour_support_window",
+            side_effect=wrong_layer,
+        ):
+            updated, diagnostics = _extend_d7_paired_support(
+                np.full((240, 240), 220.0),
+                (60.0, 100.0), (140.0, 100.0), (-100.0, 100.0), config,
+                outward_direction=(0.0, 1.0),
+                dimension_points=((60.0, 100.0), (140.0, 100.0)), evidence=evidence,
+            )
+        self.assertFalse(diagnostics["candidate_boundary_support_extension_complete"])
+        self.assertEqual(original_segments, [item["segmentPointsPx"] for item in updated])
+        self.assertTrue(all(item["supportPointsPx"] == [] for item in updated))
+
+    def test_d7_audit_segment_rejects_midpoints_without_traceable_transition_pairs(self):
+        config, evidence = self._long_support_fixture()
+        original_segments = [boundary["segmentPointsPx"][:] for boundary in evidence]
+
+        def midpoint_only(
+            _image, _p1_target, _p2_target, endpoint, _polarity, _config, diagnostics
+        ):
+            x = 60.0 if endpoint == "p1" else 140.0
+            ys = list(np.arange(113.0, 137.0, 1.0))
+            diagnostics.update({
+                "pairSupport": len(ys), "failureStage": None,
+                "rawContourLocusPointsPx": [[x, float(y)] for y in ys],
+                "transitionPairsPx": [],
+            })
+            return None
+
+        with patch(
+            "algorithms.hole_2.current_capture._paired_contour_support_window",
+            side_effect=midpoint_only,
+        ):
+            updated, diagnostics = _extend_d7_paired_support(
+                np.full((240, 240), 220.0),
+                (60.0, 100.0), (140.0, 100.0), (-100.0, 100.0), config,
+                outward_direction=(0.0, 1.0),
+                dimension_points=((60.0, 100.0), (140.0, 100.0)), evidence=evidence,
+            )
+        self.assertFalse(diagnostics["candidate_boundary_support_extension_complete"])
+        self.assertEqual(original_segments, [item["segmentPointsPx"] for item in updated])
+        self.assertTrue(all(item["supportTransitionPairsPx"] == [] for item in updated))
+
+    def test_d7_audit_segment_rejects_ambiguous_competing_paired_layers(self):
+        config, evidence = self._long_support_fixture()
+        original_segments = [boundary["segmentPointsPx"][:] for boundary in evidence]
+
+        def ambiguous(
+            _image, _p1_target, _p2_target, endpoint, _polarity, _config, diagnostics
+        ):
+            x = 60.0 if endpoint == "p1" else 140.0
+            ys = list(np.arange(113.0, 137.0, 1.0))
+            diagnostics.update({
+                "pairSupport": len(ys),
+                "failureStage": "paired_layer_ambiguous",
+                "layerStabilizationFailure": "ambiguous_competing_layers",
+                "rawContourLocusPointsPx": [[x, float(y)] for y in ys],
+                "transitionPairsPx": [
+                    [[x - 4.0, float(y)], [x + 4.0, float(y)]] for y in ys
+                ],
+            })
+
+        with patch(
+            "algorithms.hole_2.current_capture._paired_contour_support_window",
+            side_effect=ambiguous,
+        ):
+            updated, diagnostics = _extend_d7_paired_support(
+                np.full((240, 240), 220.0),
+                (60.0, 100.0), (140.0, 100.0), (-100.0, 100.0), config,
+                outward_direction=(0.0, 1.0),
+                dimension_points=((60.0, 100.0), (140.0, 100.0)), evidence=evidence,
+            )
+        self.assertFalse(diagnostics["candidate_boundary_support_extension_complete"])
+        self.assertEqual(original_segments, [item["segmentPointsPx"] for item in updated])
+        self.assertTrue(all(
+            window["competingLayerRejected"]
+            for side in diagnostics["candidate_boundary_support_sides"]
+            for window in side["windowDiagnostics"]
         ))
 
     def test_v6_review_replay_requires_exact_measurement_intersections(self):

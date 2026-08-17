@@ -21,8 +21,24 @@ def _feature(name, *, valid, failure=None, shift=0.0):
             "rawEdgeEvidence": {
                 "semantics": "neck_outer_contour_edges",
                 "boundaries": [
-                    {"side": "A", "pointsPx": [[20.0 + shift, 15.0], [20.0 + shift, 45.0]]},
-                    {"side": "B", "pointsPx": [[80.0 + shift, 15.0], [80.0 + shift, 45.0]]},
+                    {
+                        "side": "A", "pointsPx": [[20.0 + shift, 15.0], [20.0 + shift, 30.0]],
+                        "supportPointsPx": [[20.0 + shift, 38.0], [20.0 + shift, 45.0]],
+                        "supportTransitionPairsPx": [
+                            [[17.0 + shift, 38.0], [23.0 + shift, 38.0]],
+                            [[17.0 + shift, 45.0], [23.0 + shift, 45.0]],
+                        ],
+                        "supportEvidenceMode": "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    },
+                    {
+                        "side": "B", "pointsPx": [[80.0 + shift, 15.0], [80.0 + shift, 30.0]],
+                        "supportPointsPx": [[80.0 + shift, 38.0], [80.0 + shift, 45.0]],
+                        "supportTransitionPairsPx": [
+                            [[77.0 + shift, 38.0], [83.0 + shift, 38.0]],
+                            [[77.0 + shift, 45.0], [83.0 + shift, 45.0]],
+                        ],
+                        "supportEvidenceMode": "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    },
                 ],
             },
             "fittedGeometry": {
@@ -201,6 +217,11 @@ class Hole2BatchReviewTests(unittest.TestCase):
             self.assertEqual([[120.0, 80.0], [150.0, 80.0]], fit_circle["points"])
             self.assertTrue(fit_circle["flags"]["fittedModel"])
             self.assertFalse(fit_circle["flags"]["isDetectedContour"])
+            for label in ("old:7:boundary:A", "old:7:boundary:B"):
+                boundary = next(shape for shape in labelme["shapes"] if shape["label"] == label)
+                self.assertEqual(2, boundary["flags"]["primaryPointCount"])
+                self.assertEqual(2, boundary["flags"]["extensionPointCount"])
+                self.assertTrue(boundary["flags"]["frozenLineExtendedForAudit"])
             metadata = labelme["reviewMetadata"]
             self.assertEqual("old/1", metadata["old"]["algorithmVersion"])
             self.assertFalse(metadata["new"]["features"]["7"]["measurementValid"])

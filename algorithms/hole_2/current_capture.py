@@ -1433,6 +1433,9 @@ def build_feature_outputs(
                     "pointsPx": boundary.get("rawPointsPx", []),
                     "transitionPairsPx": boundary.get("transitionPairsPx", []),
                     "supportPointsPx": boundary.get("supportPointsPx", []),
+                    "supportTransitionPairsPx": boundary.get(
+                        "supportTransitionPairsPx", []
+                    ),
                     "supportEvidenceMode": boundary.get("supportEvidenceMode"),
                 }
                 for boundary in d7_boundary_evidence
@@ -3430,6 +3433,151 @@ def _shared_parallel_boundary_geometry(
     return dimension_points, fitted_boundaries, diagnostics
 
 
+def _paired_contour_support_window(
+    image: np.ndarray,
+    p1_target: tuple[float, float],
+    p2_target: tuple[float, float],
+    endpoint: str,
+    outer_polarity: float,
+    d7_config: dict[str, Any],
+    diagnostics: dict[str, Any],
+) -> None:
+    """Collect paired-transition midpoints for audit extension efficiently.
+
+    This is the raw-evidence portion of :func:`_paired_contour_boundary` with
+    the same search window, smoothing, local-peak, polarity, width, peak and
+    prior-score semantics.  Candidate-pair scoring is vectorized because an
+    audit extension scans several translated strips.  It never returns a
+    business boundary and therefore cannot change D7 measurement geometry.
+    """
+    diagnostics.update({
+        "pairSupport": 0,
+        "failureStage": None,
+        "layerStabilizationFailure": None,
+        "rawContourLocusPointsPx": [],
+        "transitionPairsPx": [],
+    })
+    dx = p2_target[0] - p1_target[0]
+    dy = p2_target[1] - p1_target[1]
+    length = math.hypot(dx, dy)
+    if length < 5.0:
+        diagnostics["failureStage"] = "axis_degenerate"
+        return
+    if abs(float(outer_polarity)) <= 1e-9:
+        diagnostics["failureStage"] = "reference_outer_polarity_unavailable"
+        return
+    axis = np.asarray((dx / length, dy / length), dtype=np.float64)
+    tangent = np.asarray((-axis[1], axis[0]), dtype=np.float64)
+    origin = np.asarray(
+        p1_target if endpoint == "p1" else p2_target, dtype=np.float64
+    )
+    offsets = np.arange(-42, 43, dtype=np.float64)
+    mids = (offsets[:-1] + offsets[1:]) * 0.5
+    prior_sigma = float(d7_config["paired_edge_prior_sigma_px"])
+    prior = np.exp(-(mids * mids) / (2.0 * prior_sigma * prior_sigma))
+    outer_sign = 1.0 if outer_polarity > 0.0 else -1.0
+    interior_sign = 1.0 if endpoint == "p1" else -1.0
+    minimum_width = float(d7_config["paired_edge_min_width_target_px"])
+    maximum_width = float(d7_config["paired_edge_max_width_target_px"])
+    minimum_peak = float(d7_config["paired_edge_min_peak"])
+    contour_points: list[list[float]] = []
+    transition_pairs: list[list[list[float]]] = []
+    tangent_coordinates: list[float] = []
+    axis_coordinates: list[float] = []
+
+    for tangent_offset in np.linspace(
+        -float(d7_config["paired_edge_strip_half_width_px"]),
+        float(d7_config["paired_edge_strip_half_width_px"]),
+        int(d7_config["paired_edge_strip_samples"]),
+    ):
+        center = origin + tangent_offset * tangent
+        profile = bilinear_sample(
+            image, center[0] + offsets * axis[0], center[1] + offsets * axis[1]
+        )
+        if np.isnan(profile).any():
+            continue
+        derivative = np.diff(smooth_1d(profile, 7))
+        outer_score = derivative * outer_sign
+        inner_score = -derivative * outer_sign
+        outer_indices = np.flatnonzero(
+            (outer_score[1:-1] >= minimum_peak)
+            & (outer_score[1:-1] >= outer_score[:-2])
+            & (outer_score[1:-1] >= outer_score[2:])
+        ) + 1
+        inner_indices = np.flatnonzero(
+            (inner_score[1:-1] >= minimum_peak)
+            & (inner_score[1:-1] >= inner_score[:-2])
+            & (inner_score[1:-1] >= inner_score[2:])
+        ) + 1
+        if outer_indices.size == 0 or inner_indices.size == 0:
+            continue
+        signed_width = (
+            mids[inner_indices][None, :] - mids[outer_indices][:, None]
+        ) * interior_sign
+        width_valid = (signed_width >= minimum_width) & (
+            signed_width <= maximum_width
+        )
+        if not bool(np.any(width_valid)):
+            continue
+        scores = np.minimum(
+            outer_score[outer_indices][:, None],
+            inner_score[inner_indices][None, :],
+        ) * np.sqrt(
+            prior[outer_indices][:, None] * prior[inner_indices][None, :]
+        )
+        scores = np.where(width_valid, scores, -np.inf)
+        flat_index = int(np.argmax(scores))
+        outer_rank, inner_rank = np.unravel_index(flat_index, scores.shape)
+        outer_index = int(outer_indices[outer_rank])
+        inner_index = int(inner_indices[inner_rank])
+        outer_position = float(
+            mids[outer_index] + parabolic_peak(outer_score.tolist(), outer_index)
+        )
+        inner_position = float(
+            mids[inner_index] + parabolic_peak(inner_score.tolist(), inner_index)
+        )
+        center_position = 0.5 * (outer_position + inner_position)
+        midpoint = center + center_position * axis
+        outer_point = center + outer_position * axis
+        inner_point = center + inner_position * axis
+        contour_points.append([float(midpoint[0]), float(midpoint[1])])
+        transition_pairs.append([
+            [float(outer_point[0]), float(outer_point[1])],
+            [float(inner_point[0]), float(inner_point[1])],
+        ])
+        tangent_coordinates.append(float(tangent_offset))
+        axis_coordinates.append(float(center_position))
+
+    diagnostics.update({
+        "pairSupport": len(contour_points),
+        "rawContourLocusPointsPx": contour_points,
+        "transitionPairsPx": transition_pairs,
+    })
+    minimum_support = int(d7_config["paired_edge_min_support"])
+    fitted = robust_fit_line(contour_points, min_points=minimum_support)
+    if fitted is None:
+        diagnostics["failureStage"] = "outer_contour_locus_fit_failed"
+        return
+    line, inliers = fitted
+    axis_cosine = abs(float(line[0]) * axis[0] + float(line[1]) * axis[1])
+    residuals = np.abs(line[0] * inliers[:, 0] + line[1] * inliers[:, 1] + line[2])
+    median_residual = float(np.median(residuals))
+    if (
+        axis_cosine < D7_BOUNDARY_MIN_AXIS_COSINE
+        or median_residual > float(d7_config["max_fit_residual_target_px"])
+    ):
+        _, stabilization = _fit_dominant_paired_layer(
+            contour_points,
+            tangent_coordinates,
+            axis_coordinates,
+            minimum_support=minimum_support,
+            residual_gate=float(d7_config["max_fit_residual_target_px"]),
+        )
+        diagnostics.update(stabilization)
+        if stabilization.get("layerStabilizationFailure") is not None:
+            diagnostics["failureStage"] = "paired_layer_ambiguous"
+
+
 def _extend_d7_paired_support(
     image: np.ndarray,
     p1_target: tuple[float, float],
@@ -3441,21 +3589,22 @@ def _extend_d7_paired_support(
     dimension_points: tuple[tuple[float, float], tuple[float, float]],
     evidence: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Extend audit-only D7 segments over observed straight-neck support.
+    """Extend audit segments with contiguous *paired* straight-neck support.
 
     The official paired-transition equations and measurement intersections
-    are frozen inputs.  The displayed segment is the projection of the
-    already-accepted paired-transition points that lie from the Phi tangent
-    into the neck and remain under the existing residual gate.  It is never
-    extended with a different optical-edge semantic.  Nothing here can alter
-    the business value or upgrade legacy evidence semantics.
+    are frozen inputs.  Moving strips reuse the existing line-search layout,
+    but every added point is still the midpoint of two opposite-polarity
+    transitions and must satisfy the unchanged fit-residual gate against the
+    frozen line.  A/B must both extend continuously; no point can refit the
+    business geometry or upgrade legacy evidence semantics.
     """
     diagnostics: dict[str, Any] = {
-        "candidate_boundary_support_extension_attempted": False,
+        "candidate_boundary_support_extension_attempted": True,
         "candidate_boundary_support_clipping_attempted": True,
         "candidate_boundary_support_extension_contract": (
-            "frozen_paired_line_clipped_to_outward_primary_paired_support"
+            "frozen_paired_line_extended_by_contiguous_outward_paired_support"
         ),
+        "candidate_boundary_support_extension_complete": False,
         "candidate_boundary_support_sides": [],
     }
     if len(evidence) != 2 or len(dimension_points) != 2:
@@ -3481,7 +3630,8 @@ def _extend_d7_paired_support(
             return evidence, diagnostics
         equations.append(line / normal_norm)
 
-    updated: list[dict[str, Any]] = []
+    primary_boundaries: list[dict[str, Any]] = []
+    primary_maxima: list[float] = []
     for index, boundary in enumerate(evidence):
         origin = np.asarray(dimension_points[index], dtype=np.float64)
         line = equations[index]
@@ -3502,22 +3652,21 @@ def _extend_d7_paired_support(
             if point_index < len(original_pairs):
                 raw_pairs.append(original_pairs[point_index])
         if len(raw_points) < 2:
-            diagnostics["candidate_boundary_support_sides"].append({
-                "side": boundary.get("side"),
-                "acceptedOffsetsTargetPx": [],
-                "stopOffsetTargetPx": 0.0,
-                "stopReason": "outward_paired_support_unavailable",
-            })
-            updated.append({
+            diagnostics["candidate_boundary_support_stop_reason"] = (
+                "outward_primary_paired_support_unavailable"
+            )
+            primary_boundaries.append({
                 **boundary,
                 "rawPointsPx": raw_points,
                 "transitionPairsPx": raw_pairs,
                 "supportPointsPx": [],
+                "supportTransitionPairsPx": [],
                 "supportEvidenceMode": "paired_transition_midpoints_only",
                 "segmentPointsPx": [],
                 "supportClippedToNeckDirection": True,
                 "supportDirectionTarget": outward.tolist(),
             })
+            primary_maxima.append(0.0)
             continue
 
         points = np.asarray(raw_points, dtype=np.float64)
@@ -3526,25 +3675,229 @@ def _extend_d7_paired_support(
         outward_coordinates = (projected - origin) @ outward
         start = projected[int(np.argmin(outward_coordinates))]
         end = projected[int(np.argmax(outward_coordinates))]
-        updated.append({
+        primary_boundaries.append({
             **boundary,
             "rawPointsPx": raw_points,
             "transitionPairsPx": raw_pairs,
             "supportPointsPx": [],
+            "supportTransitionPairsPx": [],
             "supportEvidenceMode": "paired_transition_midpoints_only",
             "segmentPointsPx": [start.tolist(), end.tolist()],
             "supportClippedToNeckDirection": True,
             "supportDirectionTarget": outward.tolist(),
         })
-        diagnostics["candidate_boundary_support_sides"].append({
+        primary_maxima.append(float(np.max(outward_coordinates)))
+
+    if any(len(boundary.get("segmentPointsPx", [])) != 2 for boundary in primary_boundaries):
+        diagnostics["candidate_boundary_support_sides"] = [
+            {
+                "side": boundary.get("side"),
+                "primaryMaxOffsetTargetPx": primary_maxima[index],
+                "candidateMaxOffsetTargetPx": None,
+                "acceptedMaxOffsetTargetPx": primary_maxima[index],
+                "acceptedOffsetsTargetPx": [],
+                "pairedPointCount": len(boundary.get("rawPointsPx", [])),
+                "extensionPointCount": 0,
+                "stopOffsetTargetPx": primary_maxima[index],
+                "stopReason": "outward_primary_paired_support_unavailable",
+                "windowDiagnostics": [],
+            }
+            for index, boundary in enumerate(primary_boundaries)
+        ]
+        diagnostics["candidate_boundary_support_lengths_target_px"] = [
+            0.0 if len(boundary.get("segmentPointsPx", [])) != 2
+            else float(math.dist(*boundary["segmentPointsPx"]))
+            for boundary in primary_boundaries
+        ]
+        return primary_boundaries, diagnostics
+
+    positive_window_offsets = sorted({
+        float(value) for value in d7_config["band_offsets_target_px"]
+        if float(value) > 0.0
+    })
+    if not positive_window_offsets:
+        diagnostics["candidate_boundary_support_stop_reason"] = "no_outward_windows"
+        return primary_boundaries, diagnostics
+
+    strip_half_width = float(d7_config["paired_edge_strip_half_width_px"])
+    strip_samples = int(d7_config["paired_edge_strip_samples"])
+    sampling_pitch = (2.0 * strip_half_width) / max(1, strip_samples - 1)
+    maximum_continuity_gap = 2.0 * sampling_pitch + 1e-6
+    residual_gate = float(d7_config["max_fit_residual_target_px"])
+    origins = [np.asarray(point, dtype=np.float64) for point in dimension_points]
+    side_candidates: list[dict[int, dict[str, Any]]] = [{}, {}]
+    window_diagnostics: list[list[dict[str, Any]]] = [[], []]
+
+    for window_offset in positive_window_offsets:
+        shifted = [
+            tuple(float(value) for value in (
+                np.asarray(point, dtype=np.float64) + window_offset * outward
+            ))
+            for point in (p1_target, p2_target)
+        ]
+        for index, endpoint in enumerate(("p1", "p2")):
+            window_quality: dict[str, Any] = {}
+            _paired_contour_support_window(
+                image, shifted[0], shifted[1], endpoint, polarities[index],
+                d7_config, window_quality,
+            )
+            raw_window_points = window_quality.get("rawContourLocusPointsPx", [])
+            raw_window_pairs = window_quality.get("transitionPairsPx", [])
+            competing_layer = (
+                window_quality.get("layerStabilizationFailure")
+                == "ambiguous_competing_layers"
+            )
+            accepted_residuals: list[float] = []
+            accepted_tangent: list[float] = []
+            for point_index, point in enumerate(raw_window_points):
+                if competing_layer or not isinstance(point, list) or len(point) != 2:
+                    continue
+                point_array = np.asarray(point, dtype=np.float64)
+                tangent_coordinate = float((point_array - origins[index]) @ outward)
+                if tangent_coordinate <= primary_maxima[index] + 1e-6:
+                    continue
+                residual = abs(float(
+                    equations[index][:2] @ point_array + equations[index][2]
+                ))
+                if residual > residual_gate:
+                    continue
+                quantized = int(round(tangent_coordinate / max(sampling_pitch, 1e-6)))
+                prior = side_candidates[index].get(quantized)
+                transition_pair = (
+                    raw_window_pairs[point_index]
+                    if point_index < len(raw_window_pairs) else None
+                )
+                if not (
+                    isinstance(transition_pair, list)
+                    and len(transition_pair) == 2
+                    and all(
+                        isinstance(pair_point, list) and len(pair_point) == 2
+                        for pair_point in transition_pair
+                    )
+                ):
+                    continue
+                candidate = {
+                    "point": [float(point_array[0]), float(point_array[1])],
+                    "transitionPair": transition_pair,
+                    "tangentOffsetTargetPx": tangent_coordinate,
+                    "residualTargetPx": residual,
+                    "windowOffsetTargetPx": window_offset,
+                }
+                if prior is None or residual < float(prior["residualTargetPx"]):
+                    side_candidates[index][quantized] = candidate
+                accepted_residuals.append(residual)
+                accepted_tangent.append(tangent_coordinate)
+            window_diagnostics[index].append({
+                "offsetTargetPx": window_offset,
+                "pairSupport": int(window_quality.get("pairSupport", 0)),
+                "fitFailureStage": window_quality.get("failureStage"),
+                "competingLayerRejected": competing_layer,
+                "candidatePointCount": len(raw_window_points),
+                "acceptedByFrozenResidualCount": len(accepted_residuals),
+                "residualMedianTargetPx": (
+                    None if not accepted_residuals
+                    else float(np.median(accepted_residuals))
+                ),
+                "residualMaxTargetPx": (
+                    None if not accepted_residuals else float(max(accepted_residuals))
+                ),
+                "tangentMinimumTargetPx": (
+                    None if not accepted_tangent else float(min(accepted_tangent))
+                ),
+                "tangentMaximumTargetPx": (
+                    None if not accepted_tangent else float(max(accepted_tangent))
+                ),
+            })
+
+    accepted_by_side: list[list[dict[str, Any]]] = []
+    side_status: list[dict[str, Any]] = []
+    for index, boundary in enumerate(primary_boundaries):
+        ordered = sorted(
+            side_candidates[index].values(),
+            key=lambda candidate: float(candidate["tangentOffsetTargetPx"]),
+        )
+        contiguous: list[dict[str, Any]] = []
+        current_offset = primary_maxima[index]
+        stop_offset: float | None = None
+        stop_reason = "no_outward_candidate"
+        for candidate in ordered:
+            tangent_offset = float(candidate["tangentOffsetTargetPx"])
+            if tangent_offset - current_offset > maximum_continuity_gap:
+                stop_offset = tangent_offset
+                stop_reason = "continuity_gap"
+                break
+            contiguous.append(candidate)
+            current_offset = max(current_offset, tangent_offset)
+            stop_reason = "continuous_paired_support_complete"
+        if len(contiguous) < 2:
+            stop_reason = (
+                "continuity_gap" if stop_reason == "continuity_gap"
+                else "extension_support_below_gate"
+            )
+        accepted_by_side.append(contiguous)
+        side_status.append({
             "side": boundary.get("side"),
-            "acceptedOffsetsTargetPx": [],
-            "stopOffsetTargetPx": None,
-            "stopReason": "same_semantic_support_ends_at_primary_strip",
-            "pairedPointCount": len(raw_points),
-            "corroboratingPointCount": 0,
+            "primaryMaxOffsetTargetPx": primary_maxima[index],
+            "candidateMaxOffsetTargetPx": (
+                None if not ordered
+                else float(max(item["tangentOffsetTargetPx"] for item in ordered))
+            ),
+            "acceptedMaxOffsetTargetPx": (
+                primary_maxima[index] if not contiguous else current_offset
+            ),
+            "acceptedOffsetsTargetPx": [
+                float(item["tangentOffsetTargetPx"]) for item in contiguous
+            ],
+            "pairedPointCount": len(boundary.get("rawPointsPx", [])),
+            "extensionPointCount": len(contiguous),
+            "stopOffsetTargetPx": stop_offset,
+            "stopReason": stop_reason,
+            "samplingPitchTargetPx": sampling_pitch,
+            "maximumContinuityGapTargetPx": maximum_continuity_gap - 1e-6,
+            "windowDiagnostics": window_diagnostics[index],
         })
-    diagnostics["candidate_boundary_support_extension_complete"] = True
+
+    extension_complete = all(len(candidates) >= 2 for candidates in accepted_by_side)
+    diagnostics["candidate_boundary_support_extension_complete"] = extension_complete
+    diagnostics["candidate_boundary_support_sides"] = side_status
+    if not extension_complete:
+        diagnostics["candidate_boundary_support_stop_reason"] = (
+            "dual_side_continuity_not_met"
+            if any(candidates for candidates in accepted_by_side)
+            else "dual_side_extension_support_below_gate"
+        )
+        diagnostics["candidate_boundary_support_lengths_target_px"] = [
+            float(math.dist(*boundary["segmentPointsPx"]))
+            for boundary in primary_boundaries
+        ]
+        return primary_boundaries, diagnostics
+
+    updated: list[dict[str, Any]] = []
+    for index, boundary in enumerate(primary_boundaries):
+        accepted = accepted_by_side[index]
+        support_points = [item["point"] for item in accepted]
+        support_pairs = [
+            item["transitionPair"] for item in accepted
+            if item["transitionPair"] is not None
+        ]
+        all_points = np.asarray(
+            boundary["rawPointsPx"] + support_points, dtype=np.float64
+        )
+        signed = all_points @ equations[index][:2] + equations[index][2]
+        projected = all_points - signed[:, None] * equations[index][:2]
+        coordinates = (projected - origins[index]) @ outward
+        start = projected[int(np.argmin(coordinates))]
+        end = projected[int(np.argmax(coordinates))]
+        updated.append({
+            **boundary,
+            "supportPointsPx": support_points,
+            "supportTransitionPairsPx": support_pairs,
+            "supportEvidenceMode": (
+                "paired_transition_midpoints_plus_contiguous_outward_paired_support"
+            ),
+            "segmentPointsPx": [start.tolist(), end.tolist()],
+        })
+
     diagnostics["candidate_boundary_support_lengths_target_px"] = [
         float(math.dist(*boundary["segmentPointsPx"])) for boundary in updated
     ]

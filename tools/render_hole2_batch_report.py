@@ -328,6 +328,31 @@ def _draw_solid_fit_circle(
     draw.ellipse(box, outline=color, width=width)
 
 
+def _d7_support_by_side(target: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    evidence = target.get("rawEdgeEvidence", {})
+    boundaries = evidence.get("boundaries", []) if isinstance(evidence, dict) else []
+    return {
+        str(boundary.get("side")): boundary
+        for boundary in boundaries
+        if isinstance(boundary, dict) and boundary.get("side") in {"A", "B"}
+    }
+
+
+def _d7_audit_flags(
+    support_by_side: dict[str, dict[str, Any]], side: str,
+) -> dict[str, Any]:
+    evidence = support_by_side.get(side, {})
+    primary = evidence.get("pointsPx", [])
+    extension = evidence.get("supportPointsPx", [])
+    mode = evidence.get("supportEvidenceMode")
+    return {
+        "supportEvidenceMode": mode,
+        "primaryPointCount": len(primary) if isinstance(primary, list) else 0,
+        "extensionPointCount": len(extension) if isinstance(extension, list) else 0,
+        "frozenLineExtendedForAudit": bool(extension),
+    }
+
+
 def _draw_d7_detail_inset(
     source: Image.Image,
     preview: Image.Image,
@@ -337,6 +362,7 @@ def _draw_d7_detail_inset(
     if preview.width < 800 or not isinstance(feature.get("target"), dict):
         return
     target = feature["target"]
+    support_by_side = _d7_support_by_side(target)
     fitted = target.get("fittedGeometry", {})
     formal = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
     review = fitted.get("legacyReviewBoundaries", []) if isinstance(fitted, dict) else []
@@ -400,6 +426,11 @@ def _draw_d7_detail_inset(
         segment = [mapped(point) for point in points]
         detail.line(segment, fill=color, width=4)
         side = str(boundary.get("side", "?"))
+        if not review_only:
+            support = support_by_side.get(side, {}).get("supportPointsPx", [])
+            for point in support if isinstance(support, list) else []:
+                x, y = mapped(point)
+                detail.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(255, 255, 0))
         detail.text((segment[-1][0] + 4, segment[-1][1] - 10), side, fill=color, font=font)
     dimension_color = (255, 145, 220) if review_only else (0, 235, 255)
     connector = [mapped(point) for point in dimension]
@@ -432,6 +463,7 @@ def _draw_preview(
     d7 = _feature(record, "7")
     if _feature_valid(record, "7") and isinstance(d7.get("target"), dict):
         target = d7["target"]
+        support_by_side = _d7_support_by_side(target)
         fitted = target.get("fittedGeometry", {})
         boundaries = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
         for index, boundary in enumerate(boundaries):
@@ -443,6 +475,12 @@ def _draw_preview(
                 ]
                 color = (255, 190, 0) if index == 0 else (255, 110, 0)
                 draw.line(scaled, fill=color, width=line_width)
+                side = str(boundary.get("side", ""))
+                support = support_by_side.get(side, {}).get("supportPointsPx", [])
+                for point in support if isinstance(support, list) else []:
+                    x, y = float(point[0]) * scale, float(point[1]) * scale
+                    dot = max(2, marker // 2)
+                    draw.ellipse((x - dot, y - dot, x + dot, y + dot), fill=(255, 255, 0))
         legacy_review = (
             fitted.get("legacyReviewBoundaries", [])
             if isinstance(fitted, dict) else []
@@ -538,6 +576,7 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
     d7 = _feature(record, "7")
     if _feature_valid(record, "7") and isinstance(d7.get("target"), dict):
         target = d7["target"]
+        support_by_side = _d7_support_by_side(target)
         fitted = target.get("fittedGeometry", {})
         boundaries = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
         for boundary in boundaries:
@@ -550,7 +589,7 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
                     "group_id": "prediction:7",
                     "description": "fitted neck outer-contour boundary; original target pixels",
                     "shape_type": "line",
-                    "flags": {},
+                    "flags": _d7_audit_flags(support_by_side, str(side)),
                 })
         legacy_review = (
             fitted.get("legacyReviewBoundaries", [])

@@ -22,8 +22,24 @@ def _feature(name, valid, failure=None):
             "rawEdgeEvidence": {
                 "semantics": "neck_outer_contour_edges",
                 "boundaries": [
-                    {"side": "A", "pointsPx": [[40.0, 35.0], [40.0, 65.0]]},
-                    {"side": "B", "pointsPx": [[140.0, 35.0], [140.0, 65.0]]},
+                    {
+                        "side": "A", "pointsPx": [[40.0, 35.0], [40.0, 50.0]],
+                        "supportPointsPx": [[40.0, 58.0], [40.0, 65.0]],
+                        "supportTransitionPairsPx": [
+                            [[37.0, 58.0], [43.0, 58.0]],
+                            [[37.0, 65.0], [43.0, 65.0]],
+                        ],
+                        "supportEvidenceMode": "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    },
+                    {
+                        "side": "B", "pointsPx": [[140.0, 35.0], [140.0, 50.0]],
+                        "supportPointsPx": [[140.0, 58.0], [140.0, 65.0]],
+                        "supportTransitionPairsPx": [
+                            [[137.0, 58.0], [143.0, 58.0]],
+                            [[137.0, 65.0], [143.0, 65.0]],
+                        ],
+                        "supportEvidenceMode": "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    },
                 ],
             },
             "fittedGeometry": {
@@ -213,6 +229,14 @@ class Hole2BatchReportTests(unittest.TestCase):
                 [[40.0, 50.0], [140.0, 50.0]],
                 shapes["prediction:7:dimension"]["points"],
             )
+            for label in ("prediction:7:boundary:A", "prediction:7:boundary:B"):
+                self.assertEqual(2, shapes[label]["flags"]["extensionPointCount"])
+                self.assertEqual(2, shapes[label]["flags"]["primaryPointCount"])
+                self.assertEqual(
+                    "paired_transition_midpoints_plus_contiguous_outward_paired_support",
+                    shapes[label]["flags"]["supportEvidenceMode"],
+                )
+                self.assertTrue(shapes[label]["flags"]["frozenLineExtendedForAudit"])
             self.assertEqual("linestrip", shapes["prediction:Phi12.2:arc:reference_left:0"]["shape_type"])
             self.assertEqual("circle", shapes["prediction:Phi12.2:fit-circle"]["shape_type"])
             self.assertEqual(
