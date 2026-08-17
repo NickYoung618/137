@@ -37,7 +37,7 @@
 
 - [x] T011 运行聚焦/全量测试、全部根Schema、CLI help、`git diff --check`及JSON/大文件/私有绝对路径污染检查
 - [x] T012 运行SpecKit converge：17项FR、7项SC、13项任务与5项Constitution原则均已核对，无额外可安全完成的实现缺口；证据阻塞项保持明示
-- [ ] T013 本地小步提交并推送025功能分支，不合并main、不修改PLC/HMI
+- [x] T013 本地小步提交并推送025功能分支，不合并main、不修改PLC/HMI
 
 ## Dependencies
 
