@@ -95,3 +95,16 @@ representatives may change before the corresponding semantic evidence exists.
   image/archive or large derived artifact.
 - The printed trace-output-outside-worktree error in full discovery is an expected tested
   fail-closed branch, not a test failure.
+
+## Mac independent gate — 2026-08-17
+
+- Mac validation branch: `025-mac-validation`; validated commit:
+  `16f3d507af1330ad43eb5f233fb9e90a2c461ce5`.
+- The explicitly requested three-suite command ran the tests present in that Mac checkout:
+  `25/25` passed. This records the actual Mac count and does not claim that Mac reproduced the
+  server-only `70/70` focused count.
+- Mac worktree remained clean. No threshold, main, PLC/HMI or algorithm change occurred.
+- The existing external human-review directory was reopened; no AUTO review mark was promoted to
+  truth and no result was used for tuning.
+- The Mac engineering gate is accepted. The only next input remains the human semantic decisions
+  for 141/161/441, 281, 261 and 401 listed above.
