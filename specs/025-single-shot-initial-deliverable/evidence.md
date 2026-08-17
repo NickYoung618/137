@@ -46,23 +46,26 @@ batching must reuse one verified adapter/reference model instead of launching on
 
 ## Layered root-cause matrix and reuse decision
 
-- **141**: coarse component exists near the expected shell, but sparse-ray residual P95 is
+- **141**: the user confirmed that all three displayed circular edges are real housing circular
+  edges. The coarse component exists near the expected shell, but sparse-ray residual P95 is
   `5.371 px` versus the scaled `5.316 px` gate; sector refit has 9 suspect sectors and retained
-  coverage `0.694`. Existing bundled gyj radial-edge and robust-fit evidence is sufficient to
-  diagnose; changing acceptance requires a human physical-edge decision and an independent part.
-- **161**: sparse residual P95 `5.955 px`, 13 suspect sectors, retained coverage `0.583`.
-  This is broad disagreement, not a small isolated arc; no safe threshold change is justified.
-- **441**: sparse P95 `4.107 px` passes, final 720-ray P95 `5.654 px` fails, with 19 suspect
-  sectors and retained coverage `0.417`. The high-resolution physical gate is revealing broad
-  inconsistency; a long independent physical outer-arc annotation is required before changing it.
-- **281**: candidate-002 is the only near-pass and fails `width_variation_too_high`; all other
-  raw candidates lack connected radial indentation. Whether candidate-002 is the physical groove
-  is a semantic question, not inferable from its score.
-- **261**: candidate-004 score `0.911` and candidate-006 score `0.852` both pass. The current
-  fail-closed ambiguity is correct until a human identifies the physical groove and fixture evidence.
+  coverage `0.694`. The next diagnosis must test whether rays switch between real concentric edge
+  families or whether localization is biased; this is not evidence for relaxing the residual gate.
+- **161**: the same human circular-edge conclusion applies. Sparse residual P95 `5.955 px`, 13
+  suspect sectors and retained coverage `0.583` show broad disagreement, not a missing visible
+  circle. Candidate/edge-family selection must be separated from acceptance-threshold behavior.
+- **441**: the same human circular-edge conclusion applies. Sparse P95 `4.107 px` passes, final
+  720-ray P95 `5.654 px` fails, with 19 suspect sectors and retained coverage `0.417`. The
+  high-resolution stage exposes broad edge-family disagreement; the gate must not simply be relaxed.
+- **281**: the user confirmed candidate-002 is fixture shadow, not the real groove. It is the only
+  near-pass and fails `width_variation_too_high`; therefore the current zero-accepted result is safe,
+  and widening that gate would create a known false positive.
+- **261**: the user confirmed candidate-004 is the real groove and candidate-006 is fixture shadow.
+  Their scores are `0.911` and `0.852`; the current fail-closed ambiguity is safe. The case may be
+  used to diagnose missing square-opening/fixture rejection evidence, never as a candidate-ID rule.
 - **401**: end wall has 27 support points; start wall has 19 detected edge points but no consensus
-  support. If the start wall is occluded, failure is the required initial behavior; if fully visible,
-  its independent support points are needed before modifying line consensus.
+  support. The user confirmed both physical groove walls are not completely visible; the current
+  refinement failure is the required initial behavior and must not be promoted.
 - **374**: already confirmed one visible real wall plus a fixture-shadow edge. Existing endpoint
   structure difference `0.0764` exceeds the adjudication hard gate `0.05`; it remains the mandatory
   mixed-edge negative.
@@ -72,17 +75,17 @@ circle fit through the one repository-contained core. The groove route reuses th
 existing subpixel edge/line/intersection implementation. No second copy or external runtime source
 path is needed.
 
-## Human evidence still required
+## Human semantic review resolved — 2026-08-17
 
-1. 141/161/441: point to the physical housing outer edge; if a circle change is desired, mark a
-   sufficiently long visible physical outer arc on one development part and a different validation part.
-2. 281: answer whether candidate-002 is the one real square groove.
-3. 261: answer which of candidate-004/candidate-006 is the real groove and whether the other is fixture shadow.
-4. 401: answer whether both physical groove walls are fully visible. If yes, later provide at least
-   three independent points per wall plus both mouth endpoints; if no, the correct result is failure.
+- 141/161/441: all three displayed circular edges were judged to be real housing circular edges.
+- 281: candidate-002 was judged to be fixture shadow, not the real groove.
+- 261: candidate-004 was judged to be the real groove; candidate-006 was judged to be fixture shadow.
+- 401: both real groove walls were judged not completely visible.
 
-AUTO overlays remain review aids, not truth. No threshold or visual implementation for these six
-representatives may change before the corresponding semantic evidence exists.
+These are semantic decisions, not pixel truth. They close the prior identity questions but do not
+authorize candidate-ID logic, runtime truth input or threshold relaxation. The next safe visual work
+is circle edge-family trace analysis for 141/161/441 and fixture-shadow rejection diagnosis for 261;
+281 and 401 are correct fail-closed controls.
 
 ## Engineering gates
 
@@ -106,5 +109,5 @@ representatives may change before the corresponding semantic evidence exists.
 - Mac worktree remained clean. No threshold, main, PLC/HMI or algorithm change occurred.
 - The existing external human-review directory was reopened; no AUTO review mark was promoted to
   truth and no result was used for tuning.
-- The Mac engineering gate is accepted. The only next input remains the human semantic decisions
-  for 141/161/441, 281, 261 and 401 listed above.
+- The Mac engineering gate is accepted. The former human semantic decisions were subsequently
+  supplied and are recorded in the resolved review section above.
