@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "single-shot-initial-profile.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "profileId", "sourceConfigSha256", "materializedConfigSha256",
+    "detectorMode", "target", "sourceConsistency", "policies"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "single-shot-initial-profile/1"},
+    "profileId": {"const": "single-real-groove-85deg-fail-closed-v1"},
+    "sourceConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "materializedConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "detectorMode": {"const": "single_real_groove"},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["angleConventionId", "targetAngleDeg", "toleranceDeg", "acceptedMinDeg", "acceptedMaxDeg"],
+      "properties": {
+        "angleConventionId": {"const": "image-y-down-clockwise-signed/1"},
+        "targetAngleDeg": {"const": 85.0},
+        "toleranceDeg": {"const": 5.0},
+        "acceptedMinDeg": {"const": 80.0},
+        "acceptedMaxDeg": {"const": 90.0}
+      }
+    },
+    "sourceConsistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["originalThresholdVersion", "originalContrastThreshold", "originalEvidencePreserved", "adjudicationVersion"],
+      "properties": {
+        "originalThresholdVersion": {"const": "sidewall-source-consistency-v1"},
+        "originalContrastThreshold": {"const": 0.12},
+        "originalEvidencePreserved": {"const": true},
+        "adjudicationVersion": {"const": "endpoint-structure-runtime-adjudication-v1"}
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "singleCaptureRequired", "pairedCaptureRequired", "occlusionFailsClosed",
+        "mixedFixtureEdgeFailsClosed", "imageGuidanceAllowed", "plcAllowed",
+        "manualTruthAppliedAtRuntime", "developmentOnly"
+      ],
+      "properties": {
+        "singleCaptureRequired": {"const": true},
+        "pairedCaptureRequired": {"const": false},
+        "occlusionFailsClosed": {"const": true},
+        "mixedFixtureEdgeFailsClosed": {"const": true},
+        "imageGuidanceAllowed": {"const": true},
+        "plcAllowed": {"const": false},
+        "manualTruthAppliedAtRuntime": {"const": false},
+        "developmentOnly": {"const": true}
+      }
+    }
+  }
+}

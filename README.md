@@ -86,6 +86,13 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
   `single_real_groove`实验配置才可输出`ACCEPTED_OVERRIDE`并继续计算图像角和有符号调整量。
   它始终是`developmentOnly`、非权威且PLC阻断；默认配置、其他诊断模式和未开启路径不变。
 
+025将初版收敛为单拍：不需要也不等待180°双拍。`tools/prepare_single_shot_initial_config.py`
+只在用户显式运行时，把现有单槽v3、原020同源性门和022二级裁决组合成Git外配置；
+它拒绝改动原0.12门、外部代码路径、非85°目标或已确认PLC映射。完整且唯一的真槽可输出
+图像当前角和调整角；固定物遮挡、单壁、混边、0/多候选或圆失败必须`valid=false`且角度为null。
+该剖面仍是功能分支上的初版候选，PLC始终为null；完整命令与审核边界见
+`specs/025-single-shot-initial-deliverable/quickstart.md`。
+
 服务器paired合成冒烟：
 
 ```bash
