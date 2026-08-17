@@ -1401,6 +1401,11 @@ def build_feature_outputs(
     )
     if not isinstance(d7_boundary_evidence, list):
         d7_boundary_evidence = []
+    d7_legacy_review_evidence = measurements.get(
+        "d7.quality.candidate_legacy_boundary_review_target_px"
+    )
+    if not isinstance(d7_legacy_review_evidence, list):
+        d7_legacy_review_evidence = []
     phi_arc_evidence = measurements.get(
         "Phi12_2.quality.candidate_evidence_arc_segments_target_px"
     )
@@ -1427,8 +1432,22 @@ def build_feature_outputs(
                     "side": boundary.get("side"),
                     "pointsPx": boundary.get("rawPointsPx", []),
                     "transitionPairsPx": boundary.get("transitionPairsPx", []),
+                    "supportPointsPx": boundary.get("supportPointsPx", []),
+                    "supportEvidenceMode": boundary.get("supportEvidenceMode"),
                 }
                 for boundary in d7_boundary_evidence
+                if isinstance(boundary, dict)
+            ],
+            "legacyReviewBoundaries": [
+                {
+                    "side": boundary.get("side"),
+                    "semantics": boundary.get("semantics"),
+                    "rawPointsPx": boundary.get("rawPointsPx", []),
+                    "inlierPointsPx": boundary.get("inlierPointsPx", []),
+                    "reviewOnly": True,
+                    "equivalentToFormalBoundary": False,
+                }
+                for boundary in d7_legacy_review_evidence
                 if isinstance(boundary, dict)
             ],
         }
@@ -1442,6 +1461,18 @@ def build_feature_outputs(
                     "segmentPointsPx": boundary.get("segmentPointsPx", []),
                 }
                 for boundary in d7_boundary_evidence
+                if isinstance(boundary, dict)
+            ],
+            "legacyReviewBoundaries": [
+                {
+                    "side": boundary.get("side"),
+                    "semantics": boundary.get("semantics"),
+                    "lineEquation": boundary.get("lineEquation"),
+                    "segmentPointsPx": boundary.get("segmentPointsPx", []),
+                    "reviewOnly": True,
+                    "equivalentToFormalBoundary": False,
+                }
+                for boundary in d7_legacy_review_evidence
                 if isinstance(boundary, dict)
             ],
         }
@@ -2910,6 +2941,16 @@ def _paired_contour_boundary(
         "outerPeakMedian": None if not outer_peaks else float(np.median(outer_peaks)),
         "innerPeakMedian": None if not inner_peaks else float(np.median(inner_peaks)),
         "pairWidthMedianPx": None if not pair_widths else float(np.median(pair_widths)),
+        # Preserve raw paired-transition evidence even when the subsequent
+        # line fit is rejected.  Callers may audit those points, but they may
+        # not promote the rejected boundary to a measurement.
+        "rawContourLocusPointsPx": [list(point) for point in contour_points],
+        "rawOuterTransitionPointsPx": [list(point) for point in outer_transition_points],
+        "rawInnerTransitionPointsPx": [list(point) for point in inner_transition_points],
+        "transitionPairsPx": [
+            [list(outer), list(inner)]
+            for outer, inner in zip(outer_transition_points, inner_transition_points)
+        ],
     })
     minimum_support = int(d7_config["paired_edge_min_support"])
     fitted = robust_fit_line(contour_points, min_points=minimum_support)
@@ -3389,6 +3430,127 @@ def _shared_parallel_boundary_geometry(
     return dimension_points, fitted_boundaries, diagnostics
 
 
+def _extend_d7_paired_support(
+    image: np.ndarray,
+    p1_target: tuple[float, float],
+    p2_target: tuple[float, float],
+    polarities: tuple[float, float],
+    d7_config: dict[str, Any],
+    *,
+    outward_direction: tuple[float, float],
+    dimension_points: tuple[tuple[float, float], tuple[float, float]],
+    evidence: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Extend audit-only D7 segments over observed straight-neck support.
+
+    The official paired-transition equations and measurement intersections
+    are frozen inputs.  The displayed segment is the projection of the
+    already-accepted paired-transition points that lie from the Phi tangent
+    into the neck and remain under the existing residual gate.  It is never
+    extended with a different optical-edge semantic.  Nothing here can alter
+    the business value or upgrade legacy evidence semantics.
+    """
+    diagnostics: dict[str, Any] = {
+        "candidate_boundary_support_extension_attempted": False,
+        "candidate_boundary_support_clipping_attempted": True,
+        "candidate_boundary_support_extension_contract": (
+            "frozen_paired_line_clipped_to_outward_primary_paired_support"
+        ),
+        "candidate_boundary_support_sides": [],
+    }
+    if len(evidence) != 2 or len(dimension_points) != 2:
+        diagnostics["candidate_boundary_support_stop_reason"] = "formal_geometry_unavailable"
+        return evidence, diagnostics
+    outward = np.asarray(outward_direction, dtype=np.float64)
+    outward_norm = float(np.linalg.norm(outward))
+    if not math.isfinite(outward_norm) or outward_norm <= 1e-12:
+        diagnostics["candidate_boundary_support_stop_reason"] = "outward_direction_degenerate"
+        return evidence, diagnostics
+    outward /= outward_norm
+
+    equations: list[np.ndarray] = []
+    for boundary in evidence:
+        equation = boundary.get("lineEquation")
+        if not isinstance(equation, list) or len(equation) != 3:
+            diagnostics["candidate_boundary_support_stop_reason"] = "formal_line_unavailable"
+            return evidence, diagnostics
+        line = np.asarray(equation, dtype=np.float64)
+        normal_norm = float(np.linalg.norm(line[:2]))
+        if not np.isfinite(line).all() or normal_norm <= 1e-12:
+            diagnostics["candidate_boundary_support_stop_reason"] = "formal_line_invalid"
+            return evidence, diagnostics
+        equations.append(line / normal_norm)
+
+    updated: list[dict[str, Any]] = []
+    for index, boundary in enumerate(evidence):
+        origin = np.asarray(dimension_points[index], dtype=np.float64)
+        line = equations[index]
+        raw_points: list[list[float]] = []
+        raw_pairs: list[Any] = []
+        original_points = boundary.get("rawPointsPx", [])
+        original_pairs = boundary.get("transitionPairsPx", [])
+        for point_index, point in enumerate(original_points):
+            if not isinstance(point, list) or len(point) != 2:
+                continue
+            point_array = np.asarray(point, dtype=np.float64)
+            residual = abs(float(line[:2] @ point_array + line[2]))
+            if float((point_array - origin) @ outward) < -1e-6:
+                continue
+            if residual > float(d7_config["max_fit_residual_target_px"]):
+                continue
+            raw_points.append([float(point_array[0]), float(point_array[1])])
+            if point_index < len(original_pairs):
+                raw_pairs.append(original_pairs[point_index])
+        if len(raw_points) < 2:
+            diagnostics["candidate_boundary_support_sides"].append({
+                "side": boundary.get("side"),
+                "acceptedOffsetsTargetPx": [],
+                "stopOffsetTargetPx": 0.0,
+                "stopReason": "outward_paired_support_unavailable",
+            })
+            updated.append({
+                **boundary,
+                "rawPointsPx": raw_points,
+                "transitionPairsPx": raw_pairs,
+                "supportPointsPx": [],
+                "supportEvidenceMode": "paired_transition_midpoints_only",
+                "segmentPointsPx": [],
+                "supportClippedToNeckDirection": True,
+                "supportDirectionTarget": outward.tolist(),
+            })
+            continue
+
+        points = np.asarray(raw_points, dtype=np.float64)
+        signed = points @ line[:2] + line[2]
+        projected = points - signed[:, None] * line[:2]
+        outward_coordinates = (projected - origin) @ outward
+        start = projected[int(np.argmin(outward_coordinates))]
+        end = projected[int(np.argmax(outward_coordinates))]
+        updated.append({
+            **boundary,
+            "rawPointsPx": raw_points,
+            "transitionPairsPx": raw_pairs,
+            "supportPointsPx": [],
+            "supportEvidenceMode": "paired_transition_midpoints_only",
+            "segmentPointsPx": [start.tolist(), end.tolist()],
+            "supportClippedToNeckDirection": True,
+            "supportDirectionTarget": outward.tolist(),
+        })
+        diagnostics["candidate_boundary_support_sides"].append({
+            "side": boundary.get("side"),
+            "acceptedOffsetsTargetPx": [],
+            "stopOffsetTargetPx": None,
+            "stopReason": "same_semantic_support_ends_at_primary_strip",
+            "pairedPointCount": len(raw_points),
+            "corroboratingPointCount": 0,
+        })
+    diagnostics["candidate_boundary_support_extension_complete"] = True
+    diagnostics["candidate_boundary_support_lengths_target_px"] = [
+        float(math.dist(*boundary["segmentPointsPx"])) for boundary in updated
+    ]
+    return updated, diagnostics
+
+
 def _detect_d7_tangent(
     target: np.ndarray,
     reference: ReferenceModel,
@@ -3585,8 +3747,16 @@ def _detect_d7_tangent(
     )
     if shared is not None:
         (first_point, second_point), shared_evidence, shared_quality = shared
+        outward = (side * normal_target[0], side * normal_target[1])
+        shared_evidence, extension_quality = _extend_d7_paired_support(
+            image, p1_shifted, p2_shifted, polarities, d7_config,
+            outward_direction=outward,
+            dimension_points=(first_point, second_point),
+            evidence=shared_evidence,
+        )
         quality["candidate_boundary_evidence_target_px"] = shared_evidence
         quality.update(shared_quality)
+        quality.update(extension_quality)
     ref_first = transform.inverse(*first_point)
     ref_second = transform.inverse(*second_point)
     return {
@@ -3596,9 +3766,98 @@ def _detect_d7_tangent(
     }, quality
 
 
+def _replay_v6_d7_review_evidence(
+    target: np.ndarray,
+    reference: ReferenceModel,
+    extraction: Extraction,
+    v6_measurements: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Replay the frozen v6 boundary calls for review-only line evidence.
+
+    The replay is exposed only when both detected intersections reproduce the
+    official v6 business coordinates after the same extraction transform.
+    These single-gradient lines are not promoted to the paired-transition
+    physical-boundary contract and therefore cannot complete evidence audit.
+    """
+    diagnostics: dict[str, Any] = {
+        "legacyReplayAttempted": True,
+        "legacyReplayMatchesMeasurement": False,
+        "legacyReplayFailure": None,
+    }
+    shape = next((item for item in reference.shapes if item.sanitized == "d7"), None)
+    keys = ("d7_x1", "d7_y1", "d7_x2", "d7_y2", "d7_length")
+    if (
+        shape is None or shape.line_p1 is None or shape.line_p2 is None
+        or not _finite_values(v6_measurements, list(keys))
+    ):
+        diagnostics["legacyReplayFailure"] = "v6_measurement_or_reference_unavailable"
+        return [], diagnostics
+    transform = SimilarityTransform(
+        float(extraction.transform_dx), float(extraction.transform_dy),
+        float(extraction.transform_scale), float(extraction.transform_theta_deg),
+    )
+    p1_target = transform.forward(*shape.line_p1)
+    p2_target = transform.forward(*shape.line_p2)
+    polarities = shape.endpoint_polarities or (0.0, 0.0)
+    stretched = contrast_stretch(target)
+    strip_diagnostics: list[dict[str, Any]] = [{}, {}]
+    detections = [
+        detect_dimension_boundary(
+            stretched, p1_target, p2_target, "p1", polarity=polarities[0],
+            diagnostics=strip_diagnostics[0],
+        ),
+        detect_dimension_boundary(
+            stretched, p1_target, p2_target, "p2", polarity=polarities[1],
+            diagnostics=strip_diagnostics[1],
+        ),
+    ]
+    if any(item is None for item in detections):
+        diagnostics["legacyReplayFailure"] = "boundary_replay_failed"
+        diagnostics["legacyReplayStrips"] = strip_diagnostics
+        return [], diagnostics
+    expected = [
+        transform.forward(float(v6_measurements["d7_x1"]), float(v6_measurements["d7_y1"])),
+        transform.forward(float(v6_measurements["d7_x2"]), float(v6_measurements["d7_y2"])),
+    ]
+    actual = [item.feature_point for item in detections if item is not None]
+    if any(
+        not (
+            math.isclose(actual_point[0], expected_point[0], rel_tol=1e-9, abs_tol=1e-6)
+            and math.isclose(actual_point[1], expected_point[1], rel_tol=1e-9, abs_tol=1e-6)
+        )
+        for actual_point, expected_point in zip(actual, expected)
+    ):
+        diagnostics["legacyReplayFailure"] = "measurement_intersection_mismatch"
+        diagnostics["legacyReplayExpectedIntersectionsTargetPx"] = expected
+        diagnostics["legacyReplayActualIntersectionsTargetPx"] = actual
+        return [], diagnostics
+
+    review: list[dict[str, Any]] = []
+    for side_name, strip in zip(("A", "B"), strip_diagnostics):
+        review.append({
+            "side": side_name,
+            "semantics": "legacy_single_gradient_boundary",
+            "rawPointsPx": strip.get("rawEdgePointsPx", []),
+            "inlierPointsPx": strip.get("inlierEdgePointsPx", []),
+            "lineEquation": strip.get("fittedLine"),
+            "segmentPointsPx": strip.get("fittedSegmentPointsPx", []),
+            "reviewOnly": True,
+            "equivalentToFormalBoundary": False,
+            "replayMatchesMeasurement": True,
+        })
+    diagnostics.update({
+        "legacyReplayMatchesMeasurement": True,
+        "legacyReplayExpectedIntersectionsTargetPx": expected,
+        "legacyReplayActualIntersectionsTargetPx": actual,
+        "legacyReplayStrips": strip_diagnostics,
+    })
+    return review, diagnostics
+
+
 def _v6_d7_fallback(
     v6_measurements: dict[str, Any],
     candidate_quality: dict[str, Any],
+    legacy_review_evidence: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, float] | None, dict[str, Any]]:
     """Return the untouched v6 d7 only when its original detector passed.
 
@@ -3621,6 +3880,8 @@ def _v6_d7_fallback(
         quality["candidate_fallback_failure"] = "v6_original_quality_rejected"
         return None, quality
     quality["candidate_fallback_pass"] = "v6_original_quality"
+    if legacy_review_evidence:
+        quality["candidate_legacy_boundary_review_target_px"] = legacy_review_evidence
     return {key: float(v6_measurements[key]) for key in keys}, quality
 
 
@@ -3849,7 +4110,15 @@ def run_current_capture(
             ):
                 d7_source = "hole2-v6-current-capture-multi-parallel-bands"
             if d7_values is None:
-                d7_values, d7_quality = _v6_d7_fallback(raw_measurements, d7_quality)
+                legacy_review, legacy_review_quality = _replay_v6_d7_review_evidence(
+                    target, measurement_reference, extraction, raw_measurements
+                )
+                d7_quality["candidate_legacy_boundary_review_diagnostics"] = (
+                    legacy_review_quality
+                )
+                d7_values, d7_quality = _v6_d7_fallback(
+                    raw_measurements, d7_quality, legacy_review
+                )
                 if d7_values is not None:
                     d7_source = "hole2-v6-original-quality-fallback"
             for key, value in d7_quality.items():

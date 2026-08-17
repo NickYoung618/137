@@ -13,6 +13,8 @@ from algorithms.hole_2.main import (
     ReferenceModel,
     ShapeModel,
     build_reference,
+    contrast_stretch,
+    detect_dimension_boundary,
     extract_image,
     gaussian_blur,
 )
@@ -21,8 +23,10 @@ from algorithms.hole_2.current_capture import (
     _detect_d7_tangent,
     _d7_multiband_recovery,
     _detect_phi12_2,
+    _extend_d7_paired_support,
     _fit_dominant_paired_layer,
     _paired_contour_boundary,
+    _replay_v6_d7_review_evidence,
     _ransac_circle,
     _shared_parallel_boundary_geometry,
     _v6_d7_fallback,
@@ -575,6 +579,144 @@ class CurrentCaptureRegistrationTests(unittest.TestCase):
         self.assertEqual(2, len(first_diagnostic["fittedSegmentPointsPx"]))
         self.assertGreaterEqual(first_diagnostic["pairSupport"], 12)
         self.assertAlmostEqual(8.0, first_diagnostic["pairWidthMedianPx"], delta=1.0)
+
+    def test_d7_audit_segment_clips_only_to_outward_paired_support(self):
+        image = np.full((220, 240), 220.0)
+        image[90:166, 56:64] = 20.0
+        image[90:166, 136:144] = 20.0
+        image = gaussian_blur(image, 1.0)
+        config = _test_config()["d7"] | {
+            "band_offsets_target_px": [-48.0, -24.0, 0.0, 24.0, 48.0],
+            "paired_edge_strip_half_width_px": 12,
+            "paired_edge_strip_samples": 25,
+            "paired_edge_min_support": 12,
+        }
+        evidence = [
+            {
+                "side": "A", "rawPointsPx": [
+                    [60.0, 100.0], [60.0, 106.0], [60.0, 112.0],
+                ],
+                "transitionPairsPx": [], "lineEquation": [1.0, 0.0, -60.0],
+                "segmentPointsPx": [[60.0, 100.0], [60.0, 112.0]],
+            },
+            {
+                "side": "B", "rawPointsPx": [
+                    [140.0, 100.0], [140.0, 106.0], [140.0, 112.0],
+                ],
+                "transitionPairsPx": [], "lineEquation": [1.0, 0.0, -140.0],
+                "segmentPointsPx": [[140.0, 100.0], [140.0, 112.0]],
+            },
+        ]
+        updated, diagnostics = _extend_d7_paired_support(
+            image,
+            (60.0, 100.0), (140.0, 100.0),
+            (-100.0, 100.0), config,
+            outward_direction=(0.0, 1.0),
+            dimension_points=((60.0, 100.0), (140.0, 100.0)),
+            evidence=evidence,
+        )
+        self.assertEqual(2, len(updated), diagnostics)
+        for boundary, expected_x in zip(updated, (60.0, 140.0)):
+            start, end = boundary["segmentPointsPx"]
+            self.assertAlmostEqual(expected_x, start[0], places=6)
+            self.assertAlmostEqual(expected_x, end[0], places=6)
+            self.assertGreaterEqual(start[1], 99.0)
+            self.assertGreaterEqual(end[1], 112.0)
+            self.assertLess(end[1], 170.0)
+            self.assertTrue(boundary["supportClippedToNeckDirection"])
+            self.assertEqual([], boundary["supportPointsPx"])
+            projections = [
+                point[1] for point in (
+                    boundary["rawPointsPx"] + boundary["supportPointsPx"]
+                )
+            ]
+            self.assertGreaterEqual(min(projections), 99.0)
+            self.assertLessEqual(end[1], max(projections) + 1e-6)
+
+    def test_d7_audit_segment_stops_when_outward_support_is_absent(self):
+        image = np.full((220, 240), 220.0)
+        config = _test_config()["d7"] | {
+            "band_offsets_target_px": [-24.0, 0.0, 24.0],
+            "band_strip_half_width_px": 6,
+            "band_strip_samples": 13,
+        }
+        evidence = [
+            {
+                "side": side,
+                "rawPointsPx": [[x, 100.0], [x, 106.0]],
+                "transitionPairsPx": [],
+                "lineEquation": [1.0, 0.0, -x],
+                "segmentPointsPx": [[x, 100.0], [x, 106.0]],
+            }
+            for side, x in (("A", 60.0), ("B", 140.0))
+        ]
+        updated, diagnostics = _extend_d7_paired_support(
+            image, (60.0, 100.0), (140.0, 100.0), (-100.0, 100.0),
+            config, outward_direction=(0.0, 1.0),
+            dimension_points=((60.0, 100.0), (140.0, 100.0)),
+            evidence=evidence,
+        )
+        self.assertTrue(diagnostics["candidate_boundary_support_extension_complete"])
+        for boundary in updated:
+            self.assertEqual([], boundary["supportPointsPx"])
+            self.assertAlmostEqual(6.0, math.dist(*boundary["segmentPointsPx"]), places=6)
+        self.assertTrue(all(
+            side["stopReason"] == "same_semantic_support_ends_at_primary_strip"
+            for side in diagnostics["candidate_boundary_support_sides"]
+        ))
+
+    def test_v6_review_replay_requires_exact_measurement_intersections(self):
+        image = np.full((200, 220), 220.0)
+        image[:, 56:64] = 20.0
+        image[:, 136:144] = 20.0
+        image = gaussian_blur(image, 1.0)
+        d7 = ShapeModel(
+            index=0, label="7", sanitized="d7", kind="line",
+            points=[(60.0, 100.0), (140.0, 100.0)],
+            line_p1=(60.0, 100.0), line_p2=(140.0, 100.0),
+            endpoint_polarities=(-100.0, 100.0),
+        )
+        reference = ReferenceModel(
+            {}, Path("synthetic.bmp"), np.zeros((200, 220)), [d7], []
+        )
+        extraction = type("ExtractionLike", (), {
+            "transform_dx": 0.0, "transform_dy": 0.0,
+            "transform_scale": 1.0, "transform_theta_deg": 0.0,
+        })()
+        # Obtain the detector's own intersections once; the adapter replay
+        # must reproduce these exact points before exposing review geometry.
+        stretched = contrast_stretch(image)
+        a = detect_dimension_boundary(
+            stretched, (60.0, 100.0), (140.0, 100.0), "p1", polarity=-100.0
+        )
+        b = detect_dimension_boundary(
+            stretched, (60.0, 100.0), (140.0, 100.0), "p2", polarity=100.0
+        )
+        self.assertIsNotNone(a)
+        self.assertIsNotNone(b)
+        measurements = {
+            "d7_x1": a.feature_point[0], "d7_y1": a.feature_point[1],
+            "d7_x2": b.feature_point[0], "d7_y2": b.feature_point[1],
+            "d7_length": math.dist(a.feature_point, b.feature_point),
+            "d7.quality.upstream": "ok:dual_boundary_fit",
+        }
+        review, diagnostics = _replay_v6_d7_review_evidence(
+            image, reference, extraction, measurements
+        )
+        self.assertEqual(2, len(review), diagnostics)
+        self.assertTrue(diagnostics["legacyReplayMatchesMeasurement"])
+        for boundary in review:
+            self.assertTrue(boundary["reviewOnly"])
+            self.assertFalse(boundary["equivalentToFormalBoundary"])
+            self.assertGreaterEqual(len(boundary["rawPointsPx"]), 12)
+            self.assertGreaterEqual(len(boundary["inlierPointsPx"]), 12)
+
+        mismatch = dict(measurements, d7_x1=measurements["d7_x1"] + 1.0)
+        review, diagnostics = _replay_v6_d7_review_evidence(
+            image, reference, extraction, mismatch
+        )
+        self.assertEqual([], review)
+        self.assertEqual("measurement_intersection_mismatch", diagnostics["legacyReplayFailure"])
 
     def test_d7_paired_transition_recovers_dominant_layer_after_mixed_fit(self):
         image = np.full((200, 220), 220.0)

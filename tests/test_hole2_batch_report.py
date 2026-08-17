@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -343,6 +343,65 @@ class Hole2BatchReportTests(unittest.TestCase):
                 red, green, blue = preview.getpixel((preview.width - 2, 2))
             self.assertGreater(red, green)
             self.assertGreater(green, blue)
+
+    def test_v6_review_boundaries_are_labeled_review_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jsonl, image_root = self._fixture(root)
+            records = [json.loads(line) for line in jsonl.read_text().splitlines()]
+            d7 = records[0]["result"]["features"]["7"]
+            review = [
+                {
+                    "side": side,
+                    "semantics": "legacy_single_gradient_boundary",
+                    "rawPointsPx": [[x, 20.0], [x, 80.0]],
+                    "inlierPointsPx": [[x, 20.0], [x, 80.0]],
+                    "lineEquation": [1.0, 0.0, -x],
+                    "segmentPointsPx": [[x, 20.0], [x, 80.0]],
+                    "reviewOnly": True,
+                    "equivalentToFormalBoundary": False,
+                }
+                for side, x in (("A", 40.0), ("B", 140.0))
+            ]
+            d7["target"]["rawEdgeEvidence"]["boundaries"] = []
+            d7["target"]["rawEdgeEvidence"]["legacyReviewBoundaries"] = review
+            d7["target"]["fittedGeometry"]["boundaries"] = []
+            d7["target"]["fittedGeometry"]["legacyReviewBoundaries"] = review
+            d7["evidenceComplete"] = False
+            d7["evidenceAuditStatus"] = "unavailable"
+            d7["evidenceAuditReason"] = "boundary_evidence_unavailable"
+            jsonl.write_text(
+                "".join(json.dumps(record) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            output = root / "report"
+            completed = self._run(
+                jsonl, image_root, output,
+                "--frame", "Pic_2026_08_12_220000_1.bmp",
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            with (output / "index.csv").open(encoding="utf-8-sig") as stream:
+                row = next(csv.DictReader(stream))
+            labelme = json.loads((output / row["predictionLabelmeJson"]).read_text())
+            shapes = {shape["label"]: shape for shape in labelme["shapes"]}
+            self.assertIn("review:7:legacy-boundary:A", shapes)
+            self.assertIn("review:7:legacy-boundary:B", shapes)
+            self.assertIn("review:7:dimension", shapes)
+            self.assertNotIn("prediction:7:boundary:A", shapes)
+            self.assertTrue(shapes["review:7:legacy-boundary:A"]["flags"]["reviewOnly"])
+            self.assertFalse(
+                shapes["review:7:legacy-boundary:A"]["flags"]["equivalentToFormalBoundary"]
+            )
+
+    def test_d7_detail_inset_makes_finite_straight_lines_auditable(self):
+        namespace = runpy.run_path(str(TOOL))
+        source = Image.new("RGB", (1200, 800), (235, 235, 235))
+        preview = source.copy()
+        before = preview.copy()
+        namespace["_draw_d7_detail_inset"](
+            source, preview, _feature("7", valid=True)
+        )
+        self.assertIsNotNone(ImageChops.difference(before, preview).getbbox())
 
     def test_output_inside_worktree_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

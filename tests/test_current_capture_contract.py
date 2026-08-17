@@ -126,6 +126,42 @@ class CurrentCaptureContractTests(unittest.TestCase):
             features["Phi12.2"]["target"]["rawEdgeEvidence"]["semantics"],
         )
 
+    def test_v6_review_geometry_does_not_upgrade_formal_evidence(self):
+        transform = SimilarityTransform(0.0, 0.0, 1.0, 0.0)
+        review = [
+            {
+                "side": side,
+                "semantics": "legacy_single_gradient_boundary",
+                "rawPointsPx": [[x, 10.0], [x, 30.0]],
+                "inlierPointsPx": [[x, 10.0], [x, 30.0]],
+                "lineEquation": [1.0, 0.0, -x],
+                "segmentPointsPx": [[x, 10.0], [x, 30.0]],
+                "reviewOnly": True,
+                "equivalentToFormalBoundary": False,
+            }
+            for side, x in (("A", 20.0), ("B", 80.0))
+        ]
+        measurements = {
+            "d7_x1": 20.0, "d7_y1": 20.0,
+            "d7_x2": 80.0, "d7_y2": 20.0, "d7_length": 60.0,
+            "d7.quality.candidate_fallback_pass": "v6_original_quality",
+            "d7.quality.candidate_legacy_boundary_review_target_px": review,
+            "Phi12_2_cx": 100.0, "Phi12_2_cy": 100.0,
+            "Phi12_2_r": 30.0, "Phi12_2_diameter_px": 60.0,
+            "Phi12_2.quality.candidate_evidence_arc_segments_target_px": [
+                {"side": "reference_left", "pointsPx": [[70.0, 95.0], [70.0, 105.0]]},
+            ],
+        }
+        features, _ = build_feature_outputs(measurements, transform, [0.0])
+        d7 = features["7"]
+        self.assertTrue(d7["measurementValid"])
+        self.assertFalse(d7["evidenceComplete"])
+        self.assertEqual("unavailable", d7["evidenceAuditStatus"])
+        self.assertEqual([], d7["target"]["rawEdgeEvidence"]["boundaries"])
+        self.assertEqual([], d7["target"]["fittedGeometry"]["boundaries"])
+        self.assertEqual(2, len(d7["target"]["rawEdgeEvidence"]["legacyReviewBoundaries"]))
+        self.assertEqual(2, len(d7["target"]["fittedGeometry"]["legacyReviewBoundaries"]))
+
     def test_phi_valid_without_calibrated_arc_is_explicitly_unauditable(self):
         transform = SimilarityTransform(0.0, 0.0, 1.0, 0.0)
         measurements = {

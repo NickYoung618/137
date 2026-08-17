@@ -244,6 +244,41 @@ class Hole2BatchReviewTests(unittest.TestCase):
             }
             self.assertEqual({"new:Phi12.2:fit-circle"}, new_phi_labels)
 
+    def test_legacy_d7_review_boundaries_remain_distinct_from_predictions(self):
+        namespace = runpy.run_path(str(TOOL))
+        feature = _feature("7", valid=True)
+        review = [
+            {
+                "side": side,
+                "segmentPointsPx": [[x, 15.0], [x, 45.0]],
+                "reviewOnly": True,
+                "equivalentToFormalBoundary": False,
+            }
+            for side, x in (("A", 20.0), ("B", 80.0))
+        ]
+        feature["target"]["rawEdgeEvidence"]["boundaries"] = []
+        feature["target"]["rawEdgeEvidence"]["legacyReviewBoundaries"] = review
+        feature["target"]["fittedGeometry"]["boundaries"] = []
+        feature["target"]["fittedGeometry"]["legacyReviewBoundaries"] = review
+        record = {
+            "result": {
+                "algorithmVersion": "review/1",
+                "runtimeInputs": [],
+                "authoritativeReference": {},
+                "features": {"7": feature, "Phi12.2": {"measurementValid": False}},
+            }
+        }
+        shapes = namespace["_shapes_for_version"]("new", record)
+        labels = {shape["label"] for shape in shapes}
+        self.assertEqual({
+            "new:review:7:legacy-boundary:A",
+            "new:review:7:legacy-boundary:B",
+            "new:review:7:dimension",
+        }, labels)
+        boundary = next(shape for shape in shapes if shape["label"].endswith(":A"))
+        self.assertTrue(boundary["flags"]["reviewOnly"])
+        self.assertFalse(boundary["flags"]["equivalentToFormalBoundary"])
+
     def test_explicit_frame_can_render_unchanged_status(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

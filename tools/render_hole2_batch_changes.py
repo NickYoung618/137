@@ -243,6 +243,25 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
                         "group_id": f"{version}:7", "description": description,
                         "shape_type": "line", "flags": {},
                     })
+            legacy_review = (
+                fitted.get("legacyReviewBoundaries", [])
+                if isinstance(fitted, dict) else []
+            )
+            for boundary in legacy_review:
+                points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
+                side = boundary.get("side") if isinstance(boundary, dict) else None
+                if isinstance(points, list) and len(points) >= 2 and side in {"A", "B"}:
+                    shapes.append({
+                        "label": f"{version}:review:7:legacy-boundary:{side}",
+                        "points": [[float(value) for value in point] for point in points],
+                        "group_id": f"{version}:review:7",
+                        "description": description,
+                        "shape_type": "line",
+                        "flags": {
+                            "reviewOnly": True,
+                            "equivalentToFormalBoundary": False,
+                        },
+                    })
             annotation = target.get("measurementAnnotation", {})
             points = annotation.get("pointsPx") if isinstance(annotation, dict) else None
             if len(boundaries) >= 2 and isinstance(points, list) and len(points) == 2:
@@ -251,6 +270,18 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
                     "points": [[float(value) for value in point] for point in points],
                     "group_id": f"{version}:7", "description": description,
                     "shape_type": "line", "flags": {},
+                })
+            elif len(legacy_review) >= 2 and isinstance(points, list) and len(points) == 2:
+                shapes.append({
+                    "label": f"{version}:review:7:dimension",
+                    "points": [[float(value) for value in point] for point in points],
+                    "group_id": f"{version}:review:7",
+                    "description": description,
+                    "shape_type": "line",
+                    "flags": {
+                        "reviewOnly": True,
+                        "equivalentToFormalBoundary": False,
+                    },
                 })
         else:
             fitted = target.get("fittedGeometry", {})
@@ -291,6 +322,11 @@ def _shapes(record: dict[str, Any], version: str) -> list[dict[str, Any]]:
                     "shape_type": "linestrip", "flags": {},
                 })
     return shapes
+
+
+def _shapes_for_version(version: str, record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Stable test/tool adapter with version-first argument order."""
+    return _shapes(record, version)
 
 
 def _image_catalog(image_root: Path) -> dict[str, list[Path]]:
@@ -374,13 +410,16 @@ def _draw_prediction(draw: ImageDraw.ImageDraw, record: dict[str, Any], version:
     radius_marker = max(5, width // 600)
     for shape in _shapes(record, version):
         points = [tuple(point) for point in shape["points"]]
+        shape_color = (
+            (255, 170, 0) if version == "old" else (255, 70, 220)
+        ) if shape.get("flags", {}).get("reviewOnly") else color
         if shape["shape_type"] in {"line", "linestrip"}:
-            draw.line(points, fill=color, width=line_width)
+            draw.line(points, fill=shape_color, width=line_width)
             marker_points = points if shape["shape_type"] == "line" else (points[0], points[-1])
             for x, y in marker_points:
                 draw.ellipse(
                     (x - radius_marker, y - radius_marker, x + radius_marker, y + radius_marker),
-                    fill=color,
+                    fill=shape_color,
                 )
         elif shape["shape_type"] == "circle" and len(points) == 2:
             center, edge = points

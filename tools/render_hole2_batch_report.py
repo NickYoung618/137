@@ -328,13 +328,96 @@ def _draw_solid_fit_circle(
     draw.ellipse(box, outline=color, width=width)
 
 
+def _draw_d7_detail_inset(
+    source: Image.Image,
+    preview: Image.Image,
+    feature: dict[str, Any],
+) -> None:
+    """Add a zoomed audit view so finite D7 lines remain visibly straight."""
+    if preview.width < 800 or not isinstance(feature.get("target"), dict):
+        return
+    target = feature["target"]
+    fitted = target.get("fittedGeometry", {})
+    formal = fitted.get("boundaries", []) if isinstance(fitted, dict) else []
+    review = fitted.get("legacyReviewBoundaries", []) if isinstance(fitted, dict) else []
+    boundaries = formal if len(formal) >= 2 else review
+    annotation = target.get("measurementAnnotation", {})
+    dimension = annotation.get("pointsPx") if isinstance(annotation, dict) else None
+    if len(boundaries) < 2 or not isinstance(dimension, list) or len(dimension) != 2:
+        return
+    line_points = [
+        point
+        for boundary in boundaries
+        if isinstance(boundary, dict)
+        for point in boundary.get("segmentPointsPx", [])
+        if isinstance(point, list) and len(point) == 2
+    ]
+    if len(line_points) < 4:
+        return
+    all_points = line_points + dimension
+    xs = [float(point[0]) for point in all_points]
+    ys = [float(point[1]) for point in all_points]
+    dimension_length = math.dist(dimension[0], dimension[1])
+    margin_x = max(36.0, 0.22 * dimension_length)
+    margin_y = max(30.0, 0.10 * dimension_length)
+    left = max(0, int(math.floor(min(xs) - margin_x)))
+    top = max(0, int(math.floor(min(ys) - margin_y)))
+    right = min(source.width, int(math.ceil(max(xs) + margin_x)))
+    bottom = min(source.height, int(math.ceil(max(ys) + margin_y)))
+    if right - left < 4 or bottom - top < 4:
+        return
+    crop = source.crop((left, top, right, bottom)).convert("RGB")
+    scale = min(420.0 / crop.width, 420.0 / crop.height)
+    crop = crop.resize(
+        (max(1, int(round(crop.width * scale))),
+         max(1, int(round(crop.height * scale)))),
+        Image.Resampling.LANCZOS,
+    )
+    inset = Image.new("RGB", (crop.width + 8, crop.height + 32), (0, 0, 0))
+    inset.paste(crop, (4, 28))
+    detail = ImageDraw.Draw(inset)
+    font = _font(max(11, min(18, inset.width // 22)))
+    detail.text(
+        (6, 5), "D7 DETAIL: finite raw-supported straight lines",
+        fill=(255, 255, 255), font=font,
+    )
+
+    def mapped(point: list[float]) -> tuple[float, float]:
+        return (
+            4.0 + (float(point[0]) - left) * scale,
+            28.0 + (float(point[1]) - top) * scale,
+        )
+
+    review_only = boundaries is review
+    for index, boundary in enumerate(boundaries):
+        points = boundary.get("segmentPointsPx", [])
+        if not isinstance(points, list) or len(points) < 2:
+            continue
+        color = (
+            (255, 70, 220) if review_only
+            else (255, 190, 0) if index == 0 else (255, 110, 0)
+        )
+        segment = [mapped(point) for point in points]
+        detail.line(segment, fill=color, width=4)
+        side = str(boundary.get("side", "?"))
+        detail.text((segment[-1][0] + 4, segment[-1][1] - 10), side, fill=color, font=font)
+    dimension_color = (255, 145, 220) if review_only else (0, 235, 255)
+    connector = [mapped(point) for point in dimension]
+    detail.line(connector, fill=dimension_color, width=3)
+    for x, y in connector:
+        detail.ellipse((x - 4, y - 4, x + 4, y + 4), fill=dimension_color)
+    detail.rectangle((0, 0, inset.width - 1, inset.height - 1), outline=(255, 255, 255), width=2)
+    preview.paste(inset, (12, max(0, preview.height - inset.height - 12)))
+
+
 def _draw_preview(
     image_path: Path,
     record: dict[str, Any],
     output_path: Path,
     max_width: int,
 ) -> tuple[int, int]:
-    image = Image.open(image_path).convert("RGB")
+    source = Image.open(image_path).convert("RGB")
+    image = source.copy()
     scale = min(1.0, max_width / float(image.width))
     size = (
         max(1, int(round(image.width * scale))),
@@ -360,6 +443,18 @@ def _draw_preview(
                 ]
                 color = (255, 190, 0) if index == 0 else (255, 110, 0)
                 draw.line(scaled, fill=color, width=line_width)
+        legacy_review = (
+            fitted.get("legacyReviewBoundaries", [])
+            if isinstance(fitted, dict) else []
+        )
+        for boundary in legacy_review:
+            points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
+            if isinstance(points, list) and len(points) >= 2:
+                scaled = [
+                    (float(point[0]) * scale, float(point[1]) * scale)
+                    for point in points
+                ]
+                draw.line(scaled, fill=(255, 70, 220), width=line_width)
         annotation = target.get("measurementAnnotation", {})
         points = annotation.get("pointsPx") if isinstance(annotation, dict) else None
         if len(boundaries) >= 2 and isinstance(points, list) and len(points) == 2:
@@ -368,6 +463,12 @@ def _draw_preview(
             for x, y in scaled:
                 draw.ellipse((x - marker, y - marker, x + marker, y + marker),
                              fill=(0, 235, 255))
+        elif len(legacy_review) >= 2 and isinstance(points, list) and len(points) == 2:
+            scaled = [(float(p[0]) * scale, float(p[1]) * scale) for p in points]
+            draw.line(scaled, fill=(255, 145, 220), width=line_width)
+            for x, y in scaled:
+                draw.ellipse((x - marker, y - marker, x + marker, y + marker),
+                             fill=(255, 145, 220))
 
     phi = _feature(record, "Phi12.2")
     if _feature_valid(record, "Phi12.2") and isinstance(phi.get("target"), dict):
@@ -399,6 +500,9 @@ def _draw_preview(
             if isinstance(points, list) and len(points) >= 2:
                 scaled = [(float(p[0]) * scale, float(p[1]) * scale) for p in points]
                 draw.line(scaled, fill=(0, 255, 80), width=line_width)
+
+    if _feature_valid(record, "7"):
+        _draw_d7_detail_inset(source, image, d7)
 
     lines = _status_lines(record)
     font_size = max(9, min(24, image.width // 75))
@@ -448,6 +552,28 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
                     "shape_type": "line",
                     "flags": {},
                 })
+        legacy_review = (
+            fitted.get("legacyReviewBoundaries", [])
+            if isinstance(fitted, dict) else []
+        )
+        for boundary in legacy_review:
+            points = boundary.get("segmentPointsPx") if isinstance(boundary, dict) else None
+            side = boundary.get("side") if isinstance(boundary, dict) else None
+            if isinstance(points, list) and len(points) >= 2 and side in {"A", "B"}:
+                shapes.append({
+                    "label": f"review:7:legacy-boundary:{side}",
+                    "points": [[float(value) for value in point] for point in points],
+                    "group_id": "review:7",
+                    "description": (
+                        "review-only replay of the v6 single-gradient boundary; "
+                        "not equivalent to the paired-transition physical boundary"
+                    ),
+                    "shape_type": "line",
+                    "flags": {
+                        "reviewOnly": True,
+                        "equivalentToFormalBoundary": False,
+                    },
+                })
         annotation = target.get("measurementAnnotation", {})
         points = annotation.get("pointsPx") if isinstance(annotation, dict) else None
         if len(boundaries) >= 2 and isinstance(points, list) and len(points) == 2:
@@ -458,6 +584,21 @@ def _prediction_shapes(record: dict[str, Any]) -> list[dict[str, Any]]:
                 "description": "perpendicular distance annotation; not an edge",
                 "shape_type": "line",
                 "flags": {},
+            })
+        elif len(legacy_review) >= 2 and isinstance(points, list) and len(points) == 2:
+            shapes.append({
+                "label": "review:7:dimension",
+                "points": [[float(value) for value in point] for point in points],
+                "group_id": "review:7",
+                "description": (
+                    "v6 measurement connector shown for review; boundary evidence "
+                    "does not satisfy the paired-transition audit contract"
+                ),
+                "shape_type": "line",
+                "flags": {
+                    "reviewOnly": True,
+                    "equivalentToFormalBoundary": False,
+                },
             })
     phi = _feature(record, "Phi12.2")
     if _feature_valid(record, "Phi12.2") and isinstance(phi.get("target"), dict):
