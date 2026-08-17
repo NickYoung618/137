@@ -93,6 +93,10 @@ Manifest和评估命令见`specs/002-slot-pose-estimation/quickstart.md`。正�
 该剖面仍是功能分支上的初版候选，PLC始终为null；完整命令与审核边界见
 `specs/025-single-shot-initial-deliverable/quickstart.md`。
 
+025剖面v2对最多3个粗真槽候选逐个运行既有亚像素双壁与同源性链，只有唯一完整通过
+才输出单拍图像引导；0个或多个通过仍报错。该能力不读取人工标注、不依赖候选编号，
+也没有放宽原始槽识别、同源性或外圆门限。
+
 服务器paired合成冒烟：
 
 ```bash

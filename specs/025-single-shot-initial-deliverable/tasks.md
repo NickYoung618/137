@@ -49,3 +49,13 @@
 ## Implementation Strategy
 
 先交付“145/147可输出、374及其他未可信图安全报错”的单拍初版候选；待用户对代表图给出物理语义后，每次只追加一类根因修复任务。
+
+## Phase 7: Convergence
+
+- [x] T014 [US3] 在 tests/test_circle_edge_family_trace.py 先编写多同心真圆边、单边、射线跨边、环绕和非有限证据的确定性追踪TDD测试 per FR-014/SC-003
+- [x] T015 [US3] 在 tools/trace_circle_edge_families.py 实现Git外逐射线径向梯度峰枚举、同心边族聚类、拟合点归属和切换扇区诊断，不改检测器 per FR-002/FR-014
+- [x] T016 [US3] 在非sealed 141/161/441上运行圆边族追踪，分别裁决多边切换、定位偏差和纯残差门假设，将脱敏结果写入 specs/025-single-shot-initial-deliverable/evidence.md per SC-003/SC-005
+- [x] T017 [US3] 在 tests/test_groove_candidate_discriminator.py 先编写方形真槽对圆弧/固定阴影的局部曲率、直壁、平行性、径向深度和端点结构诊断TDD测试 per FR-005/FR-014
+- [x] T018 [US3] 在 tools/compare_groove_candidate_structure.py 实现只读候选结构比较报告，并对非sealed 261的candidate-004/006与281/374对照运行，禁止候选编号进入运行时 per FR-012/FR-014
+- [x] T019 [US3] 仅当T016/T018找到跨物理零件可验证的物理矛盾时，追加对应算法TDD修复；否则记录为诊断阻塞并保持fail-closed per FR-003/FR-005/SC-005
+- [x] T020 运行聚焦/全量测试、Schema、CLI、diff和污染门；对旧/新配置执行同机成对稳态性能检查，若机器负载不满足则记录阻塞且不得伪造结论；提交并推送025功能分支，不合并main、不修改PLC/HMI per SC-006/SC-007

@@ -111,3 +111,85 @@ is circle edge-family trace analysis for 141/161/441 and fixture-shadow rejectio
   truth and no result was used for tuning.
 - The Mac engineering gate is accepted. The former human semantic decisions were subsequently
   supplied and are recorded in the resolved review section above.
+
+## Phase 7 root-cause convergence — 2026-08-18
+
+### Circle edge-family trace (diagnostic only)
+
+`tools/trace_circle_edge_families.py` enumerates all radial gradient peaks and records which point
+the locked repository-contained `gyj.outer_boundary_edge_point` actually selected. Outputs contain
+image SHA rather than private paths and must remain outside Git. No circle result or threshold is
+changed.
+
+| Image | selected rays | primary family median/range px | displaced family median/range px | displaced selected angles |
+|---|---:|---:|---:|---|
+| 141 | 156/180 | +4.771 / -15.841..+15.517 | -46.997 / -59.338..-24.127 | 22–26, 38–42, 318–320, 336–338° |
+| 161 | 158/180 | +2.885 / -24.466..+14.208 | -55.442 / -65.703..-35.392 | 24–26, 36–40, 318–322, 336–338° |
+| 441 | 158/180 | +4.125 / -25.593..+14.739 | -56.502 / -65.000..-32.267 | 24–26, 38–40, 318–322, 334–338° |
+
+The same concentrated inward switch pattern exists on three physical parts and aligns with the
+fixed occlusion regions, so “the image contains no outer circle” is contradicted. It does **not**
+yet prove a safe runtime fix: the robust fit already removes the large displaced points while
+141/161 still narrowly or broadly fail residual quality. Fixed angular masks are prohibited because
+the real groove can occupy those angles. Independent outer-arc truth for at least one of these
+failure images, or a cross-part global edge-family fit with held-out validation, remains required
+before changing the circle gate.
+
+Git-external trace SHA-256: 141 `b78a20b6fae8539208a129ce7595db034cf15ec4fe01d50929ba5dafab98135c`;
+161 `4d108a43ca15758029aed8276f55c138b1222eaaaefbd199818af7b45ded2e20`;
+441 `45526d21d1451748d07ec56eae3986d8661549861f3b13dd5ef989e0dfd2f080`.
+
+### Per-candidate square-opening diagnosis and bounded fix
+
+`tools/compare_groove_candidate_structure.py` independently refines every candidate with positive
+radial depth using the same bundled subpixel wall fitter. It does not assign truth or modify the
+runtime result. Report SHA-256:
+`7a8b7f8b445ca84deacf3854fa9af9ec64b77c1159cb7a4c8bf65e85fa9cd55f`.
+
+- 261 candidate-004 (human-confirmed real groove): complete two-wall geometry, parallel difference
+  `0.083°`, opening width `23.550°`, wall P95 residuals `1.366/1.577 px`.
+- 261 candidate-006 (human-confirmed fixture shadow): both sides fail insufficient support; no
+  complete opening or endpoints.
+- 281 candidate-002 (human-confirmed fixture shadow): both sides fail consensus; current recognition
+  failure remains correct.
+- 374 candidate-004 (confirmed mixed real-wall + fixture-edge negative): can still form two straight
+  lines, proving straightness alone is insufficient; unchanged source-consistency evidence rejects it.
+
+This cross-positive/negative contradiction justifies enabling the already implemented bounded
+`groove-ambiguity-resolution/1` in profile v2. It runs the full existing physical refinement for at
+most three coarse candidates and releases only one survivor. It does not alter any detector threshold.
+
+Five-image nonsealed replay using materialized config SHA
+`5f8b80848738cea6023f7ee3ea24e0edc92855b6022386ceed64da58613f8a48`:
+
+| Image | v2 result | Meaning |
+|---|---|---|
+| 145 | valid, current `29.578394°`, correction `+55.421606°` CW | unchanged clean control |
+| 147 | valid, current `29.579343°`, correction `+55.420657°` CW | unchanged clean control |
+| 261 | valid, current `-166.457362°`, correction `-108.542638°` CCW | uniquely resolved to candidate-004; angle has semantic, not pixel-truth, confirmation |
+| 281 | `GROOVE_RECOGNITION_FAILED` | known shadow stays rejected |
+| 374 | `GROOVE_SOURCE_INCONSISTENT` | known mixed edge stays rejected |
+
+Result JSONL SHA-256:
+`97a2bea194f85a74eca15dbb0a9a113c47adf5e8411bc92f30e0a5701e0b8080`.
+All PLC fields remain null. The server was heavily contended during this replay (reported per-image
+elapsed 6.0–19.0 s even for unchanged 145/147), so these numbers are not accepted as a regression
+baseline. The only new work on ambiguous 261 was two bounded refinements taking `123.608 ms` and
+`71.182 ms` respectively; image decode, outer-circle localization and reference construction were
+not duplicated. SC-007 still requires a same-machine paired steady-state rerun before release.
+
+### Phase 7 engineering gates
+
+- Focused circle/groove/profile/single-groove suite: `44/44` passed.
+- Full server discovery with explicit `jsonschema` dependency: `504/504` passed in `254.422 s`.
+- Root Draft 2020-12 Schemas: `51/51` passed `check_schema`; both Git-external diagnostic reports
+  also validate against their new contracts.
+- All three affected CLIs pass `--help`; `git diff --check` and changed-file media/private-path
+  pollution checks pass.
+- The first full-test invocation without the optional `jsonschema` environment produced five import
+  errors (including three pre-existing schema tests); the authoritative rerun used the documented
+  `uv run --with jsonschema` environment and passed. This was an environment dependency error, not
+  an algorithm failure.
+- Performance release gate remains environment-blocked on this run: two-CPU server load average was
+  `8.24/7.81/6.59`, and even unchanged controls slowed sharply. No regression claim is made from the
+  contaminated wall time. The bounded ambiguous-only increment itself is measured above (~195 ms).

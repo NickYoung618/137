@@ -16,6 +16,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from algorithms.slot_pose.sidewall_consistency import DEFAULT_SIDEWALL_CONSISTENCY_CONFIG
+from algorithms.slot_pose.groove_resolution import DEFAULT_AMBIGUITY_RESOLUTION_CONFIG
 from algorithms.slot_pose.source_consistency_adjudication import (
     DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG,
 )
@@ -23,8 +24,8 @@ from tools.dataset_common import sha256_file, write_json
 from tools.prepare_source_consistency_adjudication_config import build_experimental_config
 
 
-PROFILE_VERSION = "single-shot-initial-profile/1"
-PROFILE_ID = "single-real-groove-85deg-fail-closed-v1"
+PROFILE_VERSION = "single-shot-initial-profile/2"
+PROFILE_ID = "single-real-groove-85deg-fail-closed-v2"
 
 
 def _same_number(actual: Any, expected: float) -> bool:
@@ -92,6 +93,11 @@ def build_initial_config(base: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"single-shot initial profile refuses changed source-consistency {name}")
 
     configured = build_experimental_config(source)
+    configured["detector"]["ambiguity_resolution"] = {
+        **DEFAULT_AMBIGUITY_RESOLUTION_CONFIG,
+        "enabled": True,
+        "max_candidates": 3,
+    }
     adjudication = configured["detector"]["source_consistency_adjudication"]
     for key, expected in DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG.items():
         actual = adjudication.get(key)
@@ -126,6 +132,12 @@ def build_profile_report(*, source_config_sha256: str, output_config_sha256: str
             ],
             "originalEvidencePreserved": True,
             "adjudicationVersion": DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG["threshold_version"],
+        },
+        "ambiguityResolution": {
+            "schemaVersion": DEFAULT_AMBIGUITY_RESOLUTION_CONFIG["schema_version"],
+            "enabled": True,
+            "maxCandidates": 3,
+            "selectionEvidence": "existing_subpixel_sidewall_and_outer_circle_gates",
         },
         "policies": {
             "singleCaptureRequired": True,

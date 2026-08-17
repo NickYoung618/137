@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groove-candidate-structure-comparison.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "developmentOnly", "authoritative", "detectorModified",
+    "humanTruthAppliedAtRuntime", "images"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "groove-candidate-structure-comparison/1"},
+    "developmentOnly": {"const": true},
+    "authoritative": {"const": false},
+    "detectorModified": {"const": false},
+    "humanTruthAppliedAtRuntime": {"const": false},
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["imageSha256", "status", "candidates"],
+        "properties": {
+          "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "status": {"enum": ["DIAGNOSTIC_ONLY", "CIRCLE_NOT_AVAILABLE"]},
+          "baselineErrorCode": {"type": ["string", "null"]},
+          "candidates": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    }
+  }
+}

@@ -5,11 +5,11 @@
   "additionalProperties": false,
   "required": [
     "schemaVersion", "profileId", "sourceConfigSha256", "materializedConfigSha256",
-    "detectorMode", "target", "sourceConsistency", "policies"
+    "detectorMode", "target", "sourceConsistency", "ambiguityResolution", "policies"
   ],
   "properties": {
-    "schemaVersion": {"const": "single-shot-initial-profile/1"},
-    "profileId": {"const": "single-real-groove-85deg-fail-closed-v1"},
+    "schemaVersion": {"const": "single-shot-initial-profile/2"},
+    "profileId": {"const": "single-real-groove-85deg-fail-closed-v2"},
     "sourceConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "materializedConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "detectorMode": {"const": "single_real_groove"},
@@ -34,6 +34,17 @@
         "originalContrastThreshold": {"const": 0.12},
         "originalEvidencePreserved": {"const": true},
         "adjudicationVersion": {"const": "endpoint-structure-runtime-adjudication-v1"}
+      }
+    },
+    "ambiguityResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "enabled", "maxCandidates", "selectionEvidence"],
+      "properties": {
+        "schemaVersion": {"const": "groove-ambiguity-resolution/1"},
+        "enabled": {"const": true},
+        "maxCandidates": {"const": 3},
+        "selectionEvidence": {"const": "existing_subpixel_sidewall_and_outer_circle_gates"}
       }
     },
     "policies": {

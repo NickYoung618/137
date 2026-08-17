@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "circle-edge-family-trace.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "developmentOnly", "detectorModified", "authoritative", "image",
+    "searchPriorCircle", "angleCount", "selectedCount", "missingAnglesDeg", "families",
+    "primaryFamilyId", "switchSectors", "edgeFamilySwitchObserved", "perRay"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "circle-edge-family-trace/1"},
+    "developmentOnly": {"const": true},
+    "detectorModified": {"const": false},
+    "authoritative": {"const": false},
+    "image": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sha256", "width", "height"],
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "searchPriorCircle": {"type": "object"},
+    "angleCount": {"type": "integer", "minimum": 36},
+    "selectedCount": {"type": "integer", "minimum": 0},
+    "missingAnglesDeg": {"type": "array", "items": {"type": "number"}},
+    "families": {"type": "array", "items": {"type": "object"}},
+    "primaryFamilyId": {"type": ["string", "null"]},
+    "switchSectors": {"type": "array", "items": {"type": "object"}},
+    "edgeFamilySwitchObserved": {"type": "boolean"},
+    "perRay": {"type": "array", "items": {"type": "object"}}
+  }
+}

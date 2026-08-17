@@ -83,6 +83,14 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         )
         self.assertTrue(detector["source_consistency_adjudication"]["enabled"])
         self.assertTrue(detector["source_consistency_adjudication"]["development_only"])
+        self.assertEqual(
+            {
+                "schema_version": "groove-ambiguity-resolution/1",
+                "enabled": True,
+                "max_candidates": 3,
+            },
+            detector["ambiguity_resolution"],
+        )
         self.assertFalse(configured["pose"]["production_plc_mapping_confirmed"])
         self.assertEqual("bundled_module", configured["legacy_asset"]["source_mode"])
 
@@ -124,6 +132,8 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         self.assertFalse(report["policies"]["plcAllowed"])
         self.assertFalse(report["policies"]["manualTruthAppliedAtRuntime"])
         self.assertTrue(report["policies"]["occlusionFailsClosed"])
+        self.assertTrue(report["ambiguityResolution"]["enabled"])
+        self.assertEqual(3, report["ambiguityResolution"]["maxCandidates"])
 
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]

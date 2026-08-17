@@ -58,7 +58,9 @@
 - 025单拍初版不新建一套门限。使用`tools/prepare_single_shot_initial_config.py`从Git外
   `single_real_groove`基础配置物化时，工具会强制仓内bundled core、单槽v3、85°±5°、
   原020全套同源性门值不变、022裁决版本不变、单拍输入和PLC未确认。它另写
-  `single-shot-initial-profile/1`报告以便审计；配置和报告都必须放在Git工作树外。
+  `single-shot-initial-profile/2`报告以便审计；配置和报告都必须放在Git工作树外。
+  v2仅开启已有的有界`ambiguity_resolution`：最多3个粗候选逐个经过同一亚像素双壁、
+  外圆交点和同源性门，恰好1个完整通过才解除歧义。它不按分数、编号或固定角度选槽。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，
