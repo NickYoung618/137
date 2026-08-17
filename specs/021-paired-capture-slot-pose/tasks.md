@@ -252,3 +252,26 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - T100先于T101-T102/T104；T101与T104必须先出现红门，再实现T103/T105-T106。
 - T107只读取正式145/147 Git外人工证据和现有runtime JSONL；T108只读取非sealed历史结果，不运行图像算法。
 - T109-T110在实现、外置实跑与只读负例门全部通过后收尾。
+
+## Phase 24: Independent outer-circle and final pose truth evaluation
+
+**Goal**: 把独立外圆的结构就绪、拟合质量和最终姿态角可评价性分层；用145短弧证明fail-closed，不放宽门限。
+
+**Independent Test**: 广角合成圆弧可得到环形角误差和85°修正；短弧、残差/稳定性失败、上游缺失和身份错配全部在成功结论前失败关闭。
+
+- [x] T111 [US10] 核验145归档及四文件SHA，只读记录Kasa/robust拟合、覆盖和稳定性证据到 specs/021-paired-capture-slot-pose/evidence.md per FR-118-FR-119/SC-049
+- [x] T112 [US10] 更新spec、plan、research、data-model、contract、quickstart和checklist，固化质量门、角度契约、MVP窗口和非升权策略 per FR-105-FR-120/SC-045-SC-052
+- [x] T113 [P] [US10] 先新增tests/test_clean_groove_pose_truth_evaluation.py，覆盖大弧、短弧、残差、留一点稳定性、±180°、80/90°、SHA/上游/sealed/路径失败 per FR-107-FR-118/SC-045-SC-048
+- [x] T114 [P] [US10] 新增contracts/clean-groove-pose-truth-evaluation.schema.json，严格约束EVALUATED/NOT_EVALUATED、nullable finalPose、质量门和八项禁止升权策略 per FR-105/FR-109-FR-118/SC-048
+- [x] T115 [US10] 实现tools/evaluate_clean_groove_pose_truth.py，复用现有拟圆能力、SHA关联、质量/稳定性门和y-down顺时针角度评估 per FR-105-FR-118
+- [x] T116 [US10] 用服务器Git外正式145/147 validation和冻结fold-03 JSONL运行新CLI，生成外置报告并确认145因30°短弧NOT_EVALUATED per FR-119/SC-049-SC-050
+- [x] T117 [US10] 更新README.md、completion-audit.md和evidence.md，记录临时诊断数值、最终null结论和需追加至少120°同图外圆弧 per FR-116-FR-120/SC-049-SC-052
+- [x] T118 运行SpecKit analyze、聚焦/全量测试、全部Schema、CLI、diff/JSON/媒体/绝对路径/大文件污染门，不重跑140 BMP per SC-047-SC-052
+- [x] T119 核对本增量未修改检测算法、0.12等门限、默认配置、main或PLC/HMI，并更新脱敏证据 per FR-117/FR-120/SC-051
+- [ ] T120 本地提交并推送021功能分支，不合main；给出Mac独立复算命令与不需重跑140 BMP的理由 per SC-052
+
+### Phase 24 Dependencies
+
+- T111-T112先于T113-T114；T113必须先产生红门，再实现T115。
+- T116只读正式外置145/147证据和既有fold-03 JSONL，禁止读取part-006或重跑图像检测。
+- T117-T120依赖聚焦、外置实跑和所有安全门通过。

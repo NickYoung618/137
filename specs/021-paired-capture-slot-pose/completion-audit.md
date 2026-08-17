@@ -1,10 +1,10 @@
 # Spec 021 需求逐条完成审计
 
-**审计基线**: `021-paired-capture-slot-pose@6e49315b5c46e3e358433e1f3fb98b9dd284815c`
+**审计基线**: `021-paired-capture-slot-pose@93c452572896529d3a6a477911904bffde5f254d`
 
 **审计日期**: 2026-08-17
 
-**范围**: Spec 021的FR-001—FR-104、SC-001—SC-044；不使用sealed part-006，不把part-008 145/147的AUTO整线或runtime圆当作自身真值。
+**范围**: Spec 021的FR-001—FR-120、SC-001—SC-052；不使用sealed part-006，不把part-008 145/147的AUTO整线或runtime圆当作自身真值。
 
 ## 状态定义
 
@@ -25,6 +25,7 @@
 - `X`: `tools/prepare_clean_groove_pixel_review.py`、`tests/test_clean_groove_pixel_review.py`与`clean-groove-pixel-review/1` Schema。
 - `D`: `tools/compare_clean_groove_pixel_truth.py`、独立残差Schema/测试与145/147外置残差报告。
 - `Y`: 默认关闭的`sidewall_consistency_candidate.py`、配置Schema/测试与非sealed数值回归。
+- `Z`: `tools/evaluate_clean_groove_pose_truth.py`、独立外圆/最终姿态Schema、合成测试与145/147 Git外评估报告。
 
 ## Functional Requirements
 
@@ -134,6 +135,22 @@
 | FR-102 | GUARDRAIL_PROVEN | Y：0.05与版本显式标为development-only；一个正/一个负物理样品不足以默认启用。 |
 | FR-103 | PROVEN | D：sealed、SHA、有限几何、Git内/已有输出失败门已测；报告不含媒体、绝对路径或HUMAN原始坐标。 |
 | FR-104 | GUARDRAIL_PROVEN | Y/E：旧污染任务、双拍UNCONFIRMED、0.12和PLC边界不变；仅021分支候选。 |
+| FR-105 | PROVEN | Z：版本化离线CLI/Schema按validation、LabelMe和runtime image SHA唯一关联，只写Git外。 |
+| FR-106 | PROVEN | Z：直接复用`fit_circle_kasa`/`robust_fit_circle+geometric_circle_fit`，报告保留方法名、两拟合及差异。 |
+| FR-107 | PROVEN | Z：8个互异有限点、120°覆盖和5/10/20 px残差门均有合成正反测试。 |
+| FR-108 | PROVEN | Z：留一点重拟合输出圆心方向上界与半径漂移比，1°/2%任一失败即拒绝。 |
+| FR-109 | PROVEN | Z/E：145虽旧validation `poseAngleReady=1`，但报告仍`humanCircle.usable=false`。 |
+| FR-110 | PROVEN | Z：只有人工圆过门才输出圆心/半径AUTO误差；145/147正式字段均null。 |
+| FR-111 | PROVEN_SYNTHETIC / MISSING_FORMAL_OUTER_TRUTH | Z：人工圆心→人工端点中点与AUTO圆心→AUTO交点中点数学已测；145圆未过门。 |
+| FR-112 | PROVEN | Z：y-down、下半轴0°、顺时针正、`[-180,180)`均有精确测试。 |
+| FR-113 | PROVEN_SYNTHETIC / MISSING_FORMAL_OUTER_TRUTH | Z：环形误差和±5° MVP门已测；真实145不产生MVP结论。 |
+| FR-114 | PROVEN | Z：82.978、22.834、-158.111、80/90和±180环绕用例全部通过。 |
+| FR-115 | PROVEN | Z：外圆缺失/短弧/不稳定、人工几何/SHA错、runtime物理圆/精修缺失均在最终结论前fail-closed。 |
+| FR-116 | PROVEN | Z/E：145仅在`diagnosticOnly`保留Kasa/精修圆、临时角与修正量，`finalPose=null`。 |
+| FR-117 | GUARDRAIL_PROVEN | Z：默认、development、authority、promotion、runtime、PLC、HUMAN runtime和tuning八项常量由Schema锁死。 |
+| FR-118 | PROVEN | Z/E：源validation/results/LabelMe SHA与评估/拟圆方法版本保留；报告无媒体、绝对路径和人工原始点列。 |
+| FR-119 | PROVEN_EXTERNAL_FAIL_CLOSED | Z/E：145实跑13点、覆盖29.814°，同时触发覆盖、圆心稳定性和半径稳定性blocker。 |
+| FR-120 | GUARDRAIL_PROVEN | E：增量未改检测算法、0.12/其他门限、默认配置、140图、main或PLC/HMI。 |
 
 ## Success Criteria
 
@@ -183,6 +200,14 @@
 | SC-042 | PROVEN | Y：缺失/关闭无字段；开启SUPPORTED仍顶层失败、valid=false、角度/PLC空。 |
 | SC-043 | PROVEN | Y/E：0.12等原门值未改；446项全量、43份Schema、diff与污染门通过。 |
 | SC-044 | GUARDRAIL_PROVEN | E：仅021功能分支候选，不合main；Mac门前不称恢复率或最终角度精度。 |
+| SC-045 | PROVEN_SYNTHETIC | Z：大弧合成数据产生圆比较、当前角、环形误差、方向和MVP窗口。 |
+| SC-046 | PROVEN | Z：短弧、残差、留一点不稳定、互异点不足、上游和身份失败均有测试。 |
+| SC-047 | PROVEN | Z：状态条件Schema禁止`NOT_EVALUATED`同时携带`finalPose`，全数值有限且平台尾数规范化。 |
+| SC-048 | PROVEN | Z：八项禁止升权策略由根Schema `const`和工具常量双重约束。 |
+| SC-049 | PROVEN_EXTERNAL_FAIL_CLOSED | E：145为`NOT_EVALUATED`，blockers=`INSUFFICIENT_ARC_COVERAGE/CIRCLE_CENTER_UNSTABLE/CIRCLE_RADIUS_UNSTABLE`。 |
+| SC-050 | PROVEN_EXTERNAL | E：147没有外圆参考，独立返回`OUTER_CIRCLE_REFERENCE_MISSING`，没有0°伪值。 |
+| SC-051 | GUARDRAIL_PROVEN | E：评估器不读封存part-006、不调参、不改runtime/PLC；外置实跑只读已冻结fold-03 JSONL。 |
+| SC-052 | PENDING_MAC_GATE | Z/E：服务器实现与实跑完成；提交推送后需Mac复算，不需重跑140 BMP。 |
 
 ## 被证据否定或纠正的旧理解
 
@@ -221,7 +246,7 @@
 
 ### C. 像素级姿态精度验收
 
-若145或147中至少一张被确认为完整可见，还需对同一图像SHA保存Git外的LabelMe真值：左/右真槽壁、两个槽口端点（或完整开放槽边界），以及能独立复核圆心的外圆可见弧/圆心真值。算法自己的拟合圆不能同时作为自己的准确度真值。
+145已有13点独立可见弧，但覆盖只约30°且留一点不稳定，因此仍不能作正式圆心真值。需在同一图像SHA上继续沿真实可见外圆独立落点，使真实覆盖达到至少120°并重跑稳定性门；不能用当前拟合圆外推点补足。另一合法路径是提供独立、可追溯且具有自身不确定度的圆心真值契约。
 
 ### D. 双拍验收
 

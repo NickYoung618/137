@@ -347,3 +347,32 @@ accuracy/tuning/runtime/PLC权限仍保持false，后续还需独立评估设计
 `CANDIDATE_SUPPORTED`只是“值得追加独立真值验证”，不是恢复成功。必须同时确认顶层仍是
 `GROOVE_SOURCE_INCONSISTENT`、`valid=false`、`currentAngleDeg=null`、`imageFrameCorrectionDeg=null`且
 `plcCommand=null`。当前开发证据要求part-019已知混合边继续`CANDIDATE_REJECTED`；Mac独立回放前不得合main。
+
+## 独立外圆与最终姿态角离线评估
+
+先校验Git外证据包，再使用既有冻结runtime JSONL；本步不重跑140张BMP：
+
+    OUTER_REVIEW=/path/to/manual-clean-groove-outer145/extracted
+    RUNTIME_RESULTS=/path/to/a2-validation-140/results/021-bidirectional-v3-working/fold-03.jsonl
+    REPORT_DIR=/path/to/git-external/pose-truth-evaluation-021
+
+    sha256sum \
+      "$OUTER_REVIEW/clean-groove-pixel-validation-with-outer-145.json" \
+      "$OUTER_REVIEW/labelme-independent/normal-part-008-fixed-pose-0005.json"
+
+    mkdir -p "$REPORT_DIR"
+    uv run --with jsonschema python tools/evaluate_clean_groove_pose_truth.py \
+      --validation "$OUTER_REVIEW/clean-groove-pixel-validation-with-outer-145.json" \
+      --results "$RUNTIME_RESULTS" \
+      --output "$REPORT_DIR/clean-groove-pose-truth-evaluation.json"
+
+判读顺序：
+
+1. 先看`humanCircle.inputReferencePresent`，这只表示validation中已有圆弧。
+2. 再看`humanCircle.usable`、`qualityChecks`和`failedChecks`。覆盖低于120°或稳定性不足时，`evaluationStatus=NOT_EVALUATED`。
+3. `diagnosticOnly`中的Kasa/精修圆和临时角只用于说明失败原因，不是最终真值。
+4. 只有`evaluationStatus=EVALUATED`时才读`finalPose.candidateMinusHumanErrorDeg`和`candidateGeometryWithinMvpWindow`。
+5. 不论是否达窗，报告都不能改变runtime `valid`、source consistency、PLC或生产门限。
+
+145当前只有约30.061734°弧，预期blocker至少包含
+`INSUFFICIENT_ARC_COVERAGE`；因此最终人工角、候选角误差和MVP窗口必须为null。

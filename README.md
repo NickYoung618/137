@@ -141,9 +141,16 @@ Git外人工确认可以说明某个cluster是真壁，但人工标签绝不进�
 端点。校验器把墙/端点完成与同图独立外圆弧/圆心参考分开；缺外圆参考时不得评价最终角度精度。旧
 fixture污染标注工具继续DORMANT/INAPPLICABLE，所有复核产物禁止runtime、调参和PLC输入。
 
-145/147现已完成独立3+3墙点与左右槽口端点复核，但尚无同图独立外圆/圆心。可用
+145/147现已完成独立3+3墙点与左右槽口端点复核。145另有13个独立外圆可见弧点，但只覆盖约30°；
+它可拟圆诊断，但未过项目既有`>=120°`正式覆盖门和留一点稳定性门。不得把拟合后外推的圆上点当成
+新的人工弧证据，也不得用它“补到120°”。可用
 `tools/compare_clean_groove_pixel_truth.py`按图像SHA把HUMAN点与冻结runtime JSONL对照，分别报告墙线、
 端点、中点、槽宽和“共用runtime圆心”的条件方向残差；后者只隔离槽口定位贡献，不能称为最终姿态角精度。
+
+`tools/evaluate_clean_groove_pose_truth.py`是默认关闭的Git外离线评估器：复用项目已有Kasa初值与
+robust/geometric拟圆，对点数、弧覆盖、径向残差和留一点圆心/半径漂移逐项硬门。只有全部过门才输出
+人工当前角、AUTO候选角环形误差和85°最短调整量；否则`finalPose=null`。145实跑因覆盖和稳定性不足为
+`NOT_EVALUATED`，它的拟圆/临时角只在`diagnosticOnly`中，不是最终真值或精度PASS。
 
 `detector.sidewall_source_consistency_candidate`是默认不存在/关闭的development-only诊断。它不放宽现有
 `0.12`对比不对称门；只在原结果恰好仅失败contrast、其他原检查通过且更严格端点结构证据通过时标记

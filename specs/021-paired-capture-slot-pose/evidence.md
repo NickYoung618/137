@@ -294,3 +294,16 @@
 - `contracts/`下43份根Schema全部通过Draft 2020-12 `check_schema`；新CLI help、Python compile、JSON解析、`git diff --check`和FR/SC自动计数门通过。测试日志中的Git内trace拒绝仍是预期fail-closed路径。
 - 检查确认现有0.12/0.35/0.22/0.75/0.20/0.15 source-consistency门和0.5°local merge均未修改；新0.05只存在于默认关闭development候选的独立版本化配置。没有媒体、JSONL、外置LabelMe/报告、现场绝对路径或大文件进入Git。
 - 算法版本升至`0.17.0`以标识可选诊断能力；候选配置缺失/关闭时不新增结果字段。旧fixture污染CLI仍DORMANT，双拍参数仍UNCONFIRMED，main与PLC未触碰。
+
+## Independent Outer-circle and Final Pose Evaluation
+
+- Git外归档SHA-256复核为`fad2592f5843645e34f4bbe432e4cb6e0dbe26b18fbb750ca21aef44488131c6`；正式validation、145 LabelMe、147 LabelMe SHA-256分别为`8cbeef3957dbed5259e88047f344ef20f65d6d63539dd9516636b08098e047a7`、`e626fc2eca81af66a724eb112411cd74c82faf219de4b9c84616d651ad2382c8`、`3b72c34e15c9306b3b53331bbe8c283d1a5cb118efc2334e031f21761849b51d`。
+- 新`clean-groove-pose-truth-evaluation/1`使用现有Kasa初值和robust/geometric精修；输出方法名、两圆、径向残差、覆盖和留一点稳定性。合成TDD先以缺少模块红门失败，实现后8项聚焦测试通过，包括互异点数、大/短弧、残差/稳定性、±180°、80/90°、SHA、上游、sealed和路径失败。
+- 145的13点Kasa圆心/半径为`(2822.563801,1842.881139)/1661.790031 px`；robust/geometric精修为`(2833.762191,1851.218070)/1675.561515 px`。精修覆盖`29.814338°`，残差median/P95/max=`1.675853/3.133616/4.011561 px`。
+- 145初值→精修圆心移动`13.960958 px`；留一点最大圆心漂移`48.070771 px`，换算`1.643328°`；最大半径漂移`47.605342 px/2.841158%`。因此同时触发`INSUFFICIENT_ARC_COVERAGE`、`CIRCLE_CENTER_UNSTABLE`、`CIRCLE_RADIUS_UNSTABLE`，`evaluationStatus=NOT_EVALUATED`。
+- 145的`diagnosticOnly`数值：Kasa/精修人工临时角`30.019016°/30.512727°`，AUTO候选角`29.578394°`，临时差`-0.440622°/-0.934333°`，对85°的临时顺时针修正分别`54.980984°/54.487273°`，AUTO为`55.421606°`。这些全部不是最终真值；`circleComparison=null`、`finalPose=null`、MVP不评价。
+- 147没有独立外圆参考，以`OUTER_CIRCLE_REFERENCE_MISSING`独立`NOT_EVALUATED`；同样没有最终角或MVP结论。最终Git外报告`clean-groove-pose-truth-evaluation-021-v3.json` SHA-256为`a99f7c2cb46d692a3f5a4a5d3835cd867684ddabd17c9da487b6440f42cd1ead`。
+- 不能将拟合后的圆外推成更长弧并当作新人工证据；这不增加独立像素约束。下一道真值门是在145同图上继续标注真实可见外圆至至少120°并重跑稳定性，或提供独立可追溯圆心真值。本增量不需重跑140 BMP。
+- SpecKit最终对账为FR-001—FR-120、SC-001—SC-052、T001—T120编号连续无缺号；匹配到的`NEEDS CLARIFICATION`均是历史“无该标记”的证据句或checklist文字，不是未解问题。
+- 服务器新评估器聚焦8项全通过；权威全量门`454 tests in 122.828s`全通过。`contracts/`下44份根Schema全部通过Draft 2020-12 `check_schema`；CLI help、Python compile、JSON解析和`git diff --check`通过。
+- 污染门确认`algorithms/`和`config/`零差异，无媒体、JSONL、外置LabelMe/报告、新现场绝对路径或大文件进入Git。测试中Git内trace拒绝文字仍是预期fail-closed路径。未读sealed part-006、未重跑140 BMP、未改0.12/其他检测门限、默认配置、main或PLC/HMI。

@@ -30,6 +30,8 @@
 - Q: 这条人工线证明了什么？ → A: 它确认算法已找到的一条可见边确属真实凹槽；它没有提供另一侧壁、完整槽口、槽中点或角度真值。309.48°边仍是fixture shadow edge，不得与已确认真槽壁配对。
 - Q: 单帧是否应继续“恢复”不可见的另一侧壁？ → A: 不应。另一侧壁的可观测性尚未确认且可能被遮挡；局部Cartesian搜索只能枚举图像中实际存在的可审计证据，不能推断或合成不可见像素。当前运行时继续fail-closed；如未来增加`PARTIALLY_OBSERVED`，只能是版本化诊断状态，不能使姿态valid或产生引导/PLC命令。
 - Q: 这是否改变双拍方向？ → A: 不改变。双拍的核心价值正是保证至少一拍无遮挡；只有无遮挡帧提供完整同源两壁和槽口几何时，才可形成权威单帧测量并参与跨帧互证。
+- Q: 145的13点独立外圆弧已使`poseAngleReady=1`，是否等于最终角精度真值可用？ → A: 不等于。该字段只表示结构上已有外圆参考；正式评估还必须通过可见弧覆盖、径向残差和拟合稳定性硬门。
+- Q: 145约30°的可见弧能否直接称为最终姿态角真值？ → A: 不能。项目现有人工槽姿态评估的可见弧硬门是至少120°；低残差的短弧仍可导致圆心漂移。新工具必须保留拟合诊断值，但最终角误差和MVP PASS必须`NOT_EVALUATED`。
 
 ## User Scenarios & Testing
 
@@ -190,6 +192,25 @@
 6. **Given** part-019式真壁+fixture混合边，**When** contrast差本身低于0.12但端点结构差异较大，**Then** 实验仲裁必须`CANDIDATE_REJECTED`，不得恢复混合配对。
 7. **Given** 实验配置缺失或`enabled=false`，**When** 运行现有算法，**Then** 不执行候选仲裁、不新增结果字段且输出逐字节语义保持原路径。
 
+---
+
+### User Story 10 - 独立外圆与最终姿态角评估 (Priority: P1)
+
+算法工程师用同图独立人工外圆可见弧、独立槽口端点和SHA绑定的AUTO运行记录，离线评估外圆、槽口中点方位及85°±5°引导误差。结构完整不代表真值可用：短弧、残差或拟合稳定性不足时，工具保留可审计诊断，但最终角误差与MVP结论为空。
+
+**Why this priority**: 墙/端点误差已能量化，但缺少独立圆心时只能评估条件方向差。本增量要首次把人工外圆质量和最终姿态角误差分层，避免将短弧低残差误当稳定圆心。
+
+**Independent Test**: 用完整大弧、短弧、非圆弧、留一点拟合漂移、±180°环绕、80/90°边界、runtime上游失败和SHA错配构造纯几何输入，验证评估值和所有fail-closed分支。
+
+**Acceptance Scenarios**:
+
+1. **Given** 独立外圆弧至少8点、覆盖至少120°、残差与稳定性全部过门，**When** 人工端点与AUTO候选均可用，**Then** 用人工圆心和人工槽口中点输出人工当前角、AUTO当前角的环形误差和各85°最短修正量。
+2. **Given** 只有30°左右短弧，**When** 即使中位/P95残差很小，**Then** 状态仍为`NOT_EVALUATED`，明确`INSUFFICIENT_ARC_COVERAGE`，最终角误差、MVP窗口和准确性结论均为空。
+3. **Given** 人工拟合与AUTO物理圆，**When** 评估，**Then** 分开报告圆心二维差、半径绝对差、人工/AUTO槽口中点方向，不将人工几何回馈到运行时。
+4. **Given** 完整同源槽口候选且人工圆质量过门，**When** `abs(wrap180(autoAngle-humanAngle))<=5°`，**Then** 只在离线报告中标记`candidateGeometryWithinMvpWindow=true`；该字段不会修改runtime valid、source consistency或PLC状态。
+5. **Given** 遮挡、混合真槽壁+fixture边、多解、外圆质量失败或runtime缺少物理圆/精修，**When** 评估，**Then** 不输出最终姿态误差、不输出0°替代值，并保留具体blocker。
+6. **Given** 评估器完成，**When** 查看策略字段，**Then** `defaultEnabled=false`、`developmentOnly=true`、`authoritative=false`、`posePromotionAllowed=false`、`runtimeInputAllowed=false`和`plcInputAllowed=false`永久成立。
+
 ### Edge Cases
 
 - 第二帧旋转跨越0°/360°，或方向为逆时针。
@@ -206,6 +227,8 @@
 - 人工shape的label名称与实际几何语义冲突；必须保留原件并通过派生审核副本更正语义，不能按名称自动纳入真值。
 - 单帧只看得到一条真实槽壁；不得把最邻近强边或fixture阴影补成第二壁。
 - “某些标记落在fixture shadow上”只指非槽候选标记；不得再推导槽壁线受污染，也不得把语义上“正确、干净”升级为亚像素坐标真值。
+- 人工外圆弧点数合格但覆盖角过小；低残差仍不足以排除圆心沿短弧弦的漂移。
+- 人工圆的Kasa初始拟合、robust/geometric精修和留一点稳定性结论不一致；必须失败关闭，不得任选更接近AUTO的圆。
 
 ## Requirements
 
@@ -316,6 +339,22 @@
 - **FR-102**: 实验端点结构门值和版本 MUST 在配置、输出与证据中显式记录为development-only；在新的独立物理零件真值验证前不得默认启用或合并main。
 - **FR-103**: 对照CLI MUST 拒绝sealed part-006、重复/缺失result SHA、非有限几何、Git内输出和已有输出；报告不得包含图像像素、imageData、绝对现场路径或HUMAN坐标以外的媒体。
 - **FR-104**: 新功能 MUST 保持旧fixture污染任务DORMANT、双拍参数UNCONFIRMED诊断边界、现有0.12硬门和PLC阻断不变；只在021功能分支提交并等待Mac独立验证。
+- **FR-105**: 系统 MUST 提供版本化`clean-groove-pose-truth-evaluation/1`离线契约与CLI，按image SHA关联正式人工validation、LabelMe和runtime JSONL；输出只能写到Git工作树外。
+- **FR-106**: 评估器 MUST 复用项目现有Kasa初始拟圆和robust/geometric精修能力，同时输出两种拟合、方法版本和拟合差异；MUST NOT 将人工圆心传入任何运行时检测函数。
+- **FR-107**: 人工可见弧质量硬门 MUST 至少要求8个互异有限点、覆盖`>=120°`、精修径向残差median`<=5 px`、P95`<=10 px`、max`<=20 px`；任一失败时`humanCircleUsable=false`。
+- **FR-108**: 评估器 MUST 通过留一点重拟合审计稳定性：最大圆心漂移换算的方向上界 MUST `<=1°`，最大半径漂移 MUST `<=2%`精修半径；任一失败时必须保留数值和blocker。
+- **FR-109**: 报告 MUST 将“外圆参考结构存在”与“外圆可用于最终角精度”分字段；旧`poseAngleReady=1`不得越过FR-107/FR-108质量门。
+- **FR-110**: 报告 MUST 比较通过质量门的人工精修圆与AUTO物理圆，输出圆心距离和半径绝对差；若质量门失败，可保留`diagnosticOnly`拟合差，但正式圆误差必须为null。
+- **FR-111**: 人工当前角 MUST 由“通过质量门的人工圆心 → 人工左右槽口端点中点”计算；AUTO候选角 MUST 由“AUTO物理圆心 → AUTO左右外圆交点中点”计算。
+- **FR-112**: 两种当前角 MUST 复用`image-y-down-clockwise-signed/1`：图像x向右、y向下、圆心向下`+Y`为0°、顺时针为正、范围`[-180,180)`。
+- **FR-113**: 最终候选角误差 MUST 为`wrap180(autoCurrentAngleDeg-humanCurrentAngleDeg)`；MVP几何窗口仅在所有真值与候选门通过后评估，并要求绝对误差`<=5°`。
+- **FR-114**: 人工与AUTO引导均 MUST 计算`correctionRaw=wrap180(85-currentAngle)`；仅当当前角在左侧且处于`[80,90]`时死区输出0°，否则保留最短有符号修正量，正=顺时针、负=逆时针。
+- **FR-115**: 外圆质量失败、人工端点不完整、runtime物理圆/精修缺失、候选混合fixture、遮挡、多解、SHA错配或sealed part-006 MUST 使最终角、误差、MVP窗口和修正指令为null/NOT_EVALUATED，不得填0。
+- **FR-116**: 对于因质量门失败而未评估的条目，报告 MAY 输出明确标为`diagnosticOnly`的Kasa/精修圆和临时方向值，但MUST 同时输出blockers且不得名为最终真值或accuracy。
+- **FR-117**: 报告必须固定`defaultEnabled=false`、`developmentOnly=true`、`authoritative=false`、`posePromotionAllowed=false`、`runtimeInputAllowed=false`、`plcInputAllowed=false`、`humanTruthAppliedAtRuntime=false`。
+- **FR-118**: 报告 MUST 保留源validation SHA、runtime JSONL SHA、LabelMe SHA、评估/质量门版本，但MUST NOT 包含原图、imageData、绝对现场路径或人工原始点列。
+- **FR-119**: 145正式实跑 MUST 原样报告13点、Kasa圆、精修圆、约30°覆盖、残差和稳定性；若不足120°则必须`INSUFFICIENT_ARC_COVERAGE`，不得为了返回PASS而放宽门限。
+- **FR-120**: 新增量 MUST 只修改离线评估器、Schema、测试和SpecKit文档；不修改检测算法、0.12等门限、默认配置、140图结果、main或PLC/HMI。
 
 ### Key Entities
 
@@ -341,6 +380,8 @@
 - **CleanGroovePixelReviewValidation**: 对人工点、端点及可选外圆参考的离线完成校验；分开表达墙/端点可用与姿态角精度是否具备参考。
 - **CleanGrooveResidualDiagnostic**: HUMAN墙/端点与runtime refinement的SHA绑定离线残差；角度只描述共用runtime圆心下的槽口条件贡献。
 - **SidewallSourceConsistencyCandidate**: 默认关闭、非权威的多证据实验仲裁；永不改变原门或顶层结果。
+- **IndependentOuterCircleFit**: 独立可见弧的Kasa初始圆、robust/geometric精修圆、残差、覆盖、留一点稳定性与硬门结果。
+- **CleanGroovePoseTruthEvaluation**: SHA绑定的离线最终姿态评估；分开diagnostic-only拟合、正式人工/AUTO角、MVP窗口与永久禁止升权策略。
 
 ## Success Criteria
 
@@ -391,6 +432,14 @@
 - **SC-042**: 实验开关缺失/关闭时现有结果无新增候选字段；开启时所有SUPPORTED结果仍保持原`GROOVE_SOURCE_INCONSISTENT`、valid=false、角度null和PLC空。
 - **SC-043**: 既有0.12、0.35、0.22、0.75、0.20、0.15门值及local 0.5°merge无修改；算法/配置差异检查、全量测试和41+根Schema通过。
 - **SC-044**: 021候选仅推送功能分支，不合main；Mac使用真实原始数据验证前不宣称恢复率、误拒率或最终角度精度。
+- **SC-045**: 合成大弧评估100%复现人工/AUTO圆、当前角、±180°环形误差、各85°最短修正及80/90°死区，数学误差不超过1e-9。
+- **SC-046**: 少于8点、少于120°覆盖、残差超门、留一点圆心等效角漂移超过1°或半径漂移超过2%的测试100% `NOT_EVALUATED`且最终角/MVP字段为null。
+- **SC-047**: 上游物理圆/精修缺失、重复/缺失SHA、LabelMe被改、sealed part-006、Git内/已存在输出和非有限几何的测试100%在成功产物前fail-closed。
+- **SC-048**: 合法评估报告100%通过Draft 2020-12 Schema，不含原图、imageData、绝对现场路径或人工点列，且八项非权威/禁止升权策略均为固定值。
+- **SC-049**: 145外置实跑100%复现archive/validation/LabelMe SHA、13点、Kasa圆与约30.061734°覆盖；因少于120°必须报`INSUFFICIENT_ARC_COVERAGE`并禁止最终角accuracy PASS。
+- **SC-050**: 即使145可输出diagnostic-only人工/AUTO临时角与修正量，`finalHumanCurrentAngleDeg`、`finalCandidateAngleErrorDeg`、`candidateGeometryWithinMvpWindow`必须为null，不得填0或PASS。
+- **SC-051**: 新增聚焦、全量和全部根Schema门通过；不重跑140 BMP，检测代码、门限、默认配置、main和PLC/HMI无变化。
+- **SC-052**: 新候选只推送021功能分支；Mac独立复算前不合main，不宣称145已提供最终姿态角真值。
 
 ## Assumptions
 
@@ -414,6 +463,7 @@
 - **BLOCKED-B06**: 145/147尚无独立像素级槽壁支持点、槽口端点及外圆可见弧/圆心真值；语义上的干净槽壁不足以声明亚像素或姿态角精度，也不授权调门限。
 - **BLOCKED-B07**: 本轮工具只能准备和校验独立人工任务；实际145/147的3+3墙点、2端点及外圆参考必须由人工在原图上独立绘制，Codex不得从AUTO坐标代填。
 - **RESOLVED-R04**: 145/147的3+3墙点与2端点已正式校验，足以做墙/端点像素残差和共用AUTO圆心的条件方向诊断。
-- **BLOCKED-B08**: 145/147仍无同图独立外圆弧或圆心，因此最终姿态角精度、外圆误差及生产角度accuracy继续不可评价。
+- **BLOCKED-B08**: 145已有同图13点独立外圆弧，但覆盖仅约30°，未达现有120°正式质量门；147仍无外圆参考。因此两图都不能声称最终姿态角真值或生产角度accuracy。
+- **RESOLVED-R05**: 145外圆标注archive与四个包内文件SHA已在服务器Git外100%复核；该证据只用于离线评估器，不进入运行时。
 - **BLOCKED-B09**: 实验同源候选目前只有一个正样品part-008与一个已知混合负样品part-019的development证据；在新增独立物理零件真值前不得默认启用或宣称泛化。
 - **RESOLVED-R01**: 服务器已在Git外复核原始人工LabelMe、安全派生副本和压缩包SHA-256；三者不得提交Git，派生副本仍禁止作为运行时或完整槽姿态真值。

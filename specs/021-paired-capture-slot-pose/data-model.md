@@ -183,6 +183,25 @@
 
 规则：候选只消费现有source-consistency诊断。SUPPORTED要求原状态REJECTED、失败集合恰为`edge_contrast_asymmetry`、其余原检查通过且端点结构门通过。任何状态都不修改原结果；配置缺失或关闭时不得在输出中出现候选字段。
 
+## CleanGroovePoseTruthEvaluation
+
+- schemaVersion：`clean-groove-pose-truth-evaluation/1`
+- artifactType：`DIAGNOSTIC`
+- sourceValidationSha256、sourceResultsSha256、qualityGateVersion、angleConventionId
+- entries[].evaluationStatus：`EVALUATED | NOT_EVALUATED`
+- entries[].blockers：稳定错误码列表，短弧为`INSUFFICIENT_ARC_COVERAGE`
+- entries[].humanCircle.inputReferencePresent：validation结构上有参考
+- entries[].humanCircle.initialKasa / refinedRobustGeometric：圆心、半径和残差
+- entries[].humanCircle.angularCoverageDeg：按拟合圆心计算的最小覆盖弧
+- entries[].humanCircle.stability：Kasa-精修差、leave-one-out最大圆心/半径漂移及圆心漂移等效角
+- entries[].humanCircle.qualityChecks / failedChecks / usable
+- entries[].diagnosticOnly：质量门失败时仍可审计的Kasa/精修临时人工角、AUTO角、环形差及85°修正；不是最终真值
+- entries[].circleComparison：仅质量通过时的human-AUTO圆心距离与半径差；否则null
+- entries[].finalPose：仅全部门通过时的humanCurrentAngleDeg、candidateCurrentAngleDeg、candidateMinusHumanErrorDeg、human/candidateCorrectionDeg、rotationDirection和candidateGeometryWithinMvpWindow；否则整体null
+- policy：defaultEnabled=false、developmentOnly=true、authoritative=false、posePromotionAllowed=false、runtimeInputAllowed=false、plcInputAllowed=false、humanTruthAppliedAtRuntime=false、thresholdTuningAllowed=false
+
+状态规则：`poseAngleAccuracyReady=true`只是输入结构就绪。正式状态依次检查外圆点/弧覆盖、残差、稳定性、runtime物理圆/精修和人工完整槽证据。任一失败则`NOT_EVALUATED`且finalPose=null，不会回填0。
+
 ## State Transitions
 
 disabled → EXPERIMENT_DISABLED

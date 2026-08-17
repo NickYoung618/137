@@ -155,3 +155,28 @@ gate to pass. All other cases are rejected or not evaluated. Every candidate res
 `posePromotionAllowed=false` and `manualTruthAppliedAtRuntime=false`. It never changes the original source status,
 groove-refinement status, top-level error/valid/guidance/angle or PLC fields. The existing 0.12 contrast gate remains
 unchanged; the candidate is not eligible for default enablement until independent physical-part truth expands.
+
+## Independent outer-circle and final pose truth evaluation
+
+`clean-groove-pose-truth-evaluation/1` is a Git-external, offline-only diagnostic contract. It binds one completed
+`clean-groove-pixel-review/1` validation, its HUMAN LabelMe files and canonical runtime JSONL exclusively by SHA-256.
+It reuses the repository Kasa initial fit and robust/geometric refinement but never injects the HUMAN circle or
+endpoints into runtime detection.
+
+An outer reference being present is not sufficient authority. A visible arc must contain at least eight distinct
+finite points, cover at least 120 degrees, have refined radial residual median/P95/max no greater than 5/10/20 px,
+and pass leave-one-out stability: center-shift equivalent direction at most 1 degree and radius shift at most 2%.
+The report records every metric/check. Any failed check sets `humanCircle.usable=false`, the entry status to
+`NOT_EVALUATED`, and the formal circle comparison/final pose/MVP fields to null. Kasa/refined circles and provisional
+angles may remain under `diagnosticOnly`; they are never called final truth or accuracy.
+
+For an evaluated entry, HUMAN current angle uses the accepted HUMAN circle center to the HUMAN mouth-endpoint
+midpoint. Candidate current angle uses the AUTO physical-circle center to the AUTO outer-circle-intersection midpoint.
+Both use image x-right/y-down, downward +Y ray as zero, clockwise positive, range [-180,180). Candidate error is
+`wrap180(candidate-human)`. Each correction is `wrap180(85-current)` with the established 80..90 degree deadband.
+`candidateGeometryWithinMvpWindow` means only absolute angle error <=5 degrees after every evidence gate passed; it
+does not promote runtime valid/source-consistency/guidance or PLC.
+
+The policy object fixes `defaultEnabled=false`, `developmentOnly=true`, `authoritative=false`,
+`posePromotionAllowed=false`, `runtimeInputAllowed=false`, `plcInputAllowed=false`,
+`humanTruthAppliedAtRuntime=false` and `thresholdTuningAllowed=false`.

@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clean-groove-pose-truth-evaluation.schema.json",
+  "title": "Independent outer-circle and final groove-pose truth evaluation",
+  "$comment": "Offline diagnostic only. Human geometry never enters runtime; failed circle quality leaves formal pose fields null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "artifactType", "sourceValidationSha256", "sourceResultsSha256",
+    "qualityGate", "angleConvention", "entries", "summary", "policy"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "clean-groove-pose-truth-evaluation/1"},
+    "artifactType": {"const": "DIAGNOSTIC"},
+    "sourceValidationSha256": {"$ref": "#/$defs/sha256"},
+    "sourceResultsSha256": {"$ref": "#/$defs/sha256"},
+    "qualityGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version", "minimumPointCount", "minimumArcCoverageDeg",
+        "maximumMedianResidualPx", "maximumP95ResidualPx", "maximumMaxResidualPx",
+        "maximumLeaveOneOutCenterEquivalentAngleDeg", "maximumLeaveOneOutRadiusShiftRatio",
+        "mvpMaximumAbsoluteAngleErrorDeg"
+      ],
+      "properties": {
+        "version": {"const": "independent-visible-arc-pose-truth-v1"},
+        "minimumPointCount": {"const": 8},
+        "minimumArcCoverageDeg": {"const": 120.0},
+        "maximumMedianResidualPx": {"const": 5.0},
+        "maximumP95ResidualPx": {"const": 10.0},
+        "maximumMaxResidualPx": {"const": 20.0},
+        "maximumLeaveOneOutCenterEquivalentAngleDeg": {"const": 1.0},
+        "maximumLeaveOneOutRadiusShiftRatio": {"const": 0.02},
+        "mvpMaximumAbsoluteAngleErrorDeg": {"const": 5.0}
+      }
+    },
+    "angleConvention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "origin", "xAxis", "yAxis", "datumRay", "positiveDirection", "rangeDeg", "targetAngleDeg", "toleranceDeg"],
+      "properties": {
+        "version": {"const": "image-y-down-clockwise-signed/1"},
+        "origin": {"const": "circle_center"},
+        "xAxis": {"const": "right"},
+        "yAxis": {"const": "down"},
+        "datumRay": {"const": "positive_y_down"},
+        "positiveDirection": {"const": "clockwise"},
+        "rangeDeg": {"const": "[-180,180)"},
+        "targetAngleDeg": {"const": 85.0},
+        "toleranceDeg": {"const": 5.0}
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/entry"}
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageCount", "evaluatedCount", "notEvaluatedCount", "humanCircleUsableCount", "candidateGeometryWithinMvpWindowCount"],
+      "properties": {
+        "imageCount": {"type": "integer", "minimum": 1},
+        "evaluatedCount": {"type": "integer", "minimum": 0},
+        "notEvaluatedCount": {"type": "integer", "minimum": 0},
+        "humanCircleUsableCount": {"type": "integer", "minimum": 0},
+        "candidateGeometryWithinMvpWindowCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultEnabled", "developmentOnly", "authoritative", "posePromotionAllowed",
+        "runtimeInputAllowed", "plcInputAllowed", "humanTruthAppliedAtRuntime", "thresholdTuningAllowed"
+      ],
+      "properties": {
+        "defaultEnabled": {"const": false},
+        "developmentOnly": {"const": true},
+        "authoritative": {"const": false},
+        "posePromotionAllowed": {"const": false},
+        "runtimeInputAllowed": {"const": false},
+        "plcInputAllowed": {"const": false},
+        "humanTruthAppliedAtRuntime": {"const": false},
+        "thresholdTuningAllowed": {"const": false}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableNumber": {"type": ["number", "null"]},
+    "point": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y"],
+      "properties": {"x": {"type": "number"}, "y": {"type": "number"}}
+    },
+    "circle": {
+      "type": "object", "additionalProperties": false, "required": ["center", "radiusPx"],
+      "properties": {"center": {"$ref": "#/$defs/point"}, "radiusPx": {"type": "number", "exclusiveMinimum": 0}}
+    },
+    "residual": {
+      "type": "object", "additionalProperties": false, "required": ["median", "p95", "max"],
+      "properties": {"median": {"type": "number", "minimum": 0}, "p95": {"type": "number", "minimum": 0}, "max": {"type": "number", "minimum": 0}}
+    },
+    "qualityCheck": {
+      "type": "object", "additionalProperties": false, "required": ["checkId", "value", "threshold", "thresholdKind", "passed"],
+      "properties": {
+        "checkId": {"type": "string", "minLength": 1},
+        "value": {"type": "number"},
+        "threshold": {"type": "number"},
+        "thresholdKind": {"enum": ["min", "max"]},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "stability": {
+      "type": "object", "additionalProperties": false,
+      "required": ["leaveOneOutFitCount", "initialToRefinedCenterShiftPx", "initialToRefinedRadiusShiftPx", "maximumLeaveOneOutCenterShiftPx", "maximumLeaveOneOutCenterEquivalentAngleDeg", "maximumLeaveOneOutRadiusShiftPx", "maximumLeaveOneOutRadiusShiftRatio"],
+      "properties": {
+        "leaveOneOutFitCount": {"type": "integer", "minimum": 0},
+        "initialToRefinedCenterShiftPx": {"type": "number", "minimum": 0},
+        "initialToRefinedRadiusShiftPx": {"type": "number", "minimum": 0},
+        "maximumLeaveOneOutCenterShiftPx": {"type": "number", "minimum": 0},
+        "maximumLeaveOneOutCenterEquivalentAngleDeg": {"type": "number", "minimum": 0, "maximum": 90},
+        "maximumLeaveOneOutRadiusShiftPx": {"type": "number", "minimum": 0},
+        "maximumLeaveOneOutRadiusShiftRatio": {"type": "number", "minimum": 0}
+      }
+    },
+    "humanCircle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inputReferencePresent", "inputPointCount", "fitMethods", "initialKasa", "refinedRobustGeometric", "initialAngularCoverageDeg", "refinedAngularCoverageDeg", "initialResidualPx", "refinedResidualPx", "stability", "qualityChecks", "failedChecks", "usable"],
+      "properties": {
+        "inputReferencePresent": {"type": "boolean"},
+        "inputPointCount": {"type": "integer", "minimum": 0},
+        "fitMethods": {
+          "type": "object", "additionalProperties": false, "required": ["initial", "refined"],
+          "properties": {
+            "initial": {"const": "algorithms.hole_2.main.fit_circle_kasa"},
+            "refined": {"const": "algorithms.hole_2.main.robust_fit_circle+geometric_circle_fit"}
+          }
+        },
+        "initialKasa": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/circle"}]},
+        "refinedRobustGeometric": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/circle"}]},
+        "initialAngularCoverageDeg": {"$ref": "#/$defs/nullableNumber"},
+        "refinedAngularCoverageDeg": {"$ref": "#/$defs/nullableNumber"},
+        "initialResidualPx": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/residual"}]},
+        "refinedResidualPx": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/residual"}]},
+        "stability": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/stability"}]},
+        "qualityChecks": {"type": "array", "items": {"$ref": "#/$defs/qualityCheck"}},
+        "failedChecks": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "usable": {"type": "boolean"}
+      }
+    },
+    "guidance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["correctionRawDeg", "correctionDeg", "rotationDirection", "withinTolerance", "requiredRegionPassed"],
+      "properties": {
+        "correctionRawDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "correctionDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "rotationDirection": {"enum": ["CLOCKWISE", "COUNTERCLOCKWISE", "NONE"]},
+        "withinTolerance": {"type": "boolean"},
+        "requiredRegionPassed": {"type": "boolean"}
+      }
+    },
+    "diagnosticOnly": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finalTruth", "humanCurrentAngleFromInitialKasaDeg", "humanCurrentAngleFromRefinedDeg", "candidateCurrentAngleDeg", "candidateMinusInitialKasaDeg", "candidateMinusRefinedDeg", "humanInitialGuidance", "humanRefinedGuidance", "candidateGuidance"],
+      "properties": {
+        "finalTruth": {"const": false},
+        "humanCurrentAngleFromInitialKasaDeg": {"$ref": "#/$defs/nullableNumber"},
+        "humanCurrentAngleFromRefinedDeg": {"$ref": "#/$defs/nullableNumber"},
+        "candidateCurrentAngleDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "candidateMinusInitialKasaDeg": {"$ref": "#/$defs/nullableNumber"},
+        "candidateMinusRefinedDeg": {"$ref": "#/$defs/nullableNumber"},
+        "humanInitialGuidance": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/guidance"}]},
+        "humanRefinedGuidance": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/guidance"}]},
+        "candidateGuidance": {"$ref": "#/$defs/guidance"}
+      }
+    },
+    "circleComparison": {
+      "type": "object", "additionalProperties": false,
+      "required": ["centerErrorPx", "radiusAbsoluteErrorPx"],
+      "properties": {"centerErrorPx": {"type": "number", "minimum": 0}, "radiusAbsoluteErrorPx": {"type": "number", "minimum": 0}}
+    },
+    "finalPose": {
+      "type": "object", "additionalProperties": false,
+      "required": ["humanCurrentAngleDeg", "candidateCurrentAngleDeg", "candidateMinusHumanErrorDeg", "absoluteAngleErrorDeg", "humanGuidance", "candidateGuidance", "candidateGeometryWithinMvpWindow"],
+      "properties": {
+        "humanCurrentAngleDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "candidateCurrentAngleDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "candidateMinusHumanErrorDeg": {"type": "number", "minimum": -180, "exclusiveMaximum": 180},
+        "absoluteAngleErrorDeg": {"type": "number", "minimum": 0, "maximum": 180},
+        "humanGuidance": {"$ref": "#/$defs/guidance"},
+        "candidateGuidance": {"$ref": "#/$defs/guidance"},
+        "candidateGeometryWithinMvpWindow": {"type": "boolean"}
+      }
+    },
+    "entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["imageId", "sourceImageSha256", "humanLabelmeSha256", "evaluationStatus", "blockers", "humanCircle", "runtimeCandidate", "diagnosticOnly", "circleComparison", "finalPose"],
+      "properties": {
+        "imageId": {"type": "string", "minLength": 1},
+        "sourceImageSha256": {"$ref": "#/$defs/sha256"},
+        "humanLabelmeSha256": {"$ref": "#/$defs/sha256"},
+        "evaluationStatus": {"enum": ["EVALUATED", "NOT_EVALUATED"]},
+        "blockers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "humanCircle": {"$ref": "#/$defs/humanCircle"},
+        "runtimeCandidate": {
+          "type": "object", "additionalProperties": false,
+          "required": ["topLevelValid", "detectionStatus", "guidanceStatus", "physicalCircle", "sourceConsistencyStatus", "sourceConsistencyFailedChecks"],
+          "properties": {
+            "topLevelValid": {"type": "boolean"},
+            "detectionStatus": {"type": ["string", "null"]},
+            "guidanceStatus": {"type": ["string", "null"]},
+            "physicalCircle": {"$ref": "#/$defs/circle"},
+            "sourceConsistencyStatus": {"type": ["string", "null"]},
+            "sourceConsistencyFailedChecks": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "diagnosticOnly": {"$ref": "#/$defs/diagnosticOnly"},
+        "circleComparison": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/circleComparison"}]},
+        "finalPose": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/finalPose"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"evaluationStatus": {"const": "EVALUATED"}}},
+          "then": {
+            "properties": {
+              "blockers": {"maxItems": 0},
+              "humanCircle": {"properties": {"usable": {"const": true}}},
+              "circleComparison": {"$ref": "#/$defs/circleComparison"},
+              "finalPose": {"$ref": "#/$defs/finalPose"}
+            }
+          },
+          "else": {
+            "properties": {
+              "blockers": {"minItems": 1},
+              "humanCircle": {"properties": {"usable": {"const": false}}},
+              "circleComparison": {"type": "null"},
+              "finalPose": {"type": "null"}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

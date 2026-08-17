@@ -6,6 +6,8 @@
 
 在020单帧圆定位、暗区、真槽几何、亚像素侧壁和同源性诊断之上增加独立、默认关闭的双帧编排层。140张真实BMP trace曾证明原粗暗区只向内搜索会漏掉区间外墙证据；随后part-019 374人工线确认285.953°既有cluster是一条可见真实槽壁，但并未证明相对侧壁在该帧可见。双向搜索因此只负责枚举实际可观测墙，不负责恢复被遮挡像素；只有完整同源两壁可见时才评估无序canonical wall pair，单壁观测继续fail-closed。双拍仍负责保证至少一拍无遮挡。该路径不改变020权威状态或姿态。
 
+2026-08-17增量在现有独立墙/端点残差之上增加离线“独立外圆+最终姿态角”评估。评估器复用现有Kasa、robust和geometric circle fit，但不使用人工几何改变运行时。结构上有外圆弧只是输入就绪；正式角误差还必须通过120°覆盖、残差和留一点稳定性门。145的30°短弧预期只产生diagnostic-only拟合与`NOT_EVALUATED`最终角，不得为样本放宽门限。
+
 ## Technical Context
 
 **Language/Version**: Python 3.12
@@ -16,11 +18,11 @@
 **Project Type**: Python算法库与离线CLI
 **Performance Goals**: 双帧匹配本身P95小于20ms/对（不含两个单帧检测）；双向局部搜索有严格的domain/seed/wall上限，不复制全分辨率图像；默认关闭的历史耗时门不回退
 **Constraints**: fail-closed、参数配置化、固定角不屏蔽、part-006封存、默认关闭、不合main
-**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；part-008 145/147干净槽壁语义及独立像素复核；墙/端点残差离线诊断与默认关闭的同源门实验候选；真实双拍数据尚未到位
+**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；part-008 145/147干净槽壁语义及独立像素复核；墙/端点残差离线诊断、默认关闭的同源门实验候选和145独立外圆质量/姿态角离线评估；真实双拍数据尚未到位
 
 ## Constitution Check
 
-- 规格先行：PASS。104项FR和44项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性、部分观测状态、完整槽人工复核、独立像素残差和默认关闭同源候选。
+- 规格先行：PASS。120项FR和52项SC追溯到用户场景；最新增量明确拆分外圆输入就绪、拟合质量、最终角误差和禁止升权策略。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -56,6 +58,10 @@
 24. 当独立外圆参考缺失时，HUMAN/AUTO中点方向都使用同一个runtime物理圆心；输出明确标记为conditional，不评价外圆误差或最终姿态角精度，也不把HUMAN坐标回灌运行时。
 25. `sidewall_source_consistency_candidate`是独立、默认关闭且不可升权的实验仲裁。它只消费现有source-consistency数值：原结果只失败contrast、其余原检查全通过且独立端点结构门通过时可标记`CANDIDATE_SUPPORTED`；它永不修改原status、refinement、顶层valid/角度/PLC。
 26. 145/147只用于确认contrast-only误拒与像素残差；part-019已知混合边用于保护负例。实验端点门是development-only，必须输出版本和阈值，不能据一个正样品和一个负样品宣称泛化或默认启用。
+27. `evaluate_clean_groove_pose_truth.py`只读正式validation、HUMAN LabelMe和runtime JSONL。它先复用Kasa初始拟合及robust/geometric精修，再计算弧覆盖、残差和留一点稳定性；质量门先于所有最终角误差。
+28. 通过人工圆门时，分别用人工圆心+人工槽口中点和AUTO物理圆心+AUTO交点中点计算`+Y down=0°`、顺时针正的当前角。误差与85°修正均使用wrap180，80–90°死区仅对已通过评估的几何生效。
+29. 若覆盖/残差/稳定性失败，报告保留Kasa和精修的diagnostic-only数值，但正式圆差、人工角、候选角误差、MVP窗口和修正量全部为null。145的30°短弧是该fail-closed路径的外置证据。
+30. 新评估器只添加离线工具、Schema、测试和文档；不导入legacy adapter、不修改运行时结果、门限、默认配置或PLC/HMI。
 
 ## Project Structure
 

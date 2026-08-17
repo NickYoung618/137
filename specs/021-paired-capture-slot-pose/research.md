@@ -125,3 +125,19 @@ human truth命名空间隔离，拟合圆可在算法诊断中保留但不进入
 **Rationale**: 服务器已有的历史AUTO审阅副本与Mac任务清单中的AUTO SHA不同；按文件名近似匹配会破坏溯源。runtime JSONL包含同图物理圆、墙线、支持点和交点，并可用图像SHA精确绑定。
 
 **Alternatives considered**: 使用同名历史AUTO文件会混淆版本；要求上传原图或复制9.5MB LabelMe进Git没有必要；重跑图像会引入与已冻结结果不同的新状态。均拒绝。
+
+## Decision 18: 外圆“结构就绪”与“最终角真值可用”分层
+
+**Decision**: 新离线评估器复用现有`fit_circle_kasa`、`robust_fit_circle`及其geometric refinement，但仅在人工弧至少8点、覆盖至少120°、精修残差median/P95/max不超过5/10/20 px、留一点圆心漂移的等效角不超过1°且半径漂移不超过2%时，才将人工圆标为可用。
+
+**Rationale**: 项目已有人工槽姿态和圆完成工具均使用120°可见弧门。145的13点短弧只覆盖约30.061734°；它的Kasa中位残差约1.56 px，但robust/geometric圆心相对Kasa移动约13.96 px，留一点圆心最大漂移约48.07 px。短弧低残差不证明圆心稳定，因此不能为返回PASS而放宽既有门。
+
+**Alternatives considered**: 只要`poseAngleReady=1`就评角会把结构完整性误当拟合质量；只看径向残差会忽略短弧多圆心性；选Kasa/精修中更接近AUTO的圆属于用待测算法选真值。三者均拒绝。
+
+## Decision 19: 最终角与MVP窗口不升权
+
+**Decision**: 通过所有真值门时，人工角使用人工圆心+人工槽口中点，AUTO候选角使用AUTO物理圆心+AUTO外圆交点中点。两者都使用图像`+Y down=0°`、顺时针正的`[-180,180)`契约。候选误差为环形差，MVP几何窗口为绝对误差不超过5°。
+
+**Rationale**: 5°来自已确认的85°±5°业务容差，但离线几何达窗不等于runtime检测有效。报告始终`authoritative=false`、`posePromotionAllowed=false`，不修改source consistency、valid或PLC。
+
+**Alternatives considered**: 离线误差达窗就把runtime valid设为true，或质量失败时输出0°，都违反真值隔离和fail-closed，均拒绝。
