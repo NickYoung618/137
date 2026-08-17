@@ -28,6 +28,7 @@ from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
 from algorithms.slot_pose.sidewall_consistency import assess_sidewall_source_consistency
 from algorithms.slot_pose.sidewall_consistency_candidate import assess_sidewall_consistency_candidate
+from algorithms.slot_pose.source_consistency_adjudication import adjudicate_source_consistency
 from algorithms.slot_pose.local_second_wall import diagnose_local_second_wall
 
 
@@ -581,9 +582,19 @@ class LegacyAEndFaceAdapter:
                     )
                     if source_candidate is not None:
                         output["sourceConsistencyCandidate"] = source_candidate
+                    source_adjudication = adjudicate_source_consistency(
+                        source_consistency,
+                        detector.get("source_consistency_adjudication"),
+                    )
+                    if source_adjudication is not None:
+                        output["sourceConsistencyAdjudication"] = source_adjudication
                     if (
                         "local_second_wall_diagnostic" in detector
                         and source_consistency["status"] == "rejected"
+                        and not (
+                            source_adjudication is not None
+                            and source_adjudication["decision"] == "ACCEPTED_OVERRIDE"
+                        )
                     ):
                         output["localSecondWallDiagnostic"] = diagnose_local_second_wall(
                             target_gray,
@@ -598,7 +609,16 @@ class LegacyAEndFaceAdapter:
                             detector.get("local_second_wall_diagnostic"),
                             pixel_scale=scale,
                         )
-                    if source_consistency["status"] == "rejected":
+                    source_effective_accepted = (
+                        source_consistency["status"] == "accepted"
+                        or (
+                            source_adjudication is not None
+                            and source_adjudication["decision"] == "ACCEPTED_OVERRIDE"
+                            and source_adjudication["effectiveStatus"] == "accepted"
+                            and source_adjudication["imagePoseReleaseAllowed"] is True
+                        )
+                    )
+                    if source_consistency["status"] == "rejected" and not source_effective_accepted:
                         return {
                             **output,
                             "physicalRefinementStatus": refinement["status"],
@@ -619,6 +639,10 @@ class LegacyAEndFaceAdapter:
                     diagnostics["grooveSourceConsistency"] = refinement.get("sourceConsistency")
                     if "sourceConsistencyCandidate" in refinement:
                         diagnostics["sidewallSourceConsistencyCandidate"] = refinement["sourceConsistencyCandidate"]
+                    if "sourceConsistencyAdjudication" in refinement:
+                        diagnostics["sidewallSourceConsistencyAdjudication"] = refinement[
+                            "sourceConsistencyAdjudication"
+                        ]
                     if "localSecondWallDiagnostic" in refinement:
                         diagnostics["localSecondWallDiagnostic"] = refinement["localSecondWallDiagnostic"]
                     groove_candidates = [{
@@ -646,6 +670,10 @@ class LegacyAEndFaceAdapter:
                         diagnostics["grooveSourceConsistency"] = refinement.get("sourceConsistency")
                         if "sourceConsistencyCandidate" in refinement:
                             diagnostics["sidewallSourceConsistencyCandidate"] = refinement["sourceConsistencyCandidate"]
+                        if "sourceConsistencyAdjudication" in refinement:
+                            diagnostics["sidewallSourceConsistencyAdjudication"] = refinement[
+                                "sourceConsistencyAdjudication"
+                            ]
                         if "localSecondWallDiagnostic" in refinement:
                             diagnostics["localSecondWallDiagnostic"] = refinement["localSecondWallDiagnostic"]
                         groove_candidates = [{

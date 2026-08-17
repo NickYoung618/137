@@ -1,0 +1,7 @@
+{
+  "schema_version": "source-consistency-adjudication/1",
+  "enabled": false,
+  "threshold_version": "endpoint-structure-runtime-adjudication-v1",
+  "development_only": true,
+  "max_endpoint_structure_difference": 0.05
+}

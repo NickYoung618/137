@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/source-consistency-adjudication.schema.json",
+  "title": "Source consistency adjudication diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "thresholdVersion", "enabled", "developmentOnly", "authoritative",
+    "productionDefaultAllowed", "plcAllowed", "manualTruthAppliedAtRuntime", "decision",
+    "originalStatus", "effectiveStatus", "originalFailedChecks", "metrics", "checks",
+    "failedChecks", "imagePoseReleaseAllowed"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "source-consistency-adjudication/1"},
+    "thresholdVersion": {"type": "string", "minLength": 1},
+    "enabled": {"const": true},
+    "developmentOnly": {"const": true},
+    "authoritative": {"const": false},
+    "productionDefaultAllowed": {"const": false},
+    "plcAllowed": {"const": false},
+    "manualTruthAppliedAtRuntime": {"const": false},
+    "decision": {
+      "enum": ["NOT_EVALUATED", "NOT_NEEDED", "REJECTED", "ACCEPTED_OVERRIDE"]
+    },
+    "originalStatus": {"enum": ["accepted", "rejected", "not_evaluated", "disabled", null]},
+    "effectiveStatus": {"enum": ["accepted", "rejected", "not_evaluated"]},
+    "originalFailedChecks": {
+      "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpointStructureDifference": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["checkId", "passed"],
+        "properties": {
+          "checkId": {"type": "string", "minLength": 1},
+          "metric": {"type": "string", "minLength": 1},
+          "value": {"type": "number"},
+          "threshold": {"type": "number"},
+          "thresholdKind": {"enum": ["min", "max"]},
+          "margin": {"type": "number"},
+          "passed": {"type": "boolean"}
+        }
+      }
+    },
+    "failedChecks": {
+      "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}
+    },
+    "imagePoseReleaseAllowed": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "ACCEPTED_OVERRIDE"}}},
+      "then": {
+        "properties": {
+          "originalStatus": {"const": "rejected"},
+          "effectiveStatus": {"const": "accepted"},
+          "failedChecks": {"maxItems": 0},
+          "imagePoseReleaseAllowed": {"const": true}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"decision": {"const": "REJECTED"}}},
+      "then": {
+        "properties": {
+          "originalStatus": {"const": "rejected"},
+          "effectiveStatus": {"const": "rejected"},
+          "failedChecks": {"minItems": 1},
+          "imagePoseReleaseAllowed": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"decision": {"const": "NOT_EVALUATED"}}},
+      "then": {
+        "properties": {
+          "effectiveStatus": {"const": "not_evaluated"},
+          "failedChecks": {"minItems": 1},
+          "imagePoseReleaseAllowed": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"decision": {"const": "NOT_NEEDED"}}},
+      "then": {
+        "properties": {
+          "originalStatus": {"const": "accepted"},
+          "effectiveStatus": {"const": "accepted"},
+          "failedChecks": {"maxItems": 0},
+          "imagePoseReleaseAllowed": {"const": false}
+        }
+      }
+    }
+  ]
+}

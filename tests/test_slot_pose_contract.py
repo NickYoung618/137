@@ -104,6 +104,59 @@ class SlotPoseContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "refinement v2"):
                 load_config(path)
 
+    def test_source_adjudication_is_explicit_default_off_and_strictly_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            omitted = minimal_single_groove_config()
+            omitted_path = root / "omitted.json"
+            omitted_path.write_text(json.dumps(omitted), encoding="utf-8")
+            loaded = load_config(omitted_path)
+            self.assertNotIn("source_consistency_adjudication", loaded["detector"])
+
+            legacy = minimal_config()
+            legacy["detector"]["source_consistency_adjudication"] = {"enabled": True}
+            legacy_path = root / "legacy.json"
+            legacy_path.write_text(json.dumps(legacy), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "single_real_groove"):
+                load_config(legacy_path)
+
+            without_source = minimal_single_groove_config()
+            without_source["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+            }
+            without_source["detector"]["source_consistency_adjudication"] = {"enabled": True}
+            without_source_path = root / "without-source.json"
+            without_source_path.write_text(json.dumps(without_source), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "requires sidewall_source_consistency"):
+                load_config(without_source_path)
+
+            valid = minimal_single_groove_config()
+            valid["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+            }
+            valid["detector"]["sidewall_source_consistency"] = {"enabled": True}
+            valid["detector"]["source_consistency_adjudication"] = {"enabled": True}
+            valid_path = root / "valid.json"
+            valid_path.write_text(json.dumps(valid), encoding="utf-8")
+            configured = load_config(valid_path)
+            adjudication = configured["detector"]["source_consistency_adjudication"]
+            self.assertTrue(adjudication["enabled"])
+            self.assertTrue(adjudication["development_only"])
+            self.assertEqual(0.05, adjudication["max_endpoint_structure_difference"])
+            self.assertIn("source_consistency_adjudication", effective_config_identity(configured)["detector"])
+
+            for mutation, message in (
+                ({"unexpected": True}, "unknown fields"),
+                ({"development_only": False}, "development_only"),
+                ({"max_endpoint_structure_difference": float("nan")}, "must be in"),
+            ):
+                invalid = json.loads(json.dumps(valid))
+                invalid["detector"]["source_consistency_adjudication"].update(mutation)
+                invalid_path = root / f"invalid-{next(iter(mutation))}.json"
+                invalid_path.write_text(json.dumps(invalid), encoding="utf-8")
+                with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, message):
+                    load_config(invalid_path)
+
     def test_local_second_wall_is_explicit_default_off_and_strictly_gated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -44,6 +44,12 @@
   是局部残差、异常扇区数量/连续角宽/剩余覆盖均过门时，才复用同一批射线和原`robust_fit_circle`重拟合一次。
   后者在同一条已平滑角剖面上增加有限分位数阈值，并按环形区间去重；最终仍由真槽几何门和“恰好一个”规则决定。
   两者均不得按85°、候选编号、目录或当前数据得分选结果；缺少独立外圆/槽真值前不得改成生产默认。
+- `detector.source_consistency_adjudication`是默认不存在/关闭的022开发裁决，只允许在
+  `single_real_groove`、020同源性门已开启且槽壁精修v2时显式启用。它不改写020原始
+  `sourceConsistency`证据，也不放宽`max_edge_contrast_normalized_difference=0.12`；只有原判定
+  精确地仅失败`edge_contrast_asymmetry`、其余原检查全部通过且独立端点结构差不超过版本化门限时，
+  才输出`ACCEPTED_OVERRIDE`并继续图像坐标引导。该裁决始终`developmentOnly=true`、
+  `authoritative=false`、`plcAllowed=false`，不得进入生产默认配置。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，

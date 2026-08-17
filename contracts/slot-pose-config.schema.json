@@ -180,6 +180,23 @@
             "max_endpoint_structure_difference": {"type": "number", "minimum": 0, "maximum": 1}
           }
         },
+        "source_consistency_adjudication": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version", "enabled", "threshold_version", "development_only",
+            "max_endpoint_structure_difference"
+          ],
+          "properties": {
+            "schema_version": {"const": "source-consistency-adjudication/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "threshold_version": {"type": "string", "minLength": 1},
+            "development_only": {"const": true},
+            "max_endpoint_structure_difference": {
+              "type": "number", "minimum": 0, "maximum": 1
+            }
+          }
+        },
         "groove_recognition": {
           "type": "object",
           "properties": {

@@ -58,3 +58,15 @@ grooveSourceConsistency记录槽两侧壁的灰度跃迁幅值差、梯度差、
 没有唯一残差假设或缺少一处固定阴影时，必须输出不完整/歧义证据，不能按31度或328度直接删除候选。
 
 两个020开关默认关闭。当前阈值和无真值回放只能作为诊断实验，不能称为生产准确率或已修复。
+
+## 022同源性二级裁决
+
+显式开启`detector.source_consistency_adjudication`时，槽精修诊断可新增
+`sourceConsistencyAdjudication`，顶层诊断同步暴露`sidewallSourceConsistencyAdjudication`。
+原`sourceConsistency`对象及其`status/metrics/checks/failedChecks`必须原样保留；新对象单独输出
+`decision`（`NOT_EVALUATED`、`NOT_NEEDED`、`REJECTED`或`ACCEPTED_OVERRIDE`）、
+`effectiveSourceConsistencyStatus`、逐项审计门和安全策略。仅`ACCEPTED_OVERRIDE`允许现有图像姿态链
+继续，且不授权机械修正或PLC命令。配置缺失/关闭时不新增该字段，历史消费者行为不变。
+
+该裁决不把人工LabelMe、样本编号、固定角或85°目标作为运行时输入，也不修改020的0.12原门。
+缺证据、非有限值、多项原失败、遮挡、混合墙或端点结构不一致均保持fail-closed。
