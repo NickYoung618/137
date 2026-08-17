@@ -171,6 +171,8 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 
 ## Phase 17: Human Review - 局部fixture污染定位
 
+**Historical status**: 本阶段在当时语义下完成，但其“槽壁污染”前提已被最终人工澄清A否定。产物只作历史审计，Phase 19负责停用生成路径并更正后续动作。
+
 **Goal**: 原样保存145/147的YES/YES/YES/YES+PARTIAL语义，并生成不自动造HUMAN坐标的最小污染子段标注请求。
 
 **Independent Test**: 临时review-index、raw与AUTO LabelMe按SHA关联；派生AUTO shapes逐点不变，错误身份/哈希/已有人工内容/非PARTIAL响应在写出前拒绝。
@@ -186,3 +188,16 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 ## Phase 18: Independent Mac Gate - fixture contamination review
 
 - [x] T084 记录Mac对cd7f3ca的3项聚焦、400项全量、16项平台skip以及真实145/147外置派生LabelMe SHA门；确认源图/AUTO未覆盖、四项语义与全部false策略保留，仅提交推送021，不合main、不调门限、不碰PLC per SC-026-SC-030
+
+## Phase 19: Definitive Clarification A - 干净槽壁与旧污染请求停用
+
+**Goal**: 原样保留145/147的A语义，拒绝继续生成槽壁污染子段，并将下一个最小动作改为独立干净槽壁/端点像素复核。
+
+**Independent Test**: 旧CLI使用任意输入均在写出前返回DORMANT/INAPPLICABLE，输出目录不存在；规格和证据不再声称AUTO槽壁受fixture污染。
+
+- [x] T085 [US8] 更新 specs/021-paired-capture-slot-pose/spec.md、plan.md、research.md、data-model.md、contracts/paired-capture.md和quickstart.md，原样记录A、干净槽壁语义、非槽阴影候选不完整与像素真值缺口 per FR-071-FR-078/SC-026/SC-029
+- [x] T086 [P] [US8] 先修改 tests/test_fixture_contamination_annotation.py，覆盖函数/CLI全输入停用、零输出以及历史Schema仅可审计语义 per FR-073-FR-074/SC-027-SC-028
+- [x] T087 [US8] 将 tools/prepare_fixture_contamination_annotation.py 改为写出前fail-closed的dormant兼容CLI，并在 contracts/fixture-contamination-review.schema.json 声明历史生命周期 per FR-073-FR-074/SC-027-SC-028
+- [x] T088 [US8] 更新 specs/021-paired-capture-slot-pose/completion-audit.md、evidence.md、checklists/requirements.md和tasks.md，保留已生成两份外置LabelMe SHA但标为dormant/inapplicable，定义墙支持点+端点的下一步 per SC-026-SC-030
+- [x] T089 运行SpecKit analyze、聚焦/全量、40份Schema、CLI拒绝、diff/媒体/绝对路径/算法阈值污染门，不重跑140图、不读sealed part-006 per SC-030
+- [x] T090 提交并推送021功能分支，保持main隔离、PLC未授权，等待Mac独立验证 per SC-030

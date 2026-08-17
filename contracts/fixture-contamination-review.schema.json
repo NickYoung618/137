@@ -1,7 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "fixture-contamination-review.schema.json",
-  "title": "完整槽语义复核与fixture污染子段标注请求",
+  "$comment": "DORMANT_INAPPLICABLE_AFTER_CLARIFICATION_A; historical audit only. Groove walls were definitively confirmed clean, so this schema MUST NOT authorize annotation, tuning, runtime input, or PLC input.",
+  "title": "DORMANT历史完整槽fixture污染请求",
+  "description": "仅用于解释已生成的历史产物；最终人工澄清A确认槽壁正确干净，不得继续补画或使用该请求。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "sourceReviewIndexSha256", "entries", "truthPolicy"],

@@ -150,21 +150,21 @@
 
 ---
 
-### User Story 8 - 完整槽语义确认后的局部fixture污染标注 (Priority: P1)
+### User Story 8 - 完整干净槽壁语义确认与最小像素复核 (Priority: P1)
 
-人工复核者已经确认part-008的145与147中，两条检测墙属于同一个真实方形槽、两侧完整无遮挡且两个端点位于真实外圆槽肩；同时确认有部分标记线落在fixture shadow上，但不是整条线。工程师需要保留这组混合语义，并把下一步缩小为定位受污染的墙及其局部子段，不能把整条AUTO线升级成像素真值。
+人工复核者已确认part-008的145与147中，两条`AUTO_detected_groove_wall_left/right`属于同一个真实方形槽且墙线本身正确、干净；两侧完整无遮挡，两个端点位于真实外圆槽肩。阴影只涉及其他非槽候选标记，且阴影区域尚未完整标出；它不证明槽壁受污染。
 
-**Why this priority**: 该结论首次确认了真实完整槽身份，但也证明AUTO几何并非干净像素真值。先定位污染子段才能判断污染发生在显示延长线还是实际拟合支持点；在此之前调门限会混淆真实槽证据与fixture证据。
+**Why this priority**: 该结论首次确认了真实完整槽身份及干净槽壁语义，同时纠正了“任一标记落在阴影”被误解为“槽壁受污染”的推论。语义确认仍不是独立像素真值；下一步应复核干净槽壁的像素位置，而非绘制不存在的槽壁污染子段。
 
-**Independent Test**: 使用临时review-index、AUTO LabelMe和两个明确imageId，验证语义响应按SHA关联、AUTO shapes逐点不变、输出只创建待人工补画的污染子段请求；错误SHA、未知imageId、已有HUMAN shape或非PARTIAL语义均在写出前拒绝。
+**Independent Test**: 验证A语义被逐项保留；旧`fixture-contamination-review/1`仅可作为历史产物解释，生成工具对所有输入100%在写文件前以DORMANT/INAPPLICABLE拒绝，不再生成任何`HUMAN_fixture_shadow_overlap_on_detected_wall_*`请求。
 
 **Acceptance Scenarios**:
 
-1. **Given** 145/147的四项人工回答为YES、YES、YES、YES且污染范围为PARTIAL，**When** 记录语义复核，**Then** 分别保留“真实槽身份确认”“槽肩端点语义确认”“整条AUTO线不是像素真值”“局部fixture污染待定位”四类状态。
-2. **Given** 现有AUTO LabelMe，**When** 生成下一步标注请求，**Then** 原AUTO shapes和点坐标逐项保持不变，工具不得自动新增任何HUMAN坐标。
-3. **Given** 人工开始局部污染标注，**When** 保存LabelMe，**Then** 只需用HUMAN_fixture_shadow_overlap_on_detected_wall_left和/或HUMAN_fixture_shadow_overlap_on_detected_wall_right的linestrip描出实际受污染子段，不重画完整槽。
-4. **Given** 只有语义回答而没有污染子段像素坐标，**When** 评估准确率或修改门限，**Then** pixelTruthAvailable=false、cleanAccuracyEvaluationAllowed=false、thresholdTuningAllowed=false和runtimeInputAllowed=false。
-5. **Given** 后续获得污染子段，**When** 开展诊断，**Then** 必须分别报告污染段与显示线、实际拟合支持点、槽口端点的重叠；不得仅凭肉眼回答推断哪一侧或哪一批支持点受污染。
+1. **Given** 145/147的最终人工选择为A，**When** 记录语义复核，**Then** 保留真实槽身份=YES、两壁完整无遮挡=YES、端点位于真实槽肩=YES、槽壁fixture污染=NONE，并分开记录非槽阴影候选标记存在但区域不完整。
+2. **Given** 先前已生成的`fixture-contamination-review/1`外置产物，**When** 后续工作流读取其语义，**Then** 必须标为DORMANT/INAPPLICABLE，不得请求、导入或解释任何槽壁污染子段。
+3. **Given** 旧污染请求CLI，**When** 使用任何参数调用，**Then** 它在创建输出目录或文件前明确拒绝，并指向A语义纠正。
+4. **Given** 两条AUTO槽壁已获得干净语义确认，**When** 准备下一步最小像素复核，**Then** 只要求独立标出每条墙上分散的至少3个支持点及左/右槽口端点，不要求fixture阴影边界，也不从AUTO线自动生成HUMAN坐标。
+5. **Given** 尚无独立墙支持点/端点真值和独立外圆真值，**When** 评估像素误差、姿态角精度或修改门限，**Then** pixelTruthAvailable=false、accuracyEvaluationAllowed=false、thresholdTuningAllowed=false和runtimeInputAllowed=false。
 
 ### Edge Cases
 
@@ -181,7 +181,7 @@
 - 候选位于物理槽宽上限外，或墙对之间穿过与当前开口不连通的第二暗区。
 - 人工shape的label名称与实际几何语义冲突；必须保留原件并通过派生审核副本更正语义，不能按名称自动纳入真值。
 - 单帧只看得到一条真实槽壁；不得把最邻近强边或fixture阴影补成第二壁。
-- 人工确认真实槽身份但同时确认局部fixture污染；不得把“身份正确”改写为“整条像素线干净”。
+- “某些标记落在fixture shadow上”只指非槽候选标记；不得再推导槽壁线受污染，也不得把语义上“正确、干净”升级为亚像素坐标真值。
 
 ## Requirements
 
@@ -258,14 +258,14 @@
 - **FR-069**: 队列选择 MUST 先选具有双壁像素证据且未被人工标为partial/mixed的sample，再在sample内用`sha256(sampleId|sourceImageSha256)`稳定选择至多配置数量；MUST NOT 依据预测角、修正量、85°接近度或门限距离选帧。
 - **FR-070**: 队列JSON、CSV和review manifest MUST 写到Git外，使用A2根相对路径与图像SHA，标记`accuracyEvaluated=false`、`algorithmOutputIsTruth=false`、`humanVerified=false`并列出最小复核问题；媒体和运行JSONL不得提交Git。
 
-- **FR-071**: 系统 MUST 原样记录145/147四项语义回答：同一真实方形槽=YES、两侧完整无遮挡=YES、两端点位于真实外圆槽肩=YES、存在fixture shadow标记线=YES且范围为PARTIAL；不得将任一项弱化、合并或反向解释。
-- **FR-072**: 语义确认 MUST 分离realGrooveIdentityConfirmed、endpointSemanticsConfirmed、fixtureShadowContaminationExtent和pixelTruthAvailable；前三者不得自动使AUTO墙坐标成为真值。
-- **FR-073**: 系统 MUST 提供版本化、Git外的fixture污染复核记录，按imageId、sourceImageSha256和sourceReviewIndexSha256关联来源，重复或不匹配身份在写出前拒绝。
-- **FR-074**: 污染标注请求 MUST 逐点保留现有AUTO墙和端点shape，不得自动新增HUMAN坐标、不得覆盖已有人工内容，并保持runtimeInputAllowed=false。
-- **FR-075**: 最小人工标注 MUST 只要求以left/right专用HUMAN linestrip描出fixture shadow与对应检测墙重叠的局部子段；不得要求重画完整槽或把未标部分解释为干净像素真值。
-- **FR-076**: 未取得污染子段坐标前，affectedWall、supportPointOverlap、endpointOverlap MUST 保持UNCONFIRMED；cleanAccuracyEvaluationAllowed和thresholdTuningAllowed MUST 为false。
-- **FR-077**: 后续污染诊断 MUST 区分显示线延长、实际拟合支持点和槽口端点三类几何，并分别报告与人工污染子段的重叠，不得仅凭语义回答调整门限。
-- **FR-078**: 语义复核、派生LabelMe和污染诊断 MUST 禁止作为生产运行时输入或PLC输入；145/147不得在污染定位完成前用于准确率声明或阈值选择。
+- **FR-071**: 系统 MUST 原样记录145/147最终A语义：同一真实方形槽=YES、两侧完整无遮挡=YES、两端点位于真实外圆槽肩=YES、两条AUTO槽壁正确且干净=YES、只有非槽候选标记落在fixture shadow上且阴影区域标记不完整。
+- **FR-072**: 语义确认 MUST 分离realGrooveIdentityConfirmed、cleanGrooveWallsSemanticallyConfirmed、endpointSemanticsConfirmed、nonGrooveShadowCandidateMarksPresent、fixtureShadowRegionMarkupCompleteness和pixelTruthAvailable；语义上的干净槽壁不得自动使AUTO坐标成为像素真值。
+- **FR-073**: `fixture-contamination-review/1`及其外置派生LabelMe MUST 标记为DORMANT/INAPPLICABLE历史证据；不得要求、生成、使用或导入`HUMAN_fixture_shadow_overlap_on_detected_wall_left/right`。
+- **FR-074**: 旧污染标注工具 MUST 对所有调用在写出目录或文件前以稳定的DORMANT/INAPPLICABLE错误拒绝；历史产物不删除、不覆盖，但不再是待完成标注请求。
+- **FR-075**: 基于干净槽壁的下一个最小像素复核 MUST 仅要求人工独立标出每条墙上分散的至少3个支持点及左/右槽口端点；不得从AUTO线复制HUMAN坐标，不要求补全fixture shadow区域。
+- **FR-076**: 未取得独立墙支持点与端点像素坐标前，wallPixelTruthAvailable、endpointPixelTruthAvailable、accuracyEvaluationAllowed和thresholdTuningAllowed MUST 为false；要验收最终姿态角精度还 MUST 引入独立外圆可见弧或圆心真值。
+- **FR-077**: 非槽阴影候选标记不完整 MUST 作为独立fixture可观测性缺口；它不得否定已确认的干净槽壁，也不得用于调整槽识别门限。
+- **FR-078**: 语义复核、历史派生LabelMe及后续像素复核 MUST 禁止作为生产运行时或PLC输入；在独立像素真值和非泄漏验证设计完成前，145/147不得用于准确率声明或门限选择。
 
 ### Key Entities
 
@@ -284,8 +284,9 @@
 - **HumanVisibleWallReview**: 原人工shape身份与SHA、派生语义标签、两点几何、`oppositeWallTruth=false`和观测性限制；只证明一条可见真实槽壁。
 - **PartialWallObservation**: 运行时墙状cluster集合、未形成完整同源槽口的原因和非权威边界；不含人工真壁身份。
 - **CompleteGrooveReviewQueue**: 按物理sample汇总、人工排除项、稳定选帧规则、相对路径/SHA和待回答问题；不含角度真值。
-- **CompleteGrooveSemanticReview**: 以图像身份/SHA关联的四项人工语义回答、PARTIAL污染范围及所有禁止升权策略；不含像素坐标。
-- **FixtureContaminationAnnotationRequest**: 从AUTO LabelMe派生的Git外请求，保留原shape并仅声明允许人工补画的left/right污染子段标签。
+- **CompleteGrooveSemanticReview**: 以图像身份/SHA关联的A语义：干净槽壁、完整可见性、槽肩端点、非槽阴影候选标记不完整以及所有禁止升权策略；不含像素真值。
+- **DormantFixtureContaminationRequest**: 由旧误解生成的Git外历史请求；只可审计，不得补画、导入、调参或作为运行时输入。
+- **CleanGroovePixelReview**: 独立人工墙支持点与左/右槽口端点；不复制AUTO坐标，不要求fixture shadow边界，不单独构成最终角度真值。
 
 ## Success Criteria
 
@@ -317,11 +318,11 @@
 - **SC-024**: 140张候选盘点100%按sampleId对账且不含sealed part-006；最小正向复核队列不含已知partial part-019，队列顺序对输入manifest/JSONL顺序不敏感。
 - **SC-025**: 新Schema、CLI和全量测试通过；默认关闭路径、0.12同源门、0.5°墙merge、main和PLC均不改变。
 
-- **SC-026**: 145与147的语义记录100%保持YES/YES/YES/YES+PARTIAL，并同时保持autoLinesArePixelTruth=false、cleanAccuracyEvaluationAllowed=false和thresholdTuningAllowed=false。
-- **SC-027**: 临时审阅包测试100%证明派生前后AUTO shapes及其点坐标完全相同，且工具输出0个自动HUMAN shape。
-- **SC-028**: 未知imageId、SHA不一致、AUTO文件哈希不一致、已有HUMAN内容和非PARTIAL响应100%在写出污染请求前拒绝。
-- **SC-029**: 污染请求中的每个条目只允许left/right两种HUMAN linestrip标签，affectedWall、supportPointOverlap和endpointOverlap在人工补画前均为UNCONFIRMED。
-- **SC-030**: 新Schema、CLI、聚焦和全量测试通过；图像算法、140张结果、0.12同源门、0.5°墙merge、main和PLC均不改变。
+- **SC-026**: 145与147的语义记录100%保持A：真槽身份/完整可见/槽肩端点/干净槽壁均为YES，非槽阴影候选标记存在且不完整；autoLinesArePixelTruth、accuracyEvaluationAllowed和thresholdTuningAllowed均为false。
+- **SC-027**: 旧fixture-contamination CLI对所有调用100%输出DORMANT/INAPPLICABLE错误，且创建0个输出目录、0个LabelMe和0个HUMAN shape。
+- **SC-028**: 已生成的两份历史LabelMe及SHA在证据中保留，但100%标记为由误解产生的dormant/inapplicable，不要求人工补画或删除原件。
+- **SC-029**: 下一个最小像素复核定义100%不含fixture overlap标签，每墙至少3个独立支持点和两个槽口端点均由人工独立绘制，不从AUTO坐标生成。
+- **SC-030**: 更正后的Schema/CLI、聚焦和全量测试通过；图像算法、140张结果、0.12同源门、0.5°墙merge、main和PLC均不改变。
 
 ## Assumptions
 
@@ -340,6 +341,7 @@
 - **BLOCKED-B03**: PLC方向、缩放、地址和字节序仍未授权，paired image guidance不得升级为PLC命令。
 - **BLOCKED-B04**: part-019 374的一条可见真槽壁已获得人工语义确认；369仍未形成同等级像素确认，part-015 292明确跳过。
 - **BLOCKED-B05**: 374的相对侧真实壁是否可见仍未确认，且尚无完整槽口端点、槽中点和两处fixture二维边界标签；不得要求人工猜不可见线，局部实验结果也不得作为准确率证据。
-- **RESOLVED-R02**: part-008的145/147均已获得相同语义回答：两墙同属真实方形槽、两侧完整无遮挡、端点位于真实外圆槽肩，同时存在局部而非整条fixture shadow污染。
-- **BLOCKED-B06**: 145/147尚未标出具体受污染的left/right墙及像素子段；无法判断污染是否进入拟合支持点或触及端点，完成该最小标注前不得调门限或声明干净像素精度。
+- **RESOLVED-R02**: part-008的145/147均已获得最终A语义：两墙同属真实方形槽且墙线正确干净、两侧完整无遮挡、端点位于真实外圆槽肩；落在fixture shadow上的只是其他非槽候选标记，且阴影区域未完整标出。
+- **RESOLVED-R03**: 先前“YES但不是全部”被误解为槽壁局部污染；`fixture-contamination-review/1`及两份派生LabelMe现为DORMANT/INAPPLICABLE历史证据，不得继续标注或使用。
+- **BLOCKED-B06**: 145/147尚无独立像素级槽壁支持点、槽口端点及外圆可见弧/圆心真值；语义上的干净槽壁不足以声明亚像素或姿态角精度，也不授权调门限。
 - **RESOLVED-R01**: 服务器已在Git外复核原始人工LabelMe、安全派生副本和压缩包SHA-256；三者不得提交Git，派生副本仍禁止作为运行时或完整槽姿态真值。

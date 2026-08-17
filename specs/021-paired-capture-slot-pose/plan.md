@@ -16,11 +16,11 @@
 **Project Type**: Python算法库与离线CLI
 **Performance Goals**: 双帧匹配本身P95小于20ms/对（不含两个单帧检测）；双向局部搜索有严格的domain/seed/wall上限，不复制全分辨率图像；默认关闭的历史耗时门不回退
 **Constraints**: fail-closed、参数配置化、固定角不屏蔽、part-006封存、默认关闭、不合main
-**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；part-008 145/147语义复核与局部fixture污染子段标注；真实双拍数据尚未到位
+**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；part-008 145/147干净槽壁语义复核、旧污染请求停用与最小像素复核定义；真实双拍数据尚未到位
 
 ## Constitution Check
 
-- 规格先行：PASS。78项FR和30项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性、部分观测状态、完整槽人工复核队列及局部fixture污染标注。
+- 规格先行：PASS。78项FR和30项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性、部分观测状态、完整槽人工复核队列、干净槽壁语义与旧污染请求停用。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -49,7 +49,7 @@
 18. `local-second-wall-diagnostic/4`将“有墙状证据但无完整同源槽口”表达为`PARTIALLY_OBSERVED`；它不选择真壁身份、不读取人工标签，外层错误和所有引导字段保持失败/null。
 19. `build_complete_groove_review_queue.py`只读合并冻结manifest和JSONL，按sample对账双壁证据；已知partial sample通过显式审计排除项剔除，候选sample内只用身份SHA稳定抽帧。
 
-20. part-008 145/147的四项人工答案写入独立Git外语义记录。派生污染标注请求逐点复制既有AUTO shapes并验证review-index/AUTO/raw SHA，只允许人工后续新增left/right污染子段linestrip；在像素子段到位前不判断受影响墙、拟合支持点或端点。
+20. part-008 145/147的最终A语义写入独立证据：AUTO槽壁正确干净，非槽候选标记与fixture shadow关联且区域不完整。旧污染子段工具保留参数兼容但在任何写出前稳定拒绝；历史产物仅供审计。最小像素复核改为人工独立墙支持点与槽口端点，不画fixture overlap。
 
 ## Project Structure
 
@@ -92,7 +92,7 @@
 - 双向墙实验采用“搜索域→独立墙→无序墙对→枚举并保留失败”的诊断架构；原暗区不是硬边界，但物理槽宽和总seed上限仍是硬约束。不修改020 source consistency阈值，也不把唯一实验解升级为姿态。
 - `PARTIALLY_OBSERVED`描述观测充分性而不描述物理身份：一个或多个墙状cluster存在、但完整同源墙对不成立时可输出；人工确认只在外置审核记录中绑定候选，运行时字段明确`humanConfirmationAppliedAtRuntime=false`。
 - 完整槽人工复核队列以物理sample为选择单元；算法阶段只用于找“值得人工看”的组，不用于test拆分、阈值选择或准确率声明。组内选帧完全由SHA身份散列决定。
-- 完整槽身份确认与像素线真值分开：145/147的YES/YES/YES/YES+PARTIAL只确认语义，下一步仅标fixture污染子段。整条AUTO墙、未标部分和算法支持点在显式像素对照前均不视为干净真值。
+- 完整槽身份确认与像素线真值分开：145/147的A语义确认AUTO槽壁正确干净，但这仍不是独立亚像素坐标。下一步只标每壁分散支持点和两槽口端点，不画fixture overlap；姿态角精度最终还需独立外圆真值。
 
 ## Phase 1 Design Outputs
 
@@ -102,7 +102,7 @@
 
 ## Post-Design Constitution Re-check
 
-PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed；374人工线只确认一条可见真壁。145/147已确认真实完整槽身份和槽肩端点语义，但存在未定位的局部fixture污染，不能提供干净像素精度真值。真实双拍BMP、确认旋转参数、污染子段及独立圆心/槽壁像素真值仍是生产验收阻塞。
+PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed；374人工线只确认一条可见真壁。145/147已确认真实完整槽身份、干净槽壁和槽肩端点语义；非槽fixture阴影标记不完整是独立缺口。真实双拍BMP、确认旋转参数、独立槽壁/端点像素真值及独立外圆真值仍是精度和生产验收阻塞。
 
 ## Complexity Tracking
 

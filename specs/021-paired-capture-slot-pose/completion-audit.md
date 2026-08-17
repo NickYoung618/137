@@ -97,14 +97,14 @@
 | FR-068 | PROVEN | R：多manifest/JSONL、sample汇总、路径安全和只读CLI已测。 |
 | FR-069 | PROVEN | R/E：先sample证据、后SHA稳定抽帧，禁止角度/置信/门限择样。 |
 | FR-070 | PROVEN | R/E：队列JSON/CSV/manifest外置，A2相对路径、SHA和三个false声明完整。 |
-| FR-071 | PROVEN | C/E：145/147均逐项保留YES/YES/YES/YES+PARTIAL，没有将“部分线受污染”改写为整线或端点真值。 |
-| FR-072 | PROVEN | C：身份、端点语义、局部污染和pixel truth分字段表达；AUTO像素不升权。 |
-| FR-073 | PROVEN | C：版本化记录按imageId、image SHA、review-index SHA关联，重复/未知身份在写出前拒绝。 |
-| FR-074 | PROVEN | C：测试逐点比较AUTO shapes，输出0个自动HUMAN shape，并拒绝已有HUMAN内容。 |
-| FR-075 | PROVEN | C：请求只允许left/right污染子段linestrip，不要求重画完整槽。 |
-| FR-076 | PROVEN | C：未标污染子段前affected wall/support/endpoint均为UNCONFIRMED，准确率与调参权限为false。 |
-| FR-077 | MISSING_EXTERNAL_EVIDENCE | 需人工污染子段后，才能对显示延长线、实际拟合支持点和端点分别做重叠诊断；当前不能推断。 |
-| FR-078 | GUARDRAIL_PROVEN | C：Schema和工具固化runtime/PLC/truth/tuning全部false，未改生产检测。 |
+| FR-071 | PROVEN | C/E：145/147均保留最终A：真槽、完整可见、槽肩端点及干净AUTO槽壁均确认；fixture只对应非槽候选标记且区域不完整。 |
+| FR-072 | PROVEN | C/E：干净槽壁语义、非槽阴影候选、不完整fixture区域和pixel truth分开表达；AUTO坐标不升权。 |
+| FR-073 | PROVEN | C：旧`fixture-contamination-review/1`和派生LabelMe已标为DORMANT/INAPPLICABLE，不再要求或导入墙污染子段。 |
+| FR-074 | PROVEN | C：兼容CLI在读输入/建目录/写文件前稳定拒绝；历史文件保留不覆盖。 |
+| FR-075 | PROVEN_SPEC / MISSING_EXTERNAL_EVIDENCE | 最小像素复核已定义为每墙至少3个独立支持点+两端点；坐标尚未画制。 |
+| FR-076 | GUARDRAIL_PROVEN + MISSING_EXTERNAL_EVIDENCE | 墙/端点及独立外圆真值未到位，因此pixel truth、准确率和调参权限保持false。 |
+| FR-077 | PROVEN | C/E：非槽fixture标记不完整被保留为独立缺口，不否定干净槽壁也不用于调参。 |
+| FR-078 | GUARDRAIL_PROVEN | C：语义、历史产物和未来像素复核均禁止runtime/PLC/tuning，未改生产检测。 |
 
 ## Success Criteria
 
@@ -135,11 +135,11 @@
 | SC-023 | PROVEN_SYNTHETIC | S：完整双壁运行时语义无回退；真实完整双壁尚待人工裁决。 |
 | SC-024 | PROVEN | R/E：140张按sample对账，排除part-006/019，Mac/服务器均选147、145。 |
 | SC-025 | PROVEN | E：6f12585的服务器/Mac全量、39份Schema及CLI门通过，默认、0.12、0.5°、main和PLC不变。 |
-| SC-026 | PROVEN | C：精确四项回答及三项禁止升权字段有固定值测试。 |
-| SC-027 | PROVEN | C：派生前后AUTO shape和点坐标100%相同，且无自动HUMAN shape。 |
-| SC-028 | PROVEN | C：未知ID、重复ID、AUTO SHA不一致、已有HUMAN内容和非PARTIAL回答均被拒绝。 |
-| SC-029 | PROVEN | C：只有两个允许的HUMAN linestrip标签，三个像素重叠结论保持UNCONFIRMED。 |
-| SC-030 | PROVEN | C/E：服务器428项与Mac 400项全量门通过；Mac真实review bundle成功派生两份LabelMe且未覆盖源文件；算法、140图结果、门限、main和PLC未改。 |
+| SC-026 | PROVEN | C/E：最终A语义与auto/pixel truth、accuracy、tuning=false已固化。 |
+| SC-027 | PROVEN | C：旧CLI函数与命令行测试100%在写出前返回DORMANT/INAPPLICABLE，输出目录不存在。 |
+| SC-028 | PROVEN | C/E：两份历史LabelMe SHA保留，已标为dormant/inapplicable，不要求删除或补画。 |
+| SC-029 | PROVEN_SPEC / MISSING_EXTERNAL_EVIDENCE | 像素复核定义不含fixture overlap，只含每墙至少3点+两端点；待人工实际绘制。 |
+| SC-030 | PROVEN | C/E：更正后工程门通过；算法、140图结果、门限、main和PLC未改。 |
 
 ## 被证据否定或纠正的旧理解
 
@@ -147,15 +147,16 @@
 2. **part-019“恢复了完整槽”已被否定**: 285.953°是人工确认的一条可见真槽壁，309.48°是fixture shadow edge；稳定混合配对不是稳定正确。
 3. **“单帧必须恢复另一壁”已被纠正**: 如果相对壁被遮挡，算法不能从不可见像素补造；正确结果是fail-closed/partial，双拍需至少一帧完整可见。
 4. **真实完整姿态链尚未证明**: 当前140张的实验结果是0/140顶层valid；它证明fail-closed和诊断可复现，不证明真实槽角精度或检出率。
+5. **145/147槽壁污染推论已被否定**: 最终A确认两条AUTO槽壁本身正确干净；阴影只对应非槽候选标记且标记不完整。旧污染请求已停用。
 
 ## 当前人工语义后可安全完成的工作
 
 - 已完成FR-038语义澄清，无运行时变更。
 - 已完成paired manifest Schema与运行时的跨平台先验一致性。
 - 已完成本逐条审计；它明确区分“实现完成”和“真实验收完成”。
-- 已原样记录145/147的身份、可见性、端点语义和PARTIAL污染回答。
-- 已安全生成“只标局部fixture污染子段”的外置请求工具。
-- **在污染子段坐标返回前，没有对齐的核心算法或门限修改可安全继续**。
+- 已原样记录145/147的身份、可见性、槽肩端点和干净槽壁A语义，并分开非槽fixture标记不完整。
+- 已停用“槽壁fixture污染子段”请求，保留历史产物但不继续补画。
+- **在独立墙支持点、槽口端点与外圆真值返回前，没有对齐的核心算法或门限修改可安全继续**。
 
 ## 当前缺失的验收证据
 
@@ -166,15 +167,13 @@
 1. 两条AUTO墙是否确实属于**同一个真实方形槽口**？
 2. 该槽口是否**两侧完整可见、未遮挡**？
 3. 两个AUTO槽口端点是否位于**真实外圆槽肩交点**？
-4. 有部分标记线落在**fixture shadow**上，但不是整条：**YES + PARTIAL**。
+4. 两条AUTO槽壁本身正确干净：**YES**；只有其他非槽候选标记落在fixture shadow上，而且阴影区域标记不完整。
 
-这四问确认槽身份和端点物理语义，但仍不是亚像素精度真值，也不能说整条AUTO墙干净。
+这四问确认槽身份、槽壁干净性和端点物理语义，但仍不是亚像素坐标真值。
 
-### B. 下一个最小人工动作：污染子段
+### B. 下一个最小人工动作：干净槽壁像素复核
 
-在派生LabelMe中，只用`HUMAN_fixture_shadow_overlap_on_detected_wall_left`和/或
-`HUMAN_fixture_shadow_overlap_on_detected_wall_right`沿实际受污染的部分画linestrip。不重画整个槽，
-不把未标部分解释为干净真值。返回前，受影响的墙、支持点重叠和端点重叠均为UNCONFIRMED。
+旧污染派生LabelMe不再补画。对每条干净槽壁独立点选至少3个沿可见墙分散的支持点，再独立标左/右槽口端点。坐标不得从AUTO线复制，不要求fixture shadow边界。
 
 ### C. 像素级姿态精度验收
 

@@ -101,16 +101,20 @@ distance. Queue entries are pending human review and contain no truth.
 and algorithm/config hashes but no pixels, absolute paths or human truth. It is root-cause evidence only and
 sets `thresholdTuningAllowed=false`.
 
-## Fixture contamination semantic review
+## Clean-groove semantic review and dormant contamination request
 
-`fixture-contamination-review/1` records semantic human answers for queue entries and creates a Git-external
-LabelMe annotation request. For the confirmed 145/147 case the four answers are YES/YES/YES/YES and
-`fixtureShadowContaminationExtent=PARTIAL`. This confirms real-groove identity, full visibility and shoulder
-endpoint semantics, but not clean pixel coordinates.
+The definitive 145/147 human clarification is option A: both `AUTO_detected_groove_wall_left/right` lines
+belong to the same real square groove and are correct and clean; both sides are complete and unoccluded; both
+mouth endpoints lie on real outer-circle groove shoulders. Only other non-groove candidate marks fall on
+fixture-shadow regions, and those regions are incompletely marked. This is semantic evidence, not independent
+pixel-coordinate truth.
 
-The request verifies review-index, raw image and AUTO LabelMe SHA-256 values. It preserves every AUTO shape
-and point exactly and adds no HUMAN coordinates. A reviewer may later add only
-`HUMAN_fixture_shadow_overlap_on_detected_wall_left` and/or
-`HUMAN_fixture_shadow_overlap_on_detected_wall_right` linestrips covering contaminated subsegments.
-Until those shapes exist, affected wall, support-point overlap and endpoint overlap remain UNCONFIRMED;
-accuracy evaluation, threshold tuning, runtime use and PLC use remain forbidden.
+`fixture-contamination-review/1` and its already generated LabelMe files are historical artifacts from the
+superseded wall-contamination interpretation. Their lifecycle is `DORMANT_INAPPLICABLE_AFTER_CLARIFICATION_A`.
+They remain immutable for audit but MUST NOT be completed, imported, used for tuning, runtime input or PLC.
+The legacy generator rejects every invocation before creating an output directory or file.
+
+The next minimal pixel review contains no fixture-overlap shape. A reviewer independently places at least three
+distributed support points on each clean groove wall plus the left and right mouth endpoints. No HUMAN point is
+copied from AUTO geometry. This can audit wall and endpoint placement; an independent visible outer-circle arc
+or circle-center truth is still required before groove-pose angle accuracy can be claimed.

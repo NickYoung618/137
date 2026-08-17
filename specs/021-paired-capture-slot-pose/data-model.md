@@ -126,20 +126,27 @@
 
 ## CompleteGrooveSemanticReview
 
-- schemaVersion：fixture-contamination-review/1
-- sourceReviewIndexSha256
-- entries[]：imageId、sourceImageSha256、sourceAutoLabelmeSha256、四项YES回答、fixtureShadowContaminationExtent=PARTIAL
-- semanticConclusions：realGrooveIdentityConfirmed=true、endpointSemanticsConfirmed=true、pixelTruthAvailable=false
+- authority：FINAL_HUMAN_CLARIFICATION_A
+- entries[]：imageId、sourceImageSha256、真槽身份=YES、两壁完整无遮挡=YES、槽肩端点=YES、槽壁正确干净=YES
+- nonGrooveShadowEvidence：candidateMarksPresent=true、fixtureShadowRegionMarkupCompleteness=INCOMPLETE
+- semanticConclusions：realGrooveIdentityConfirmed=true、cleanGrooveWallsSemanticallyConfirmed=true、endpointSemanticsConfirmed=true、pixelTruthAvailable=false
 - truthPolicy：autoLinesArePixelTruth=false、cleanAccuracyEvaluationAllowed=false、thresholdTuningAllowed=false、runtimeInputAllowed=false
 
-## FixtureContaminationAnnotationRequest
+## DormantFixtureContaminationRequest
 
-- derivedLabelmeRelativePath、derivedLabelmeSha256
-- allowedHumanLabels：left/right两种fixture overlap linestrip
-- affectedWall、supportPointOverlap、endpointOverlap：人工补画前均为UNCONFIRMED
-- AUTO shapes：与来源LabelMe逐点一致；工具生成时HUMAN shape计数为0
+- schemaVersion：`fixture-contamination-review/1`，仅为历史产物格式
+- lifecycleStatus：DORMANT_INAPPLICABLE_AFTER_CLARIFICATION_A
+- 已生成产物：保留原文件和SHA，不覆盖、不补画、不导入、不调参
+- 生成器：所有调用在写出前返回DORMANT/INAPPLICABLE
 
-规则：语义确认不等于像素坐标确认。污染子段只标注AUTO墙与fixture shadow的实际重叠部分；未标部分不得自动解释为干净真值，派生文件不得作为运行时输入。
+## CleanGroovePixelReview
+
+- wallLeftSupportPoints / wallRightSupportPoints：每墙至少3个由人工独立选取且沿可见墙分散的点
+- mouthEndpointLeft / mouthEndpointRight：人工独立点
+- fixtureShadowBoundaryRequired=false
+- copiedFromAuto=false、pixelTruthAvailable=false（人工完成并审核前）、runtimeInputAllowed=false
+
+规则：语义上的干净槽壁不等于像素坐标真值。墙支持点与端点只可用于离线复核；姿态角精度还需独立外圆真值。
 
 ## State Transitions
 

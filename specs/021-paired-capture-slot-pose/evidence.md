@@ -203,17 +203,15 @@
 - 本提交只改变manifest先验校验、Spec和测试，没有改变图像检测、任何阈值或默认开关，因此不重跑140张原始BMP是有证据支持的最小验证策略。
 - 该Mac门只证明跨平台契约和工程门通过，不改变真实数据结论。part-008 145/147仍需人工确认完整同源双壁、槽肩端点和fixture污染；确认前不得调参、声明真实准确率或合并main，PLC继续未授权。
 
-## part-008 145/147 Semantic Review and Minimal Contamination Action
+## Historical 145/147 Wall-contamination Interpretation (Superseded)
 
-- 人工复核对`normal:part-008:fixed-pose:0005`（145）和`normal:part-008:fixed-pose:0007`（147）给出完全相同回答：两检测墙属于同一真实方形槽=YES；两侧完整可见无遮挡=YES；两端点位于真实外圆槽肩=YES；有部分标记线落在fixture shadow上=YES，且不是整条（PARTIAL）。
-- 这是物理身份与端点语义确认，不是像素坐标、干净mask或整条AUTO线真值。当前不知污染落在left/right哪一墙的哪一小段，也不知是否进入实际拟合支持点或端点。
-- 最小安全动作是从现有review-index按SHA派生LabelMe，不改任何AUTO shape，不自动生成HUMAN坐标；人工只在受污染局部添加left/right专用linestrip。未标段不得反推为干净真值。
-- 污染子段返回后，下一步只做诊断对账：分别检查它与审阅显示线延长、实际拟合支持点和槽口端点的重叠。在诊断结果前不调门限、不声明像素精度、不把AUTO线用于运行时或PLC。
-- 本增量不修改检测算法、实验门限、默认配置、140张回放结论、main或PLC；因此无需重跑140张。
+- 最初对“某些标记落在fixture shadow上，但不是全部”的回答存在歧义，曾被解释为AUTO槽壁局部污染。该推论现已被最终人工澄清A否定。
+- 基于该误解生成的`fixture-contamination-review/1`、派生LabelMe及对应测试结果仅作历史审计。它们不证明槽壁污染，不得继续补画、导入、调参或运行时使用。
+- 历史过程没有覆盖原图或源AUTO LabelMe，没有修改检测算法、实验门限、默认配置、140张回放结论、main或PLC。
 
 ## Verification for Fixture-contamination Review Increment
 
-- SpecKit analyze对FR-001—FR-078、SC-001—SC-030和T077—T083对账；完成审计各有78/30条、无缺号/重号、无NEEDS CLARIFICATION或Constitution冲突。唯一外部缺口是污染子段像素坐标，已保留为`BLOCKED-B06`。
+- SpecKit analyze对FR-001—FR-078、SC-001—SC-030和T077—T083对账；完成审计各有78/30条、无缺号/重号、无NEEDS CLARIFICATION或Constitution冲突。该结论属于澄清A之前的工程门；当时认定的“污染子段缺口”已作废，`BLOCKED-B06`现改为独立墙/端点/外圆像素真值缺口。
 - TDD红门先以缺少工具的`ModuleNotFoundError`失败；实现后新增聚焦测试3/3通过。七个021契约/运行时/审阅模块聚焦套件全部通过。
 - 服务器权威全量门：`uv run --with jsonschema python -m unittest discover -s tests -q`运行`428 tests in 140.788s`，全部通过。测试中的Git内trace输出拒绝文字是预期fail-closed分支，不是失败。
 - 全40份JSON Schema通过Draft 2020-12 meta-validation；新CLI help、Python compile和`git diff --check`通过。FR/SC自动计数与审计行数均为78/30。
@@ -224,5 +222,22 @@
 - Mac独立验证分支`021-mac-validation`已干净快进到`cd7f3ca6434492e31c9667a9d81f1a30797b65f1`。新增fixture contamination聚焦测试`3/3`通过。
 - Mac全量discover完成`400 tests`，其中`16`项按平台条件skip，`0 failure`/`0 error`，耗时`15.297s`。“trace output must be outside the Git worktree”仍是被测试覆盖的预期fail-closed路径，不是失败。
 - Mac在Git外真实145/147 review bundle上成功生成`fixture-contamination-review.json`及两份派生LabelMe。`normal-part-008-fixed-pose-0005.json` SHA-256为`9857f53e09359aa398c8321d25b1ea605dac803a5eb6e6a19ffb5bc09c6d9ba7`；`normal-part-008-fixed-pose-0007.json` SHA-256为`2a14bce355fe1c4ff4e6b6b81f88baa1372fa4db38fada2788cabac2e0151e7c`。
-- 两份产物均保留YES/YES/YES/YES+PARTIAL，并保留truth/tuning/runtime/PLC全部false。原始图像和源AUTO LabelMe均未覆盖。
-- 该独立门只证明工具、契约和真实外置审阅包兼容，不提供污染像素子段，不改变精度、门限或算法结论。下一个唯一外部输入仍是人工在这两份LabelMe中画出实际受污染墙子段。
+- 两份历史产物保留当时未澄清的YES/YES/YES/YES+PARTIAL记录，并保留truth/tuning/runtime/PLC全部false。原始图像和源AUTO LabelMe均未覆盖。
+- 该独立门只证明当时工具、契约和外置审阅包兼容。最终A已使这两份产物DORMANT/INAPPLICABLE；用户不得在其中画任何槽壁污染子段。
+
+## Definitive Human Clarification A for part-008 145/147
+
+- 权威语义对`normal:part-008:fixed-pose:0005`（145）与`normal:part-008:fixed-pose:0007`（147）完全相同：真实方形槽身份=YES；两侧完整可见无遮挡=YES；两端点位于真实外圆槽肩=YES；两条`AUTO_detected_groove_wall_left/right`本身正确且干净=YES。
+- 落在fixture shadow区域的只是其他非槽候选标记，而且这些阴影区域并未被完整标出。这一事实不得重新解释为槽壁污染，也不要求当前补全fixture shadow边界。
+- A是物理身份和干净性语义，不是独立像素坐标或干净mask。AUTO墙、AUTO端点与拟合圆仍不能同时作为自身精度真值。
+- 旧`prepare_fixture_contamination_annotation.py`现为兼容拒绝CLI：任何调用均在读取review bundle、建立输出目录或写文件前返回`DORMANT/INAPPLICABLE after definitive human clarification A`。
+- 下一个最小外部输入是对干净槽壁的独立像素复核：每墙至少3个沿可见墙分散的人工支持点，加左/右槽口端点。不从AUTO复制HUMAN坐标，不画fixture overlap。最终姿态角精度还需同图的独立外圆可见弧或圆心真值。
+- 本澄清不改算法、门限、默认配置、140张结果、main或PLC；未使用sealed part-006。
+
+## Verification for Definitive Clarification A
+
+- SpecKit specify/plan/tasks已对齐最终A；随后的只读analyze统计为`78 FR + 30 SC = 108 requirements`、`90 tasks`、本轮新需求覆盖`100%`、`0`个Constitution冲突、`0`个未解决歧义和`0`个未覆盖实现项。Phase 17/18保留为历史审计并明确由Phase 19取代。
+- TDD红门证明旧工具仍会读取review-index，CLI返回的是缺文件错误，历史Schema也无dormant声明：3项测试中2 failure + 1 error。修正后新聚焦测试`3/3`通过，工具在读输入、建目录或写文件前稳定返回DORMANT/INAPPLICABLE。
+- 七个021契约/运行时/审阅模块聚焦回归`80 tests in 35.864s`，全部通过。服务器权威全量门`428 tests in 131.585s`，全部通过。输出中的Git内trace拒绝是预期fail-closed测试，不是失败。
+- 全40份JSON Schema通过Draft 2020-12 meta-validation；Python compile、CLI help、CLI实际`exit=2`且零输出、`git diff --check`及FR/SC 78/30审计对账均通过。
+- 污染检查确认没有`algorithms/`或`config/`差异，没有媒体、JSONL、现场绝对路径或大于等于1 MiB变更文件。未重跑140张，未读sealed part-006，main与PLC未触碰。
