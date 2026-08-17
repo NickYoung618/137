@@ -48,3 +48,29 @@ The source code is now repository-contained. The A-end-face LabelMe reference an
 reference image remain Git-external immutable deployment assets and must be supplied with
 matching SHA-256 on Mac/production. This is intentional data governance, not a dependency
 on the gyj code repository.
+
+## Mac independent gate — 2026-08-17
+
+- Candidate branch: `024-single-shot-visual-root-cause`; Mac validation branch:
+  `024-mac-validation`; validated commit:
+  `101f82f70e32aa2c527765247c3dadcc0f6edb67`.
+- Focused suite: 41 tests ran, all passed; 3 were skipped by Mac environment conditions.
+- Mac worktree remained clean. No threshold, main, PLC/HMI or sealed part-006 access
+  occurred.
+- Final Git-external diagnostic archive SHA-256 was independently verified as
+  `000f64b6999c7ab38d24d9ae776dfdf98f3cc73ad27b85a54a3a46901a43038d`.
+- Mac retained the original archive and created a separate Chinese-named human-review
+  copy. Success controls and each failure class remain separated by sample/error type;
+  this organization is for review only and does not create truth labels.
+
+The engineering/Mac gate is accepted for 024. No aligned detector or threshold change is
+safe before the following human semantic decisions:
+
+1. 141/161/441: identify the physical housing outer edge.
+2. 281: decide whether candidate-002 is the real square groove.
+3. 261: decide which of candidate-004/candidate-006 is the real groove and whether the
+   other is fixture-shadow evidence.
+4. 401: decide whether both physical groove walls are visible.
+
+374 remains the already confirmed mixed real-wall plus fixture-shadow negative and does
+not require another semantic review.
