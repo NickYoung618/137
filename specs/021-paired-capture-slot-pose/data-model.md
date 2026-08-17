@@ -141,10 +141,17 @@
 
 ## CleanGroovePixelReview
 
-- wallLeftSupportPoints / wallRightSupportPoints：每墙至少3个由人工独立选取且沿可见墙分散的点
-- mouthEndpointLeft / mouthEndpointRight：人工独立点
-- fixtureShadowBoundaryRequired=false
-- copiedFromAuto=false、pixelTruthAvailable=false（人工完成并审核前）、runtimeInputAllowed=false
+- schemaVersion：`clean-groove-pixel-review/1`
+- sourceReviewIndexSha256、imageId、sourceImageSha256、sourceAutoLabelmeSha256：只作身份/SHA审计
+- derivedLabelmeRelativePath、derivedLabelmeSha256：Git外空白人工任务
+- initialGeometry：`shapes=[]`、`imageData=null`、`autoGeometryParsed=false`、`copiedFromAuto=false`
+- wallLeftSupportPoints / wallRightSupportPoints：`HUMAN_clean_groove_wall_left/right_support`，每墙至少3个由人工独立选取且沿可见墙分散的point
+- mouthEndpointLeft / mouthEndpointRight：`HUMAN_clean_groove_mouth_endpoint_left/right`，各恰好1个人工独立point
+- outerCircleReference：可选`HUMAN_outer_circle_visible_arc`（>=8点linestrip）或`HUMAN_outer_circle_center`（1个point）
+- fixtureShadowBoundaryRequired=false；fixture overlap标签禁止
+- reviewStatus：PENDING_HUMAN_ANNOTATION、WALL_ENDPOINT_COMPLETE或WALL_ENDPOINT_AND_OUTER_REFERENCE_COMPLETE
+- wallPixelTruthAvailable、endpointPixelTruthAvailable、outerCircleReferenceAvailable、wallEndpointPixelReviewComplete、poseAngleAccuracyReady分字段
+- accuracyEvaluationAllowed=false、thresholdTuningAllowed=false、runtimeInputAllowed=false、plcInputAllowed=false（即使完成也不自动升权）
 
 规则：语义上的干净槽壁不等于像素坐标真值。墙支持点与端点只可用于离线复核；姿态角精度还需独立外圆真值。
 

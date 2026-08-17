@@ -205,3 +205,22 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 ## Phase 20: Independent Mac Gate - definitive clarification A
 
 - [x] T091 记录Mac对c7fdc46的3项聚焦、400项全量、16项平台skip、40份Schema、dormant CLI exit=2/stdout零字节/零输出目录及diff/status门；明确无需重跑140 BMP，仅提交推送021、不合main、不碰PLC per SC-026-SC-030
+
+## Phase 21: Independent clean-groove pixel review
+
+**Goal**: 为145/147生成零AUTO坐标的Git外独立人工任务，并以严格校验分开证明墙/端点复核完成与外圆角度参考可用。
+
+**Independent Test**: 临时review-index/raw/AUTO按SHA关联；准备产物`shapes=[]`且不解析AUTO；完成校验覆盖3+3墙点、2端点、可选圆弧/圆心及所有失败分支。旧污染CLI继续零输出拒绝。
+
+- [x] T092 [US8] 更新Spec 021规格、plan、research、data-model、contract和checklist，固化空白独立任务、3+3点、2端点、可选外圆参考及权限隔离 per FR-079-FR-088/SC-031-SC-036
+- [x] T093 [P] [US8] 先新增 tests/test_clean_groove_pixel_review.py，覆盖空shapes、零AUTO解析/复制、SHA/路径/身份失败、3+3与端点校验、圆弧/圆心阶段和禁用标签/权限 per FR-079-FR-087/SC-031-SC-035
+- [x] T094 [P] [US8] 新增 contracts/clean-groove-pixel-review.schema.json，严格表达任务来源、PENDING/完成状态、分离真值字段及永久false权限 per FR-079/FR-080/FR-085/SC-031/SC-033
+- [x] T095 [US8] 实现 tools/prepare_clean_groove_pixel_review.py 的prepare/validate子命令；所有产物Git外，prepare不解析AUTO shape，validate fail-closed per FR-079-FR-087/SC-031-SC-035
+- [x] T096 [US8] 更新quickstart、README、completion-audit和evidence，给出Mac生成/校验命令及人工LabelMe步骤，明确外圆缺失时不得评姿态角精度 per FR-083/FR-085-FR-088/SC-033-SC-036
+- [x] T097 运行SpecKit analyze、聚焦/全量、全部Schema、CLI、diff/JSON/媒体/绝对路径/检测阈值污染门；不读sealed part-006、不重跑140图 per SC-036
+- [x] T098 提交并推送021功能分支，保持main隔离、旧污染流程DORMANT、PLC未授权，等待Mac独立验证 per SC-035-SC-036
+
+### Phase 21 Dependencies
+
+- T092先于T093-T094；T093红门先于T095；T095完成后执行T096-T098。
+- 本阶段只使用合成临时fixture，不读取145/147原图或AUTO几何；实际Git外任务由Mac在已核验review bundle上生成。

@@ -249,3 +249,14 @@
 - `contracts/`下40份根Schema全部通过Draft 2020-12 `check_schema`。dormant CLI实测`exit=2`、stdout为`0`字节、未创建output目录，stderr明确包含`DORMANT/INAPPLICABLE ... clarification A`。
 - Mac的`git diff --check`通过且`git status`干净。因该提交未改图像检测代码或门限，不重跑140张真实BMP符合既定验证边界。
 - 该Mac门关闭了“旧槽壁污染请求是否仍可执行”的跨平台风险。它不提供像素真值或准确率；下一个外部输入仍是每壁至少3个独立支持点+左/右槽口端点，最终角度精度还需同图独立外圆可见弧/圆心真值。
+
+## Independent Clean-groove Pixel Review Preparation
+
+- SpecKit specify/plan/tasks/analyze将规格扩展为FR-001—FR-088、SC-001—SC-036及T001—T098；编号连续、无重复、无`NEEDS CLARIFICATION`，新增FR/SC均映射到Phase 21任务。完成审计现有88条FR和36条SC逐项对账。
+- TDD红门先以缺少`tools.prepare_clean_groove_pixel_review`的`ModuleNotFoundError`失败。实现后聚焦组合`tests.test_clean_groove_pixel_review`、旧dormant污染工具、prefill review和完整槽队列共`20 tests`全部通过；其中prepare/validate CLI端到端实际生成并校验两张临时任务。
+- 新`clean-groove-pixel-review/1`准备器使用不可解析为JSON的AUTO fixture仍通过，直接证明AUTO文件只做SHA审计、不解析shape。每个Git外LabelMe初始为`shapes=[]`、`imageData=null`；校验器覆盖3+3墙point、2端点、无外圆/8点圆弧/独立圆心三种状态。
+- 失败分支覆盖未知/重复imageId、sealed part-006身份、不安全truthPolicy、raw/AUTO SHA不符、Git内或已存在输出、墙点不足/重复、端点缺失、错误shape type、非有限/越界坐标、AUTO shape、旧fixture overlap label及AUTO复制声明；校验失败不写完成报告。
+- 服务器权威最终全量门为`436 tests in 174.126s`，全部通过。一次与其他受保护仓库4进程图像批跑并发的中间全量仅历史legacy `<8s`性能门测得`11.994s`而失败；外部负载结束后同一门复测`4.847s`通过，随后436项全量通过，未修改性能阈值。输出中的`trace output must be outside the Git worktree`仍是被断言覆盖的预期fail-closed分支，不是失败。
+- `contracts/`下41份根Schema全部通过Draft 2020-12 `check_schema`；新CLI根/prepare/validate help、Python compile、JSON解析和`git diff --check`均通过。
+- 污染门确认`algorithms/`与`config/`零差异，无媒体/JSONL/大文件或现场数据绝对路径进入Git。未读取sealed part-006、未重跑140 BMP、未改检测阈值、main或PLC。
+- 服务器没有生成145/147真实人工点。Mac下一步只需在已核验review bundle上生成Git外空白任务并独立落点；Mac独立测试通过前保持021功能分支隔离，不合main。

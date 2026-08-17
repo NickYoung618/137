@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clean-groove-pixel-review.schema.json",
+  "title": "独立干净凹槽像素复核任务与校验报告",
+  "$comment": "Offline review only. AUTO geometry is never parsed/copied; fixture-contamination review remains DORMANT/INAPPLICABLE. No accuracy, tuning, runtime or PLC authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "artifactType", "lifecycleStatus", "semanticAuthority",
+    "sourceReviewIndexSha256", "sourceTaskManifestSha256", "counts",
+    "requiredHumanGeometry", "entries", "truthPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "clean-groove-pixel-review/1"},
+    "artifactType": {"enum": ["PREPARATION", "VALIDATION"]},
+    "lifecycleStatus": {
+      "enum": [
+        "PENDING_HUMAN_ANNOTATION", "WALL_ENDPOINT_COMPLETE",
+        "WALL_ENDPOINT_AND_OUTER_REFERENCE_COMPLETE"
+      ]
+    },
+    "semanticAuthority": {"const": "FINAL_HUMAN_CLARIFICATION_A"},
+    "sourceReviewIndexSha256": {"$ref": "#/$defs/sha256"},
+    "sourceTaskManifestSha256": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["images", "pending", "wallEndpointComplete", "poseAngleReady"],
+      "properties": {
+        "images": {"type": "integer", "minimum": 1},
+        "pending": {"type": "integer", "minimum": 0},
+        "wallEndpointComplete": {"type": "integer", "minimum": 0},
+        "poseAngleReady": {"type": "integer", "minimum": 0}
+      }
+    },
+    "requiredHumanGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wallLeft", "wallRight", "mouthEndpointLeft", "mouthEndpointRight",
+        "outerCircleVisibleArc", "outerCircleCenter"
+      ],
+      "properties": {
+        "wallLeft": {"$ref": "#/$defs/wallRule"},
+        "wallRight": {"$ref": "#/$defs/wallRule"},
+        "mouthEndpointLeft": {"$ref": "#/$defs/pointRule"},
+        "mouthEndpointRight": {"$ref": "#/$defs/pointRule"},
+        "outerCircleVisibleArc": {"$ref": "#/$defs/arcRule"},
+        "outerCircleCenter": {"$ref": "#/$defs/optionalPointRule"}
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "imageId", "sourceImageSha256", "sourceRawRelativePath",
+          "sourceAutoLabelmeSha256", "labelmeRelativePath", "labelmeSha256",
+          "imageWidth", "imageHeight", "reviewStatus", "wallPixelTruthAvailable",
+          "endpointPixelTruthAvailable", "outerCircleReferenceAvailable",
+          "wallEndpointPixelReviewComplete", "poseAngleAccuracyReady", "geometryCounts",
+          "outerCircleReferenceMode", "validationErrors"
+        ],
+        "properties": {
+          "imageId": {"type": "string", "minLength": 1},
+          "sourceImageSha256": {"$ref": "#/$defs/sha256"},
+          "sourceRawRelativePath": {"$ref": "#/$defs/safeRelativePath"},
+          "sourceAutoLabelmeSha256": {"$ref": "#/$defs/sha256"},
+          "labelmeRelativePath": {"$ref": "#/$defs/safeRelativePath"},
+          "labelmeSha256": {"$ref": "#/$defs/sha256"},
+          "imageWidth": {"type": "integer", "minimum": 1},
+          "imageHeight": {"type": "integer", "minimum": 1},
+          "reviewStatus": {
+            "enum": [
+              "PENDING_HUMAN_ANNOTATION", "WALL_ENDPOINT_COMPLETE",
+              "WALL_ENDPOINT_AND_OUTER_REFERENCE_COMPLETE"
+            ]
+          },
+          "wallPixelTruthAvailable": {"type": "boolean"},
+          "endpointPixelTruthAvailable": {"type": "boolean"},
+          "outerCircleReferenceAvailable": {"type": "boolean"},
+          "wallEndpointPixelReviewComplete": {"type": "boolean"},
+          "poseAngleAccuracyReady": {"type": "boolean"},
+          "geometryCounts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "wallLeftSupportPoints", "wallRightSupportPoints", "mouthEndpointLeft",
+              "mouthEndpointRight", "outerCircleVisibleArcPoints", "outerCircleCenter"
+            ],
+            "properties": {
+              "wallLeftSupportPoints": {"type": "integer", "minimum": 0},
+              "wallRightSupportPoints": {"type": "integer", "minimum": 0},
+              "mouthEndpointLeft": {"type": "integer", "minimum": 0},
+              "mouthEndpointRight": {"type": "integer", "minimum": 0},
+              "outerCircleVisibleArcPoints": {"type": "integer", "minimum": 0},
+              "outerCircleCenter": {"type": "integer", "minimum": 0}
+            }
+          },
+          "outerCircleReferenceMode": {
+            "enum": ["NONE", "VISIBLE_ARC", "CENTER", "VISIBLE_ARC_AND_CENTER"]
+          },
+          "validationErrors": {"type": "array", "maxItems": 0}
+        }
+      }
+    },
+    "truthPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "independentAnnotationRequired", "autoGeometryParsed", "autoCoordinatesCopied",
+        "fixtureShadowBoundaryRequired", "accuracyEvaluationAllowed", "thresholdTuningAllowed",
+        "runtimeInputAllowed", "plcInputAllowed"
+      ],
+      "properties": {
+        "independentAnnotationRequired": {"const": true},
+        "autoGeometryParsed": {"const": false},
+        "autoCoordinatesCopied": {"const": false},
+        "fixtureShadowBoundaryRequired": {"const": false},
+        "accuracyEvaluationAllowed": {"const": false},
+        "thresholdTuningAllowed": {"const": false},
+        "runtimeInputAllowed": {"const": false},
+        "plcInputAllowed": {"const": false}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"artifactType": {"const": "PREPARATION"}}},
+      "then": {
+        "properties": {
+          "lifecycleStatus": {"const": "PENDING_HUMAN_ANNOTATION"},
+          "sourceTaskManifestSha256": {"type": "null"}
+        }
+      },
+      "else": {"properties": {"sourceTaskManifestSha256": {"$ref": "#/$defs/sha256"}}}
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "safeRelativePath": {
+      "type": "string", "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "wallRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["label", "shapeType", "minimumCount"],
+      "properties": {
+        "label": {"type": "string", "pattern": "^HUMAN_clean_groove_wall_(left|right)_support$"},
+        "shapeType": {"const": "point"},
+        "minimumCount": {"const": 3}
+      }
+    },
+    "pointRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["label", "shapeType", "exactCount"],
+      "properties": {
+        "label": {"type": "string", "pattern": "^HUMAN_clean_groove_mouth_endpoint_(left|right)$"},
+        "shapeType": {"const": "point"},
+        "exactCount": {"const": 1}
+      }
+    },
+    "arcRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["label", "shapeType", "minimumPointCount", "optional"],
+      "properties": {
+        "label": {"const": "HUMAN_outer_circle_visible_arc"},
+        "shapeType": {"const": "linestrip"},
+        "minimumPointCount": {"const": 8},
+        "optional": {"const": true}
+      }
+    },
+    "optionalPointRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["label", "shapeType", "exactCount", "optional"],
+      "properties": {
+        "label": {"const": "HUMAN_outer_circle_center"},
+        "shapeType": {"const": "point"},
+        "exactCount": {"const": 1},
+        "optional": {"const": true}
+      }
+    }
+  }
+}

@@ -279,3 +279,43 @@ fixture shadow区域，而且这些阴影区域没有被完整标出。
 
 这一步只能核对墙与端点像素位置。若要验收最终姿态角精度，还需同图的独立外圆可见弧或圆心真值。
 在这些像素真值和独立验证设计完成前，禁止调门限或宣称像素/角度准确率。
+
+## 145/147独立干净槽壁像素复核
+
+以下任务与先前AUTO审阅包分开，生成的LabelMe初始`shapes=[]`。工具只验证AUTO文件SHA，不读取其
+shape坐标，也不复制原图。所有输出必须位于Git外：
+
+    REVIEW_BUNDLE="$A2_WORK/complete-groove-review-021/review-bundle"
+    CLEAN_REVIEW="$A2_WORK/clean-groove-pixel-review-021"
+
+    uv run --with jsonschema python tools/prepare_clean_groove_pixel_review.py prepare \
+      --review-index "$REVIEW_BUNDLE/review-index.json" \
+      --image-id 'normal:part-008:fixed-pose:0005' \
+      --image-id 'normal:part-008:fixed-pose:0007' \
+      --semantic-authority FINAL_HUMAN_CLARIFICATION_A \
+      --output-dir "$CLEAN_REVIEW"
+
+生成后只打开`$CLEAN_REVIEW/labelme-independent/*.json`。每张图按以下标签独立落点，不打开AUTO
+LabelMe抄坐标。本轮left/right按槽口两个端点在图像中的x坐标由小到大定义；交换两侧不影响中点，
+但统一命名便于逐壁误差审计：
+
+1. `HUMAN_clean_groove_wall_left_support`：沿left真实槽壁上、中、下分散点至少3个point。
+2. `HUMAN_clean_groove_wall_right_support`：沿right真实槽壁同样点至少3个point。
+3. `HUMAN_clean_groove_mouth_endpoint_left`：left槽壁与真实外圆槽肩交点，恰好1个point。
+4. `HUMAN_clean_groove_mouth_endpoint_right`：right槽壁与真实外圆槽肩交点，恰好1个point。
+5. 可选`HUMAN_outer_circle_visible_arc`：同图独立可见外圆弧，linestrip至少8点；或
+   `HUMAN_outer_circle_center`：独立圆心point。两者都不画时只完成墙/端点复核，不能验收姿态角精度。
+
+保存前在LabelMe全局flags中勾选`human_verified`，取消`annotation_pending`；保持
+`independent_annotation=true`、`copied_from_auto=false`以及runtime/tuning/PLC三个权限为false。
+不要添加任何`AUTO_` shape或已停用的`HUMAN_fixture_shadow_overlap_on_detected_wall_*`。
+
+完成两张后校验：
+
+    uv run --with jsonschema python tools/prepare_clean_groove_pixel_review.py validate \
+      --task-manifest "$CLEAN_REVIEW/clean-groove-pixel-review.json" \
+      --output "$CLEAN_REVIEW/validation-report.json"
+
+`wallEndpointPixelReviewComplete=true`只证明墙/端点人工几何齐全；只有
+`outerCircleReferenceAvailable=true`时`poseAngleAccuracyReady`才会为true。即使如此，报告中的
+accuracy/tuning/runtime/PLC权限仍保持false，后续还需独立评估设计才能使用这些真值。

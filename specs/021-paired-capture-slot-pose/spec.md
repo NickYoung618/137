@@ -166,6 +166,10 @@
 4. **Given** 两条AUTO槽壁已获得干净语义确认，**When** 准备下一步最小像素复核，**Then** 只要求独立标出每条墙上分散的至少3个支持点及左/右槽口端点，不要求fixture阴影边界，也不从AUTO线自动生成HUMAN坐标。
 5. **Given** 尚无独立墙支持点/端点真值和独立外圆真值，**When** 评估像素误差、姿态角精度或修改门限，**Then** pixelTruthAvailable=false、accuracyEvaluationAllowed=false、thresholdTuningAllowed=false和runtimeInputAllowed=false。
 
+6. **Given** 145/147已完成语义确认但尚无独立像素坐标，**When** 生成像素复核任务，**Then** 每张LabelMe初始`shapes`为空，不解析或复制AUTO点列，只通过原图相对路径和SHA绑定人工任务。
+7. **Given** 人工完成墙与端点标注，**When** 校验复核结果，**Then** left/right墙各至少有3个有限且位于图像内的独立point、左右槽口端点各恰好1个point；缺项、AUTO shape、旧fixture污染label或声称从AUTO复制均fail-closed。
+8. **Given** 墙与端点像素复核合格但没有独立外圆参考，**When** 生成校验报告，**Then** `wallEndpointPixelReviewComplete=true`而`poseAngleAccuracyReady=false`；只有同图独立可见圆弧（至少8个有限点）或独立圆心point合格后，才可把外圆参考标记为可用。
+
 ### Edge Cases
 
 - 第二帧旋转跨越0°/360°，或方向为逆时针。
@@ -266,6 +270,16 @@
 - **FR-076**: 未取得独立墙支持点与端点像素坐标前，wallPixelTruthAvailable、endpointPixelTruthAvailable、accuracyEvaluationAllowed和thresholdTuningAllowed MUST 为false；要验收最终姿态角精度还 MUST 引入独立外圆可见弧或圆心真值。
 - **FR-077**: 非槽阴影候选标记不完整 MUST 作为独立fixture可观测性缺口；它不得否定已确认的干净槽壁，也不得用于调整槽识别门限。
 - **FR-078**: 语义复核、历史派生LabelMe及后续像素复核 MUST 禁止作为生产运行时或PLC输入；在独立像素真值和非泄漏验证设计完成前，145/147不得用于准确率声明或门限选择。
+- **FR-079**: 系统 MUST 提供版本化`clean-groove-pixel-review/1`外置任务契约与CLI；输入只接受显式review-index和imageId，输出目录 MUST 位于Git工作树外且在任何写入前验证路径、身份与SHA。
+- **FR-080**: 准备阶段 MUST NOT 解析或复制AUTO shape坐标；每张派生LabelMe MUST 以空`shapes`开始、`imageData=null`且只引用已核验原图相对路径，明确`independentAnnotation=true`、`copiedFromAuto=false`与`human_verified=false`。
+- **FR-081**: 人工槽壁 MUST 使用`HUMAN_clean_groove_wall_left_support`和`HUMAN_clean_groove_wall_right_support` point shape，每墙至少3个有限、图像内且位置互不重复的独立支撑点；工具 MUST NOT 从AUTO线生成或建议坐标。
+- **FR-082**: 左右槽口端点 MUST 分别使用`HUMAN_clean_groove_mouth_endpoint_left/right`，各恰好1个有限、图像内point；缺失、重复、错误shape_type或无法区分左右时 MUST 拒绝完成。
+- **FR-083**: 同图外圆参考 MUST 作为独立可选阶段保留：`HUMAN_outer_circle_visible_arc`为至少8个有限点的linestrip，或`HUMAN_outer_circle_center`为恰好1个point；两者都缺失时墙/端点复核 MAY 完成，但`poseAngleAccuracyReady=false`。
+- **FR-084**: 完成校验 MUST 拒绝任何`AUTO_` shape、`HUMAN_fixture_shadow_overlap_on_detected_wall_*`、非有限/越界坐标、`copied_from_auto=true`、`independent_annotation!=true`或`human_verified!=true`，并在失败时不得生成“完成”报告。
+- **FR-085**: 复核报告 MUST 分开输出`wallPixelTruthAvailable`、`endpointPixelTruthAvailable`、`outerCircleReferenceAvailable`、`wallEndpointPixelReviewComplete`与`poseAngleAccuracyReady`；任何状态均不得自动授权accuracy、threshold tuning、runtime或PLC。
+- **FR-086**: 145/147只能通过显式imageId和SHA进入任务；CLI MUST 拒绝未知/重复imageId、源raw/AUTO哈希不符、已有输出目录或review-index真值策略不安全，且不得读取sealed part-006或根据算法结果挑选图片。
+- **FR-087**: 旧`fixture-contamination-review/1`、其派生LabelMe和兼容CLI MUST 继续保持DORMANT/INAPPLICABLE；新任务不得包含fixture overlap标签、不得要求补画fixture shadow边界。
+- **FR-088**: 新工具、契约和测试 MUST 不修改图像检测、配置阈值、140图结果、main或PLC；外置人工标注不得成为生产运行时输入或直接用于调参。
 
 ### Key Entities
 
@@ -287,6 +301,8 @@
 - **CompleteGrooveSemanticReview**: 以图像身份/SHA关联的A语义：干净槽壁、完整可见性、槽肩端点、非槽阴影候选标记不完整以及所有禁止升权策略；不含像素真值。
 - **DormantFixtureContaminationRequest**: 由旧误解生成的Git外历史请求；只可审计，不得补画、导入、调参或作为运行时输入。
 - **CleanGroovePixelReview**: 独立人工墙支持点与左/右槽口端点；不复制AUTO坐标，不要求fixture shadow边界，不单独构成最终角度真值。
+- **CleanGroovePixelReviewTask**: 由review-index身份/SHA绑定、零AUTO几何的空白LabelMe任务及必填shape规则；只写Git外。
+- **CleanGroovePixelReviewValidation**: 对人工点、端点及可选外圆参考的离线完成校验；分开表达墙/端点可用与姿态角精度是否具备参考。
 
 ## Success Criteria
 
@@ -323,6 +339,12 @@
 - **SC-028**: 已生成的两份历史LabelMe及SHA在证据中保留，但100%标记为由误解产生的dormant/inapplicable，不要求人工补画或删除原件。
 - **SC-029**: 下一个最小像素复核定义100%不含fixture overlap标签，每墙至少3个独立支持点和两个槽口端点均由人工独立绘制，不从AUTO坐标生成。
 - **SC-030**: 更正后的Schema/CLI、聚焦和全量测试通过；图像算法、140张结果、0.12同源门、0.5°墙merge、main和PLC均不改变。
+- **SC-031**: 准备145/147任务时100%生成`shapes=[]`、`imageData=null`的空白LabelMe，AUTO文件只做SHA来源审计且0个AUTO/HUMAN坐标被复制。
+- **SC-032**: 完成校验100%拒绝每墙少于3点、重复点、端点缺失/重复、错误shape_type、非有限/越界坐标、AUTO/旧污染label及任何AUTO复制声明。
+- **SC-033**: 合法3+3墙点与2端点100%得到`wallEndpointPixelReviewComplete=true`；无外圆参考时`poseAngleAccuracyReady=false`，增加合法8点圆弧或独立圆心后才变为true。
+- **SC-034**: CLI对未知/重复imageId、SHA不符、不安全truthPolicy、Git内或已存在输出100%在成功产物写出前拒绝；媒体、绝对现场路径和像素坐标均不进入Git。
+- **SC-035**: 旧fixture污染CLI继续100% DORMANT/INAPPLICABLE且零输出；新契约100%不含fixture overlap人工shape或fixture边界要求。
+- **SC-036**: 新增聚焦、全量和全部根Schema门通过；检测代码、阈值、140图回放、main和PLC无变化，Mac独立门前不合并。
 
 ## Assumptions
 
@@ -344,4 +366,5 @@
 - **RESOLVED-R02**: part-008的145/147均已获得最终A语义：两墙同属真实方形槽且墙线正确干净、两侧完整无遮挡、端点位于真实外圆槽肩；落在fixture shadow上的只是其他非槽候选标记，且阴影区域未完整标出。
 - **RESOLVED-R03**: 先前“YES但不是全部”被误解为槽壁局部污染；`fixture-contamination-review/1`及两份派生LabelMe现为DORMANT/INAPPLICABLE历史证据，不得继续标注或使用。
 - **BLOCKED-B06**: 145/147尚无独立像素级槽壁支持点、槽口端点及外圆可见弧/圆心真值；语义上的干净槽壁不足以声明亚像素或姿态角精度，也不授权调门限。
+- **BLOCKED-B07**: 本轮工具只能准备和校验独立人工任务；实际145/147的3+3墙点、2端点及外圆参考必须由人工在原图上独立绘制，Codex不得从AUTO坐标代填。
 - **RESOLVED-R01**: 服务器已在Git外复核原始人工LabelMe、安全派生副本和压缩包SHA-256；三者不得提交Git，派生副本仍禁止作为运行时或完整槽姿态真值。

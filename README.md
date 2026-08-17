@@ -135,6 +135,12 @@ Git外人工确认可以说明某个cluster是真壁，但人工标签绝不进�
 全部在Git外，`accuracyEvaluated=false`且不含预测角择样；人工必须确认两壁同属一个完整方形槽及槽口端点后，
 这些帧才可成为完整槽姿态真值。
 
+145/147已完成“同一真实槽、两侧完整、槽肩端点、AUTO槽壁语义干净”的人工确认，但AUTO坐标仍不是真值。
+`tools/prepare_clean_groove_pixel_review.py`只核对review-index、原图与AUTO文件SHA，随后在Git外生成
+`shapes=[]`的独立LabelMe任务；它不解析或复制AUTO几何。人工每墙独立点至少3个支撑点并各点1个左右槽口
+端点。校验器把墙/端点完成与同图独立外圆弧/圆心参考分开；缺外圆参考时不得评价最终角度精度。旧
+fixture污染标注工具继续DORMANT/INAPPLICABLE，所有复核产物禁止runtime、调参和PLC输入。
+
 ## 007单真槽闭环图像引导
 
 `single-real-groove-pose-config/3`修正了旧v2把“当前不在85°附近”和“PLC映射未确认”混入失败状态的问题。

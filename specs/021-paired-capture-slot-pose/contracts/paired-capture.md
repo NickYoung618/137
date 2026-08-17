@@ -118,3 +118,11 @@ The next minimal pixel review contains no fixture-overlap shape. A reviewer inde
 distributed support points on each clean groove wall plus the left and right mouth endpoints. No HUMAN point is
 copied from AUTO geometry. This can audit wall and endpoint placement; an independent visible outer-circle arc
 or circle-center truth is still required before groove-pose angle accuracy can be claimed.
+
+`clean-groove-pixel-review/1` prepares this task outside Git. Preparation validates the selected review-index,
+raw image and AUTO file SHA but never parses AUTO shapes. Every generated LabelMe starts with an empty `shapes`
+array and null `imageData`, points to the verified raw image by a relative path, and declares independent annotation.
+Validation requires at least three distinct in-bounds point shapes per wall and exactly one left/right mouth endpoint.
+An optional independent `HUMAN_outer_circle_visible_arc` linestrip requires at least eight points; alternatively one
+`HUMAN_outer_circle_center` point may provide the reference center. Wall/endpoint completion and outer-reference
+availability are separate fields. All outcomes keep accuracy evaluation, threshold tuning, runtime and PLC disabled.

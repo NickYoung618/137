@@ -50,6 +50,8 @@
 19. `build_complete_groove_review_queue.py`只读合并冻结manifest和JSONL，按sample对账双壁证据；已知partial sample通过显式审计排除项剔除，候选sample内只用身份SHA稳定抽帧。
 
 20. part-008 145/147的最终A语义写入独立证据：AUTO槽壁正确干净，非槽候选标记与fixture shadow关联且区域不完整。旧污染子段工具保留参数兼容但在任何写出前稳定拒绝；历史产物仅供审计。最小像素复核改为人工独立墙支持点与槽口端点，不画fixture overlap。
+21. `prepare_clean_groove_pixel_review.py prepare`只核对review-index、raw与AUTO文件SHA；AUTO文件不解析shape。它为显式imageId生成`shapes=[]`、`imageData=null`的Git外LabelMe任务，人工在原始图像上独立落点。
+22. 同一工具的`validate`子命令只读人工完成LabelMe：强制每墙至少3个独立point、左右端点各1个point，并把可选的独立外圆可见弧/圆心与墙端点完成状态分开报告。报告永远保持accuracy/tuning/runtime/PLC权限为false。
 
 ## Project Structure
 
@@ -62,6 +64,7 @@
     tools/extract_local_second_wall_trace.py
     tools/build_complete_groove_review_queue.py
     tools/prepare_fixture_contamination_annotation.py
+    tools/prepare_clean_groove_pixel_review.py
     contracts/paired-capture-manifest.schema.json
     contracts/paired-slot-pose-config.schema.json
     contracts/paired-slot-pose-result.schema.json
@@ -69,6 +72,7 @@
     contracts/local-second-wall-diagnostic-result.schema.json
     contracts/complete-groove-review-queue.schema.json
     contracts/fixture-contamination-review.schema.json
+    contracts/clean-groove-pixel-review.schema.json
     config/paired-capture-slot-pose.example.json
     config/local-second-wall-diagnostic.example.json
     tests/test_paired_capture_slot_pose.py
@@ -77,6 +81,7 @@
     tests/test_local_second_wall_trace.py
     tests/test_complete_groove_review_queue.py
     tests/test_fixture_contamination_annotation.py
+    tests/test_clean_groove_pixel_review.py
 
 **Structure Decision**: 双拍功能不进入legacy_adapter选择链；局部第二壁模块只通过legacy_adapter的诊断钩子运行且禁止改变选择结果。图像审阅独立于生产算法。
 
@@ -93,12 +98,14 @@
 - `PARTIALLY_OBSERVED`描述观测充分性而不描述物理身份：一个或多个墙状cluster存在、但完整同源墙对不成立时可输出；人工确认只在外置审核记录中绑定候选，运行时字段明确`humanConfirmationAppliedAtRuntime=false`。
 - 完整槽人工复核队列以物理sample为选择单元；算法阶段只用于找“值得人工看”的组，不用于test拆分、阈值选择或准确率声明。组内选帧完全由SHA身份散列决定。
 - 完整槽身份确认与像素线真值分开：145/147的A语义确认AUTO槽壁正确干净，但这仍不是独立亚像素坐标。下一步只标每壁分散支持点和两槽口端点，不画fixture overlap；姿态角精度最终还需独立外圆真值。
+- 独立像素任务从空`shapes`开始：AUTO LabelMe仅通过SHA验证来源，工具不解析其几何。完成校验允许先完成墙/端点，再单独补外圆弧或圆心；这两个阶段的可用状态不能互相冒充。
 
 ## Phase 1 Design Outputs
 
 - data-model.md：manifest、旋转契约、候选、匹配假设、结果状态、审阅包。
 - contracts/paired-capture.md：输入、配置和输出行为契约。
 - quickstart.md：服务器测试、Mac配对运行与374/369审阅命令。
+- clean-groove-pixel-review.schema.json：空白任务、人工完成状态、独立外圆参考与永久禁止升权策略。
 
 ## Post-Design Constitution Re-check
 

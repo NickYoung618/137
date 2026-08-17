@@ -4,7 +4,7 @@
 
 **审计日期**: 2026-08-17
 
-**范围**: Spec 021的FR-001—FR-078、SC-001—SC-030；不使用sealed part-006，不把part-008 145/147的AUTO结果当像素真值。
+**范围**: Spec 021的FR-001—FR-088、SC-001—SC-036；不使用sealed part-006，不把part-008 145/147的AUTO结果当像素真值。
 
 ## 状态定义
 
@@ -22,6 +22,7 @@
 - `R`: `tools/prepare_slot_pose_prefill_review.py`、`tools/build_complete_groove_review_queue.py`及对应测试/Schema。
 - `C`: `tools/prepare_fixture_contamination_annotation.py`、`tests/test_fixture_contamination_annotation.py`与`fixture-contamination-review/1` Schema。
 - `E`: `evidence.md`的服务器、Mac 140 BMP、part-019人工单壁和最终跨平台门记录。
+- `X`: `tools/prepare_clean_groove_pixel_review.py`、`tests/test_clean_groove_pixel_review.py`与`clean-groove-pixel-review/1` Schema。
 
 ## Functional Requirements
 
@@ -105,6 +106,16 @@
 | FR-076 | GUARDRAIL_PROVEN + MISSING_EXTERNAL_EVIDENCE | 墙/端点及独立外圆真值未到位，因此pixel truth、准确率和调参权限保持false。 |
 | FR-077 | PROVEN | C/E：非槽fixture标记不完整被保留为独立缺口，不否定干净槽壁也不用于调参。 |
 | FR-078 | GUARDRAIL_PROVEN | C：语义、历史产物和未来像素复核均禁止runtime/PLC/tuning，未改生产检测。 |
+| FR-079 | PROVEN | X：`clean-groove-pixel-review/1`、prepare/validate CLI和Git外路径门已实现。 |
+| FR-080 | PROVEN | X：AUTO文件只哈希不解析；生成LabelMe恒为`shapes=[]`、`imageData=null`。 |
+| FR-081 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：每墙>=3个独立point强制校验；145/147实际人工点尚待绘制。 |
+| FR-082 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：左右端点各1个point强制校验；实际坐标尚待绘制。 |
+| FR-083 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：可选>=8点圆弧或独立圆心与墙/端点状态分开；实际外圆参考尚缺。 |
+| FR-084 | PROVEN | X：AUTO/旧污染label、坐标/类型/边界/复制与人工flags失败分支均fail-closed且不写报告。 |
+| FR-085 | PROVEN | X：墙、端点、外圆、完成与姿态角ready五状态分字段，全部权限恒false。 |
+| FR-086 | PROVEN | X：显式身份、SHA、truthPolicy、路径、输出存在及sealed part-006门均有测试。 |
+| FR-087 | PROVEN | C/X：旧CLI仍DORMANT；新工具无fixture overlap标签或边界请求。 |
+| FR-088 | GUARDRAIL_PROVEN | X/E：仅离线工具/契约/文档；算法、阈值、main和PLC未改。 |
 
 ## Success Criteria
 
@@ -140,6 +151,12 @@
 | SC-028 | PROVEN | C/E：两份历史LabelMe SHA保留，已标为dormant/inapplicable，不要求删除或补画。 |
 | SC-029 | PROVEN_SPEC / MISSING_EXTERNAL_EVIDENCE | 像素复核定义不含fixture overlap，只含每墙至少3点+两端点；待人工实际绘制。 |
 | SC-030 | PROVEN | C/E：更正后服务器428项与Mac 400项全量门、40份Schema、dormant CLI零输出拒绝均通过；算法、140图结果、门限、main和PLC未改。 |
+| SC-031 | PROVEN | X：测试以不可解析AUTO文件验证只哈希；两张任务均零shape/零imageData。 |
+| SC-032 | PROVEN | X：3+3、端点、重复/类型/非有限/越界/AUTO/旧污染/复制失败全覆盖。 |
+| SC-033 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：无外圆与arc/center三分支通过；真实145/147标注尚待返回。 |
+| SC-034 | PROVEN | X：身份、SHA、策略、Git内/已存在输出均写前拒绝，无媒体进Git。 |
+| SC-035 | PROVEN | C/X：旧停用测试与新工具禁用fixture overlap测试同时通过。 |
+| SC-036 | PROVEN_SERVER / PENDING_MAC_GATE | X/E：服务器436项全量、41份Schema和污染门通过；待Mac独立门，期间不合main。 |
 
 ## 被证据否定或纠正的旧理解
 
