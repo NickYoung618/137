@@ -269,3 +269,28 @@
 - Mac已在Git外`independent-clean-groove-pixel-e6a8ce1`目录成功生成145/147两份独立任务，逐文件确认`shapes=0`。145已在LabelMe中打开并由独立screen会话保持，尚未产生人工点坐标。
 - 因该提交不含图像检测或阈值变化，未重跑140 BMP符合既定最小验证边界。该门只证明准备工具跨平台可用，不能替代145/147人工3+3墙点、两端点或同图外圆参考。
 - 021继续与main隔离，PLC未触碰。下一步只等待145人工点标；人工结果返回前不调门限、不声明像素或姿态角准确率。
+
+## 145/147 Independent Pixel Residual Diagnostic
+
+- 服务器Git外证据包SHA-256复核为`4e22dc5e24eee74a2120ba60cafba7c66ad992bd602051dd8166f473fafdd711`；正式validation SHA-256为`6ca149635d35a943e5ec2115af0866422e9890660ed5b2185658abf573c51a5a`。两图均为`WALL_ENDPOINT_COMPLETE`、pending=0、3+3墙点和2端点；外圆弧/圆心均为0。
+- 新离线CLI按image SHA与冻结fold-03 runtime JSONL唯一关联，生成Git外`residual-diagnostic-021-v1.json`，SHA-256为`e0b99fb6c0e22c1b5b8cf5e044e0fa553cf61c2c4ff5a8ce926a3179b832430b`。报告不含原图、imageData、绝对路径或HUMAN原始坐标。
+- 145（0005）：left墙HUMAN→AUTO线median/max=`6.039/6.388 px`、无向角差`4.074°`；right墙=`0.521/0.583 px`、`1.085°`。左右端点误差`0.725/2.472 px`，中点误差`1.162 px`，AUTO-human槽宽差`-2.791 px`。
+- 147（0007）：left墙HUMAN→AUTO线median/max=`3.965/5.498 px`、无向角差`3.060°`；right墙=`1.052/2.977 px`、`3.220°`。左右端点误差`2.486/2.707 px`，中点误差`0.173 px`，AUTO-human槽宽差`-4.731 px`。
+- 共用runtime圆心的槽口条件方向差分别为`-0.033158°`和`-0.005534°`。这只隔离槽口中点定位贡献；`outerCircleErrorEvaluated=false`、`poseAngleAccuracyEvaluated=false`，不能作为最终角度精度。
+- 两图原source consistency均只失败`edge_contrast_asymmetry`，contrast差约`0.1835/0.1830`，端点结构差约`0.0203/0.0205`。这证明本两图存在contrast-only误拒，不证明总体误拒率。
+
+## Default-off Source-consistency Candidate Development Evidence
+
+- 现有0.12对比门完全未改。新候选只在原结果恰好仅失败contrast、其余原检查全通过且development-only端点结构差不超过`0.05`时输出`CANDIDATE_SUPPORTED`；无论支持/拒绝，原结果、valid、角度和PLC不变。
+- 只读扫描三折非sealed既有JSONL：`normal:part-008`中13帧有完整source证据且候选SUPPORTED，另外7帧因更早外圆失败而NOT_EVALUATED；contrast范围`0.173127–0.192721`、端点结构范围`0.019299–0.022887`。
+- 已知混合边负例`normal:part-019`为20/20 CANDIDATE_REJECTED；contrast范围`0.127224–0.138007`、端点结构范围`0.076028–0.080916`。这表明不能放宽contrast，端点结构候选至少保护当前已知负例。
+- 上述正向证据只有part-008一个物理样品，负向证据只有part-019一个物理样品；0.05只作为可审计development门，默认关闭且不得称为泛化、恢复率或准确率提升。part-006未读取，140张图片未重跑。
+
+## Verification for Pixel Residual and Candidate Increment
+
+- SpecKit specify/plan/tasks/analyze覆盖FR-001—FR-104、SC-001—SC-044和T100—T110；编号连续、无重复/缺号、无`NEEDS CLARIFICATION`，新增需求均映射Phase 23。
+- TDD红门先以两个缺失模块的`ModuleNotFoundError`失败；实现后六模块聚焦`66 tests`全部通过、`4`项平台/资产条件skip。新聚焦覆盖残差数学、SHA/状态/物理圆/sealed/Git内失败、candidate正负例及顶层不升权。
+- 服务器最终空闲环境权威全量门为`446 tests in 137.521s`，全部通过。此前误并发三份全量造成legacy `<8s`门一次测得`9.732s`；终止两份重复进程、负载释放后该原门单测`4.350s`通过，随后单份全量通过。没有修改8秒门限。
+- `contracts/`下43份根Schema全部通过Draft 2020-12 `check_schema`；新CLI help、Python compile、JSON解析、`git diff --check`和FR/SC自动计数门通过。测试日志中的Git内trace拒绝仍是预期fail-closed路径。
+- 检查确认现有0.12/0.35/0.22/0.75/0.20/0.15 source-consistency门和0.5°local merge均未修改；新0.05只存在于默认关闭development候选的独立版本化配置。没有媒体、JSONL、外置LabelMe/报告、现场绝对路径或大文件进入Git。
+- 算法版本升至`0.17.0`以标识可选诊断能力；候选配置缺失/关闭时不新增结果字段。旧fixture污染CLI仍DORMANT，双拍参数仍UNCONFIRMED，main与PLC未触碰。

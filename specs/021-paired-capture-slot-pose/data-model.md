@@ -155,6 +155,34 @@
 
 规则：语义上的干净槽壁不等于像素坐标真值。墙支持点与端点只可用于离线复核；姿态角精度还需独立外圆真值。
 
+## CleanGrooveResidualDiagnostic
+
+- schemaVersion：`clean-groove-residual-diagnostic/1`
+- artifactType：`DIAGNOSTIC`
+- sourceValidationSha256、sourceResultsSha256、entries[]
+- entries[].imageId、sourceImageSha256、humanLabelmeSha256
+- entries[].walls.left/right：humanSupportPointCount、humanToAutoLinePx（values/median/p95/max）、autoSupportToHumanLinePx（median/p95/max）、unorientedLineAngleDifferenceDeg
+- entries[].mouth：left/rightEndpointErrorPx、midpointErrorPx、human/autoWidthPx、widthDifferencePx
+- entries[].conditionalDirection：conditionalOnRuntimeCircleCenter=true、runtimeCircleCenter、human/autoDirectionFromPositiveXClockwiseDeg、circularDifferenceDeg
+- entries[].sourceConsistency：原status、metrics、checks、failedChecks、contrastOnlyFalseRejectionObserved
+- summary：imageCount、wallEndpointCompleteCount、contrastOnlyFalseRejectionCount
+- policy：outerCircleErrorEvaluated=false、poseAngleAccuracyEvaluated=false、accuracyClaimAllowed=false、thresholdTuningAllowed=false、runtimeInputAllowed=false、plcInputAllowed=false
+
+规则：只按image SHA唯一关联；输出只含几何残差、SHA和相对身份，不含图像像素、imageData、绝对路径或HUMAN原始坐标。缺物理圆、精修、有限坐标或SHA不一致时整个报告fail-closed。
+
+## SidewallSourceConsistencyCandidate
+
+- config schemaVersion：`sidewall-source-consistency-candidate/1`
+- enabled：默认false
+- thresholdVersion：显式development-only版本
+- maxEndpointStructureDifference：独立配置，必须有限且位于[0,1]
+- result status：DISABLED、NOT_EVALUATED、CANDIDATE_SUPPORTED、CANDIDATE_REJECTED
+- originalStatus、originalFailedChecks、checks、metrics
+- authoritative=false、posePromotionAllowed=false、manualTruthAppliedAtRuntime=false
+- developmentOnly=true
+
+规则：候选只消费现有source-consistency诊断。SUPPORTED要求原状态REJECTED、失败集合恰为`edge_contrast_asymmetry`、其余原检查通过且端点结构门通过。任何状态都不修改原结果；配置缺失或关闭时不得在输出中出现候选字段。
+
 ## State Transitions
 
 disabled → EXPERIMENT_DISABLED

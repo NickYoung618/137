@@ -16,7 +16,7 @@ from tools.dataset_common import inspect_image
 SCHEMA_VERSION = "slot-pose-result/2"
 SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.16.0"
+ALGORITHM_VERSION = "0.17.0"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -115,6 +115,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
     source_consistency = merged_sidewall_consistency_config(
         detector.get("sidewall_source_consistency")
     )
+    source_consistency_candidate = None
+    if "sidewall_source_consistency_candidate" in detector:
+        from algorithms.slot_pose.sidewall_consistency_candidate import (
+            merged_sidewall_consistency_candidate_config,
+        )
+
+        source_consistency_candidate = merged_sidewall_consistency_candidate_config(
+            detector.get("sidewall_source_consistency_candidate")
+        )
     local_second_wall = None
     if "local_second_wall_diagnostic" in detector:
         from algorithms.slot_pose.local_second_wall import merged_local_second_wall_config
@@ -131,6 +140,10 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError(
                 "detector.sidewall_source_consistency can only be enabled in single_real_groove mode"
             )
+        if source_consistency_candidate is not None and source_consistency_candidate["enabled"]:
+            raise ValueError(
+                "detector.sidewall_source_consistency_candidate can only be enabled in single_real_groove mode"
+            )
         if local_second_wall is not None and local_second_wall["enabled"]:
             raise ValueError(
                 "detector.local_second_wall_diagnostic can only be enabled in single_real_groove mode"
@@ -139,6 +152,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["fixture_shadow_model"] = fixture_shadow
     if mode == "single_real_groove" or "sidewall_source_consistency" in detector:
         detector["sidewall_source_consistency"] = source_consistency
+    if source_consistency_candidate is not None:
+        detector["sidewall_source_consistency_candidate"] = source_consistency_candidate
     if local_second_wall is not None:
         detector["local_second_wall_diagnostic"] = local_second_wall
     if "dark_candidate_robustness" in detector and mode != "single_real_groove":
@@ -255,6 +270,19 @@ def load_config(config_path: Path) -> dict[str, Any]:
                     raise ValueError(
                         "detector.local_second_wall_diagnostic requires groove refinement v2"
                     )
+            if source_consistency_candidate is not None and source_consistency_candidate["enabled"]:
+                if not detector["sidewall_source_consistency"]["enabled"]:
+                    raise ValueError(
+                        "detector.sidewall_source_consistency_candidate requires sidewall_source_consistency"
+                    )
+                if detector["groove_refinement"]["threshold_version"] != "groove-sidewall-subpixel-v2":
+                    raise ValueError(
+                        "detector.sidewall_source_consistency_candidate requires groove refinement v2"
+                    )
+        elif source_consistency_candidate is not None and source_consistency_candidate["enabled"]:
+            raise ValueError(
+                "detector.sidewall_source_consistency_candidate requires groove refinement v2"
+            )
     return config
 
 

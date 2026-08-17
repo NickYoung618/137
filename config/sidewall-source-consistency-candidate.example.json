@@ -1,0 +1,7 @@
+{
+  "schema_version": "sidewall-source-consistency-candidate/1",
+  "enabled": false,
+  "threshold_version": "endpoint-structure-development-candidate-v1",
+  "development_only": true,
+  "max_endpoint_structure_difference": 0.05
+}

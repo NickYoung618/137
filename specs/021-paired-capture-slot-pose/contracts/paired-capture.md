@@ -126,3 +126,32 @@ Validation requires at least three distinct in-bounds point shapes per wall and 
 An optional independent `HUMAN_outer_circle_visible_arc` linestrip requires at least eight points; alternatively one
 `HUMAN_outer_circle_center` point may provide the reference center. Wall/endpoint completion and outer-reference
 availability are separate fields. All outcomes keep accuracy evaluation, threshold tuning, runtime and PLC disabled.
+
+## Clean-groove residual diagnostic
+
+`clean-groove-residual-diagnostic/1` is an offline, Git-external artifact. It accepts only a completed
+`clean-groove-pixel-review/1` validation report, the referenced HUMAN LabelMe files and a canonical runtime JSONL.
+Images are associated exclusively by unique `sourceImageSha256`; basename matching or replacement AUTO review
+artifacts are forbidden. The CLI validates every HUMAN LabelMe SHA, finite coordinate and runtime physical-circle /
+sidewall-refinement field before writing a report.
+
+For each wall it reports HUMAN support-point distances to the AUTO infinite line, AUTO refinement support-point
+distances to a HUMAN total-least-squares line and the unoriented line-angle difference. Mouth endpoints, midpoint
+and chord width are evaluated separately. When no independent outer-circle reference exists, HUMAN and AUTO mouth
+midpoints use the same runtime physical-circle center. This is explicitly a conditional mouth-localization direction
+residual, not outer-circle or final pose-angle accuracy. The report never contains image pixels, imageData, absolute
+paths or raw HUMAN coordinates and always keeps accuracy/tuning/runtime/PLC authority false.
+
+## Sidewall source-consistency candidate
+
+`detector.sidewall_source_consistency_candidate` is optional and absent by default. When present it validates
+against `sidewall-source-consistency-candidate-config.schema.json`. Disabled or absent configuration performs no
+evaluation and adds no result field. Enabled evaluation consumes only the already computed source-consistency
+metrics/checks; it cannot read HUMAN annotation, path, sample identity or fixed image angle.
+
+`CANDIDATE_SUPPORTED` requires the original status to be rejected, the only original failure to be
+`edge_contrast_asymmetry`, every other original check to pass, and the versioned development-only endpoint-structure
+gate to pass. All other cases are rejected or not evaluated. Every candidate result fixes `authoritative=false`,
+`posePromotionAllowed=false` and `manualTruthAppliedAtRuntime=false`. It never changes the original source status,
+groove-refinement status, top-level error/valid/guidance/angle or PLC fields. The existing 0.12 contrast gate remains
+unchanged; the candidate is not eligible for default enablement until independent physical-part truth expands.

@@ -16,11 +16,11 @@
 **Project Type**: Python算法库与离线CLI
 **Performance Goals**: 双帧匹配本身P95小于20ms/对（不含两个单帧检测）；双向局部搜索有严格的domain/seed/wall上限，不复制全分辨率图像；默认关闭的历史耗时门不回退
 **Constraints**: fail-closed、参数配置化、固定角不屏蔽、part-006封存、默认关闭、不合main
-**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；part-008 145/147干净槽壁语义复核、旧污染请求停用与最小像素复核定义；真实双拍数据尚未到位
+**Scale/Scope**: 双向局部墙搜索与双拍契约的合成验证；Git外140张单帧BMP分折回放；part-019 374/369简化审阅；part-008 145/147干净槽壁语义及独立像素复核；墙/端点残差离线诊断与默认关闭的同源门实验候选；真实双拍数据尚未到位
 
 ## Constitution Check
 
-- 规格先行：PASS。78项FR和30项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性、部分观测状态、完整槽人工复核队列、干净槽壁语义与旧污染请求停用。
+- 规格先行：PASS。104项FR和44项SC覆盖契约、未知参数、安全失败、审阅语义、双向墙候选、无序墙对、逐seed可追溯性、部分观测状态、完整槽人工复核、独立像素残差和默认关闭同源候选。
 - 坐标与姿态：PASS。明确image profile、第一拍零件坐标、第二拍当前角和PLC边界。
 - 质量与安全失败：PASS。缺帧、未确认参数、0/多解、残差和遮挡均有稳定状态。
 - 数据溯源：PASS。sample/pair/capture/SHA齐全，原图Git外，part-006禁止读取。
@@ -52,6 +52,10 @@
 20. part-008 145/147的最终A语义写入独立证据：AUTO槽壁正确干净，非槽候选标记与fixture shadow关联且区域不完整。旧污染子段工具保留参数兼容但在任何写出前稳定拒绝；历史产物仅供审计。最小像素复核改为人工独立墙支持点与槽口端点，不画fixture overlap。
 21. `prepare_clean_groove_pixel_review.py prepare`只核对review-index、raw与AUTO文件SHA；AUTO文件不解析shape。它为显式imageId生成`shapes=[]`、`imageData=null`的Git外LabelMe任务，人工在原始图像上独立落点。
 22. 同一工具的`validate`子命令只读人工完成LabelMe：强制每墙至少3个独立point、左右端点各1个point，并把可选的独立外圆可见弧/圆心与墙端点完成状态分开报告。报告永远保持accuracy/tuning/runtime/PLC权限为false。
+23. `compare_clean_groove_pixel_truth.py`只读正式validation、HUMAN LabelMe和runtime JSONL，并且只按image SHA唯一关联。它逐墙计算HUMAN点到AUTO墙线、AUTO支持点到HUMAN TLS线、无向墙角差，逐端点计算二维误差，并分开输出中点/槽宽误差。
+24. 当独立外圆参考缺失时，HUMAN/AUTO中点方向都使用同一个runtime物理圆心；输出明确标记为conditional，不评价外圆误差或最终姿态角精度，也不把HUMAN坐标回灌运行时。
+25. `sidewall_source_consistency_candidate`是独立、默认关闭且不可升权的实验仲裁。它只消费现有source-consistency数值：原结果只失败contrast、其余原检查全通过且独立端点结构门通过时可标记`CANDIDATE_SUPPORTED`；它永不修改原status、refinement、顶层valid/角度/PLC。
+26. 145/147只用于确认contrast-only误拒与像素残差；part-019已知混合边用于保护负例。实验端点门是development-only，必须输出版本和阈值，不能据一个正样品和一个负样品宣称泛化或默认启用。
 
 ## Project Structure
 
@@ -65,6 +69,7 @@
     tools/build_complete_groove_review_queue.py
     tools/prepare_fixture_contamination_annotation.py
     tools/prepare_clean_groove_pixel_review.py
+    tools/compare_clean_groove_pixel_truth.py
     contracts/paired-capture-manifest.schema.json
     contracts/paired-slot-pose-config.schema.json
     contracts/paired-slot-pose-result.schema.json
@@ -73,6 +78,8 @@
     contracts/complete-groove-review-queue.schema.json
     contracts/fixture-contamination-review.schema.json
     contracts/clean-groove-pixel-review.schema.json
+    contracts/clean-groove-residual-diagnostic.schema.json
+    contracts/sidewall-source-consistency-candidate-config.schema.json
     config/paired-capture-slot-pose.example.json
     config/local-second-wall-diagnostic.example.json
     tests/test_paired_capture_slot_pose.py
@@ -82,6 +89,8 @@
     tests/test_complete_groove_review_queue.py
     tests/test_fixture_contamination_annotation.py
     tests/test_clean_groove_pixel_review.py
+    tests/test_clean_groove_residual_diagnostic.py
+    tests/test_sidewall_source_consistency_candidate.py
 
 **Structure Decision**: 双拍功能不进入legacy_adapter选择链；局部第二壁模块只通过legacy_adapter的诊断钩子运行且禁止改变选择结果。图像审阅独立于生产算法。
 
@@ -106,10 +115,12 @@
 - contracts/paired-capture.md：输入、配置和输出行为契约。
 - quickstart.md：服务器测试、Mac配对运行与374/369审阅命令。
 - clean-groove-pixel-review.schema.json：空白任务、人工完成状态、独立外圆参考与永久禁止升权策略。
+- clean-groove-residual-diagnostic.schema.json：按SHA关联的墙/端点/条件方向残差与永久禁止升权策略。
+- sidewall-source-consistency-candidate-config.schema.json：默认关闭的development-only替代判据配置。
 
 ## Post-Design Constitution Re-check
 
-PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed；374人工线只确认一条可见真壁。145/147已确认真实完整槽身份、干净槽壁和槽肩端点语义；非槽fixture阴影标记不完整是独立缺口。真实双拍BMP、确认旋转参数、独立槽壁/端点像素真值及独立外圆真值仍是精度和生产验收阻塞。
+PASS WITH BLOCKERS。设计没有猜现场参数、没有改变默认单帧路径，也不产生PLC命令。服务器140张BMP可证明候选生成结构与fail-closed；374人工线只确认一条可见真壁。145/147已确认真实完整槽身份、干净槽壁和槽肩端点语义，并完成3+3墙点和2端点的独立像素复核；非槽fixture阴影标记不完整是独立缺口。墙/端点残差可以离线评价，但无独立外圆/圆心，最终姿态角精度仍不可评价。真实双拍BMP、确认旋转参数、独立外圆真值及更多物理零件正负真值仍是生产验收阻塞。
 
 ## Complexity Tracking
 

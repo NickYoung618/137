@@ -438,6 +438,56 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual("groove_source_consistency", payload["error"]["stage"])
         self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
         self.assertEqual("rejected", payload["diagnostics"]["grooveSourceConsistency"]["status"])
+        self.assertNotIn("sidewallSourceConsistencyCandidate", payload["diagnostics"])
+
+    def test_default_off_source_candidate_never_promotes_failed_pose(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["sidewall_source_consistency_candidate"] = {"enabled": True}
+        path = self.root / "single-v3-source-candidate.json"
+        write_json(path, config)
+        check_ids = [
+            "edge_contrast_asymmetry", "edge_gradient_asymmetry",
+            "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
+            "radial_coverage_inconsistent", "endpoint_structure_inconsistent",
+        ]
+        rejected = {
+            "schemaVersion": "groove-sidewall-source-consistency/1",
+            "thresholdVersion": "sidewall-source-consistency-v1", "enabled": True,
+            "status": "rejected", "metrics": {"endpointStructureDifference": 0.02},
+            "checks": [{"checkId": check_id, "passed": check_id != "edge_contrast_asymmetry"}
+                       for check_id in check_ids],
+            "failedChecks": ["edge_contrast_asymmetry"],
+        }
+        with patch(
+            "algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency",
+            return_value=rejected,
+        ):
+            payload = run(self.images / "one-real-two-shadows.png", path, "single:v3:candidate")
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_SOURCE_INCONSISTENT", payload["error"]["code"])
+        self.assertIsNone(payload["result"]["currentAngleDeg"])
+        self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
+        self.assertIsNone(payload["result"]["plcCommand"])
+        candidate = payload["diagnostics"]["sidewallSourceConsistencyCandidate"]
+        self.assertEqual("CANDIDATE_SUPPORTED", candidate["status"])
+        self.assertFalse(candidate["authoritative"])
+        self.assertFalse(candidate["posePromotionAllowed"])
+
+    def test_source_candidate_requires_v2_refinement_contract(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["sidewall_source_consistency_candidate"] = {"enabled": True}
+        path = self.root / "single-v1-source-candidate-invalid.json"
+        write_json(path, config)
+        with self.assertRaisesRegex(ValueError, "requires groove refinement v2"):
+            load_config(path)
 
     def test_unique_local_second_wall_diagnostic_cannot_promote_failed_pose(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

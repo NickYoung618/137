@@ -319,3 +319,31 @@ LabelMe抄坐标。本轮left/right按槽口两个端点在图像中的x坐标�
 `wallEndpointPixelReviewComplete=true`只证明墙/端点人工几何齐全；只有
 `outerCircleReferenceAvailable=true`时`poseAngleAccuracyReady`才会为true。即使如此，报告中的
 accuracy/tuning/runtime/PLC权限仍保持false，后续还需独立评估设计才能使用这些真值。
+
+## 145/147墙/端点残差离线诊断
+
+人工校验达到`WALL_ENDPOINT_COMPLETE`后，按图像SHA与冻结runtime JSONL对照。输出文件必须不存在且位于Git外：
+
+    CLEAN_REVIEW="$A2_WORK/clean-groove-pixel-review-021"
+    RUNTIME_RESULTS="$A2_PRIVATE/results/021-bidirectional-v3-working/fold-03.jsonl"
+
+    uv run --with jsonschema python tools/compare_clean_groove_pixel_truth.py \
+      --validation "$CLEAN_REVIEW/validation-report.json" \
+      --results "$RUNTIME_RESULTS" \
+      --output "$CLEAN_REVIEW/residual-diagnostic-021-v1.json"
+
+判读时分三层：`walls.left/right`是人工点与AUTO无限墙线/TLS线的像素残差，`mouth`是槽肩端点、
+中点和槽宽误差，`conditionalDirection`让两种中点共用runtime圆心。若没有独立外圆参考，报告固定
+`outerCircleErrorEvaluated=false`和`poseAngleAccuracyEvaluated=false`；不得把条件方向差称为最终角度精度。
+
+## 默认关闭的同源性候选
+
+不要修改现有020配置中的0.12硬门。只在Git外实验配置中显式加入完整的默认关闭片段：
+
+    jq --slurpfile candidate config/sidewall-source-consistency-candidate.example.json \
+      '.detector.sidewall_source_consistency_candidate = ($candidate[0] | .enabled = true)' \
+      "$CONFIG_020" > "$A2_WORK/source-consistency-candidate-021.experimental.json"
+
+`CANDIDATE_SUPPORTED`只是“值得追加独立真值验证”，不是恢复成功。必须同时确认顶层仍是
+`GROOVE_SOURCE_INCONSISTENT`、`valid=false`、`currentAngleDeg=null`、`imageFrameCorrectionDeg=null`且
+`plcCommand=null`。当前开发证据要求part-019已知混合边继续`CANDIDATE_REJECTED`；Mac独立回放前不得合main。

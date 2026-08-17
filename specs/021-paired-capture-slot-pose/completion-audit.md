@@ -1,10 +1,10 @@
 # Spec 021 需求逐条完成审计
 
-**审计基线**: `021-paired-capture-slot-pose@f8f957d9198161eb2a233ef45b4b90bcbdf82a83`
+**审计基线**: `021-paired-capture-slot-pose@6e49315b5c46e3e358433e1f3fb98b9dd284815c`
 
 **审计日期**: 2026-08-17
 
-**范围**: Spec 021的FR-001—FR-088、SC-001—SC-036；不使用sealed part-006，不把part-008 145/147的AUTO结果当像素真值。
+**范围**: Spec 021的FR-001—FR-104、SC-001—SC-044；不使用sealed part-006，不把part-008 145/147的AUTO整线或runtime圆当作自身真值。
 
 ## 状态定义
 
@@ -23,6 +23,8 @@
 - `C`: `tools/prepare_fixture_contamination_annotation.py`、`tests/test_fixture_contamination_annotation.py`与`fixture-contamination-review/1` Schema。
 - `E`: `evidence.md`的服务器、Mac 140 BMP、part-019人工单壁和最终跨平台门记录。
 - `X`: `tools/prepare_clean_groove_pixel_review.py`、`tests/test_clean_groove_pixel_review.py`与`clean-groove-pixel-review/1` Schema。
+- `D`: `tools/compare_clean_groove_pixel_truth.py`、独立残差Schema/测试与145/147外置残差报告。
+- `Y`: 默认关闭的`sidewall_consistency_candidate.py`、配置Schema/测试与非sealed数值回归。
 
 ## Functional Requirements
 
@@ -102,20 +104,36 @@
 | FR-072 | PROVEN | C/E：干净槽壁语义、非槽阴影候选、不完整fixture区域和pixel truth分开表达；AUTO坐标不升权。 |
 | FR-073 | PROVEN | C：旧`fixture-contamination-review/1`和派生LabelMe已标为DORMANT/INAPPLICABLE，不再要求或导入墙污染子段。 |
 | FR-074 | PROVEN | C：兼容CLI在读输入/建目录/写文件前稳定拒绝；历史文件保留不覆盖。 |
-| FR-075 | PROVEN_SPEC / MISSING_EXTERNAL_EVIDENCE | 最小像素复核已定义为每墙至少3个独立支持点+两端点；坐标尚未画制。 |
-| FR-076 | GUARDRAIL_PROVEN + MISSING_EXTERNAL_EVIDENCE | 墙/端点及独立外圆真值未到位，因此pixel truth、准确率和调参权限保持false。 |
+| FR-075 | PROVEN_EXTERNAL | 145/147每墙3个独立支持点+两端点已正式校验；AUTO线仍不被整体提升为真值。 |
+| FR-076 | PROVEN_PARTIAL / MISSING_OUTER_TRUTH | 墙/端点像素证据已到位；独立外圆真值仍缺，因此最终姿态角准确率和调参权限保持false。 |
 | FR-077 | PROVEN | C/E：非槽fixture标记不完整被保留为独立缺口，不否定干净槽壁也不用于调参。 |
 | FR-078 | GUARDRAIL_PROVEN | C：语义、历史产物和未来像素复核均禁止runtime/PLC/tuning，未改生产检测。 |
 | FR-079 | PROVEN | X：`clean-groove-pixel-review/1`、prepare/validate CLI和Git外路径门已实现。 |
 | FR-080 | PROVEN | X：AUTO文件只哈希不解析；生成LabelMe恒为`shapes=[]`、`imageData=null`。 |
-| FR-081 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：每墙>=3个独立point强制校验；145/147实际人工点尚待绘制。 |
-| FR-082 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：左右端点各1个point强制校验；实际坐标尚待绘制。 |
-| FR-083 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：可选>=8点圆弧或独立圆心与墙/端点状态分开；实际外圆参考尚缺。 |
+| FR-081 | PROVEN_SERVER_AND_EXTERNAL | X：每墙>=3个独立point强制校验；145/147实际人工点已通过正式validation与SHA门。 |
+| FR-082 | PROVEN_SERVER_AND_EXTERNAL | X：左右端点各1个point强制校验；145/147实际坐标已通过正式validation与SHA门。 |
+| FR-083 | PROVEN_IMPLEMENTATION / MISSING_OUTER_TRUTH | X：可选>=8点圆弧或独立圆心与墙/端点状态分开；实际外圆参考尚缺。 |
 | FR-084 | PROVEN | X：AUTO/旧污染label、坐标/类型/边界/复制与人工flags失败分支均fail-closed且不写报告。 |
 | FR-085 | PROVEN | X：墙、端点、外圆、完成与姿态角ready五状态分字段，全部权限恒false。 |
 | FR-086 | PROVEN | X：显式身份、SHA、truthPolicy、路径、输出存在及sealed part-006门均有测试。 |
 | FR-087 | PROVEN | C/X：旧CLI仍DORMANT；新工具无fixture overlap标签或边界请求。 |
 | FR-088 | GUARDRAIL_PROVEN | X/E：仅离线工具/契约/文档；算法、阈值、main和PLC未改。 |
+| FR-089 | PROVEN_IMPLEMENTATION | D：版本化残差Schema/CLI按image SHA关联正式validation、HUMAN LabelMe与runtime JSONL，且只写Git外。 |
+| FR-090 | PROVEN | D：完成状态、pending、LabelMe SHA/尺寸、唯一runtime SHA、物理圆与refinement门均有失败测试。 |
+| FR-091 | PROVEN | D：逐墙双向线残差、TLS、无向角和左右x顺序映射均实现并经合成/145/147实算。 |
+| FR-092 | PROVEN | D：左右端点、中点、槽宽误差独立输出，不以墙线残差替代。 |
+| FR-093 | PROVEN_CONDITIONAL | D：方向差共用runtime物理圆心并明确conditional；不声称圆心真值。 |
+| FR-094 | GUARDRAIL_PROVEN | D：外圆/姿态精度、accuracy、tuning、runtime、PLC权限全部固定false。 |
+| FR-095 | PROVEN | D：原source consistency metrics/checks/failedChecks逐项保留；HUMAN坐标不进入运行时。 |
+| FR-096 | PROVEN_TWO_IMAGES_ONLY | D：145/147各自标记contrast-only false rejection；未外推总体误拒率。 |
+| FR-097 | PROVEN | Y：候选配置版本化、默认false，配置缺失/关闭时结果无候选字段。 |
+| FR-098 | PROVEN | Y：候选函数只接收数值source consistency且三项升权权限恒false。 |
+| FR-099 | PROVEN_DEVELOPMENT | Y：contrast-only、其他检查、端点结构三层门和缺证据/多失败分支均测试。 |
+| FR-100 | PROVEN | Y：adapter开启候选仍保持原source/refinement/top-level错误、valid、角度和PLC。 |
+| FR-101 | PROVEN_DEVELOPMENT | Y/E：part-019 20/20候选拒绝；part-008有source证据的13/13仅诊断支持，未称恢复。 |
+| FR-102 | GUARDRAIL_PROVEN | Y：0.05与版本显式标为development-only；一个正/一个负物理样品不足以默认启用。 |
+| FR-103 | PROVEN | D：sealed、SHA、有限几何、Git内/已有输出失败门已测；报告不含媒体、绝对路径或HUMAN原始坐标。 |
+| FR-104 | GUARDRAIL_PROVEN | Y/E：旧污染任务、双拍UNCONFIRMED、0.12和PLC边界不变；仅021分支候选。 |
 
 ## Success Criteria
 
@@ -153,10 +171,18 @@
 | SC-030 | PROVEN | C/E：更正后服务器428项与Mac 400项全量门、40份Schema、dormant CLI零输出拒绝均通过；算法、140图结果、门限、main和PLC未改。 |
 | SC-031 | PROVEN | X：测试以不可解析AUTO文件验证只哈希；两张任务均零shape/零imageData。 |
 | SC-032 | PROVEN | X：3+3、端点、重复/类型/非有限/越界/AUTO/旧污染/复制失败全覆盖。 |
-| SC-033 | PROVEN_IMPLEMENTATION / MISSING_EXTERNAL_EVIDENCE | X：无外圆与arc/center三分支通过；真实145/147标注尚待返回。 |
+| SC-033 | PROVEN_WALL_ENDPOINT / MISSING_OUTER_TRUTH | X/E：145/147墙/端点已返回；无外圆与arc/center三分支通过，但独立外圆参考仍缺。 |
 | SC-034 | PROVEN | X：身份、SHA、策略、Git内/已存在输出均写前拒绝，无媒体进Git。 |
 | SC-035 | PROVEN | C/X：旧停用测试与新工具禁用fixture overlap测试同时通过。 |
-| SC-036 | PROVEN_SERVER_AND_MAC | X/E：服务器436项与Mac 408项全量、41份Schema和污染门通过；145/147空白任务已生成，仍不合main。 |
+| SC-036 | PROVEN_SERVER_AND_MAC | X/E：服务器436项与Mac 408项全量、41份Schema和污染门通过；145/147任务生成流程已跨平台验证，仍不合main。 |
+| SC-037 | PROVEN_SERVER_EXTERNAL | D：145/147按SHA 2/2对账并生成有限残差，外置报告无媒体和绝对路径。 |
+| SC-038 | PROVEN_SYNTHETIC | D：墙线、P95、左右映射和环形角数学覆盖并通过。 |
+| SC-039 | PROVEN | D：状态/SHA/重复result/缺物理圆/sealed/Git内/已有输出均写前拒绝。 |
+| SC-040 | PROVEN_TWO_IMAGES_ONLY | D：145/147均为contrast-only false rejection，所有accuracy/tuning/runtime/PLC权限false。 |
+| SC-041 | PROVEN_DEVELOPMENT | Y/E：part-008式低端点结构可SUPPORTED，part-019式高端点结构和多失败不能SUPPORTED。 |
+| SC-042 | PROVEN | Y：缺失/关闭无字段；开启SUPPORTED仍顶层失败、valid=false、角度/PLC空。 |
+| SC-043 | PROVEN | Y/E：0.12等原门值未改；446项全量、43份Schema、diff与污染门通过。 |
+| SC-044 | GUARDRAIL_PROVEN | E：仅021功能分支候选，不合main；Mac门前不称恢复率或最终角度精度。 |
 
 ## 被证据否定或纠正的旧理解
 
@@ -173,7 +199,8 @@
 - 已完成本逐条审计；它明确区分“实现完成”和“真实验收完成”。
 - 已原样记录145/147的身份、可见性、槽肩端点和干净槽壁A语义，并分开非槽fixture标记不完整。
 - 已停用“槽壁fixture污染子段”请求，保留历史产物但不继续补画。
-- **在独立墙支持点、槽口端点与外圆真值返回前，没有对齐的核心算法或门限修改可安全继续**。
+- 墙支持点和槽口端点已返回并完成离线残差诊断；可安全增加默认关闭、不可升权的同源候选，但不得改生产门限。
+- **在独立外圆真值与更多物理零件正负真值返回前，没有对齐的生产门限修改或最终角度精度声明可安全继续**。
 
 ## 当前缺失的验收证据
 
@@ -188,9 +215,9 @@
 
 这四问确认槽身份、槽壁干净性和端点物理语义，但仍不是亚像素坐标真值。
 
-### B. 下一个最小人工动作：干净槽壁像素复核
+### B. 已完成：干净槽壁像素复核
 
-旧污染派生LabelMe不再补画。对每条干净槽壁独立点选至少3个沿可见墙分散的支持点，再独立标左/右槽口端点。坐标不得从AUTO线复制，不要求fixture shadow边界。
+旧污染派生LabelMe未补画。145/147每条干净槽壁已独立点选3个分散支持点，并独立标左/右槽口端点；正式validation为`WALL_ENDPOINT_COMPLETE`。这些点不含fixture阴影且未从AUTO复制，但AUTO整条线仍不是像素真值。
 
 ### C. 像素级姿态精度验收
 

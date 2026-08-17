@@ -170,6 +170,26 @@
 7. **Given** 人工完成墙与端点标注，**When** 校验复核结果，**Then** left/right墙各至少有3个有限且位于图像内的独立point、左右槽口端点各恰好1个point；缺项、AUTO shape、旧fixture污染label或声称从AUTO复制均fail-closed。
 8. **Given** 墙与端点像素复核合格但没有独立外圆参考，**When** 生成校验报告，**Then** `wallEndpointPixelReviewComplete=true`而`poseAngleAccuracyReady=false`；只有同图独立可见圆弧（至少8个有限点）或独立圆心point合格后，才可把外圆参考标记为可用。
 
+---
+
+### User Story 9 - 独立像素残差诊断与同源门实验候选 (Priority: P1)
+
+算法工程师需要把145/147的独立人工墙点/端点与同图AUTO运行结果逐项对照，定位墙拟合、槽肩交点和条件方向误差；同时验证现有灰度对比不对称硬门是否把真实同源双壁误拒绝。由于尚无独立外圆真值，所有角度只能标为“共用AUTO圆心的槽口条件残差”，实验候选不得提升姿态或改变生产结果。
+
+**Why this priority**: 当前两图已证明墙与端点物理身份正确，但运行时仍因单一`edge_contrast_asymmetry`失败。继续盲调0.12会重新放过part-019已知混合边；必须先用像素真值拆解误差，再用多证据、默认关闭且不可升权的候选验证替代判据。
+
+**Independent Test**: 用不含图像像素的临时HUMAN LabelMe、runtime JSONL与已知part-019式混合边指标，验证SHA绑定、墙/端点残差数学、条件角语义、contrast-only候选与所有fail-closed分支。
+
+**Acceptance Scenarios**:
+
+1. **Given** 已正式校验的3+3墙点、2端点及同图runtime refinement，**When** 运行离线对照，**Then** 每墙输出人工点到AUTO无限墙线的逐点/median/P95/max距离、人工拟合墙与AUTO墙的无向角差、AUTO墙点到人工线残差，并输出左右端点、槽口中点和槽宽的像素差。
+2. **Given** 没有独立外圆弧或圆心，**When** 计算人工/自动中点方向差，**Then** 两者必须共用同一个AUTO物理圆心，字段名明确`conditionalOnRuntimeCircleCenter`，且`outerCircleErrorEvaluated=false`、`poseAngleAccuracyEvaluated=false`。
+3. **Given** runtime结果image SHA、人工LabelMe SHA或验证报告状态不一致，**When** 对照，**Then** 在产生成功报告前fail-closed，不接受basename或AUTO审阅文件近似匹配。
+4. **Given** 145/147人工确认同源双壁而现有门只失败`edge_contrast_asymmetry`，**When** 汇总根因，**Then** 报告为“已观察到contrast-only false rejection”，但不得据两图宣称总体误拒率或直接放宽0.12。
+5. **Given** 默认关闭的实验同源仲裁，**When** 原判据只失败contrast且其余原检查均通过、端点结构满足独立更严格开发门，**Then** 只输出`CANDIDATE_SUPPORTED`、`authoritative=false`和`posePromotionAllowed=false`；顶层仍`GROOVE_SOURCE_INCONSISTENT`、valid=false。
+6. **Given** part-019式真壁+fixture混合边，**When** contrast差本身低于0.12但端点结构差异较大，**Then** 实验仲裁必须`CANDIDATE_REJECTED`，不得恢复混合配对。
+7. **Given** 实验配置缺失或`enabled=false`，**When** 运行现有算法，**Then** 不执行候选仲裁、不新增结果字段且输出逐字节语义保持原路径。
+
 ### Edge Cases
 
 - 第二帧旋转跨越0°/360°，或方向为逆时针。
@@ -280,6 +300,22 @@
 - **FR-086**: 145/147只能通过显式imageId和SHA进入任务；CLI MUST 拒绝未知/重复imageId、源raw/AUTO哈希不符、已有输出目录或review-index真值策略不安全，且不得读取sealed part-006或根据算法结果挑选图片。
 - **FR-087**: 旧`fixture-contamination-review/1`、其派生LabelMe和兼容CLI MUST 继续保持DORMANT/INAPPLICABLE；新任务不得包含fixture overlap标签、不得要求补画fixture shadow边界。
 - **FR-088**: 新工具、契约和测试 MUST 不修改图像检测、配置阈值、140图结果、main或PLC；外置人工标注不得成为生产运行时输入或直接用于调参。
+- **FR-089**: 系统 MUST 提供版本化`clean-groove-residual-diagnostic/1`离线契约与CLI，按image SHA关联正式`clean-groove-pixel-review/1`验证、HUMAN LabelMe和runtime JSONL；输出 MUST 位于Git外。
+- **FR-090**: 对照 MUST 验证validation状态为`WALL_ENDPOINT_COMPLETE`或更高、pending=0、LabelMe SHA与图像尺寸匹配、runtime image SHA唯一且groove refinement/物理圆字段完整；任一不符 MUST fail-closed。
+- **FR-091**: 每墙 MUST 输出人工支撑点到AUTO无限墙线的逐点、median、P95、max距离，AUTO refinement支持点到人工TLS线的median/P95/max距离，以及两条无向直线的环形角差；左右墙按人工端点x顺序稳定映射。
+- **FR-092**: 槽口几何 MUST 分开输出左右端点二维误差、人工/AUTO中点、其中点误差、人工/AUTO槽宽及宽度差；不得用墙线残差替代端点误差。
+- **FR-093**: 条件方向残差 MUST 使用同一个runtime物理圆心分别连接人工与AUTO槽口中点，并以图像+x起顺时针计算环形差；字段 MUST 明确`conditionalOnRuntimeCircleCenter=true`。
+- **FR-094**: 当独立外圆参考缺失时，报告 MUST 固定`outerCircleErrorEvaluated=false`、`poseAngleAccuracyEvaluated=false`、`accuracyClaimAllowed=false`和`thresholdTuningAllowed=false`；不得输出最终角度accuracy PASS/FAIL。
+- **FR-095**: 报告 MUST 保留原`grooveSourceConsistency`全部metrics/checks/failedChecks，并分开说明人工像素复核只确认本图墙/端点，不把HUMAN坐标输入运行时。
+- **FR-096**: 当正式人工复核确认同源双壁，而原判据恰好只失败`edge_contrast_asymmetry`时，离线报告 MUST 标记`contrastOnlyFalseRejectionObserved=true`；该字段不得外推到未标注帧或总体准确率。
+- **FR-097**: 系统 MUST 提供版本化、默认关闭的`sidewall_source_consistency_candidate`实验配置；缺失配置时运行时 MUST 不执行、不输出候选字段。
+- **FR-098**: 实验候选 MUST 仅消费现有source-consistency数值证据，不得读取HUMAN真值、文件名、固定角或sample身份；输出 MUST 固定`authoritative=false`、`posePromotionAllowed=false`和`manualTruthAppliedAtRuntime=false`。
+- **FR-099**: `CANDIDATE_SUPPORTED` MUST 同时要求原状态为rejected、失败集合恰好为`edge_contrast_asymmetry`、其余原检查全部通过，并通过独立版本化的严格端点结构门；任一条件不满足 MUST `CANDIDATE_REJECTED`或`NOT_EVALUATED`。
+- **FR-100**: 实验候选不论SUPPORTED或REJECTED，MUST NOT 修改原source consistency status、groove refinement status、顶层error/detection/guidance/valid、任何角度或PLC字段。
+- **FR-101**: 已知part-019混合边负例 MUST 保持实验`CANDIDATE_REJECTED`；145/147 MAY 在离线开发证据中SUPPORTED，但不得称为生产恢复或准确率提升。
+- **FR-102**: 实验端点结构门值和版本 MUST 在配置、输出与证据中显式记录为development-only；在新的独立物理零件真值验证前不得默认启用或合并main。
+- **FR-103**: 对照CLI MUST 拒绝sealed part-006、重复/缺失result SHA、非有限几何、Git内输出和已有输出；报告不得包含图像像素、imageData、绝对现场路径或HUMAN坐标以外的媒体。
+- **FR-104**: 新功能 MUST 保持旧fixture污染任务DORMANT、双拍参数UNCONFIRMED诊断边界、现有0.12硬门和PLC阻断不变；只在021功能分支提交并等待Mac独立验证。
 
 ### Key Entities
 
@@ -303,6 +339,8 @@
 - **CleanGroovePixelReview**: 独立人工墙支持点与左/右槽口端点；不复制AUTO坐标，不要求fixture shadow边界，不单独构成最终角度真值。
 - **CleanGroovePixelReviewTask**: 由review-index身份/SHA绑定、零AUTO几何的空白LabelMe任务及必填shape规则；只写Git外。
 - **CleanGroovePixelReviewValidation**: 对人工点、端点及可选外圆参考的离线完成校验；分开表达墙/端点可用与姿态角精度是否具备参考。
+- **CleanGrooveResidualDiagnostic**: HUMAN墙/端点与runtime refinement的SHA绑定离线残差；角度只描述共用runtime圆心下的槽口条件贡献。
+- **SidewallSourceConsistencyCandidate**: 默认关闭、非权威的多证据实验仲裁；永不改变原门或顶层结果。
 
 ## Success Criteria
 
@@ -345,6 +383,14 @@
 - **SC-034**: CLI对未知/重复imageId、SHA不符、不安全truthPolicy、Git内或已存在输出100%在成功产物写出前拒绝；媒体、绝对现场路径和像素坐标均不进入Git。
 - **SC-035**: 旧fixture污染CLI继续100% DORMANT/INAPPLICABLE且零输出；新契约100%不含fixture overlap人工shape或fixture边界要求。
 - **SC-036**: 新增聚焦、全量和全部根Schema门通过；检测代码、阈值、140图回放、main和PLC无变化，Mac独立门前不合并。
+- **SC-037**: 145/147正式验证与runtime按SHA 100%对账；墙、端点、中点、槽宽和条件方向残差均为有限值且Schema通过，报告不含像素媒体或绝对路径。
+- **SC-038**: 受控几何测试100%覆盖水平/垂直/斜墙、端点左右顺序、无向180°环绕、P95和条件角±180°环绕，数值误差不超过1e-9。
+- **SC-039**: 缺失/重复SHA、LabelMe哈希错、未完成人工状态、缺物理圆/精修、非有限坐标、sealed part-006和Git内/已有输出100%在成功报告前拒绝。
+- **SC-040**: 145/147报告100%标记contrast-only false rejection，同时`outerCircleErrorEvaluated=false`、`poseAngleAccuracyEvaluated=false`、accuracy/tuning/runtime/PLC权限均为false。
+- **SC-041**: 实验候选合成测试100%证明145/147式contrast-only+低端点结构差可SUPPORTED，part-019式混合边高端点结构差、多失败、缺证据均不SUPPORTED。
+- **SC-042**: 实验开关缺失/关闭时现有结果无新增候选字段；开启时所有SUPPORTED结果仍保持原`GROOVE_SOURCE_INCONSISTENT`、valid=false、角度null和PLC空。
+- **SC-043**: 既有0.12、0.35、0.22、0.75、0.20、0.15门值及local 0.5°merge无修改；算法/配置差异检查、全量测试和41+根Schema通过。
+- **SC-044**: 021候选仅推送功能分支，不合main；Mac使用真实原始数据验证前不宣称恢复率、误拒率或最终角度精度。
 
 ## Assumptions
 
@@ -367,4 +413,7 @@
 - **RESOLVED-R03**: 先前“YES但不是全部”被误解为槽壁局部污染；`fixture-contamination-review/1`及两份派生LabelMe现为DORMANT/INAPPLICABLE历史证据，不得继续标注或使用。
 - **BLOCKED-B06**: 145/147尚无独立像素级槽壁支持点、槽口端点及外圆可见弧/圆心真值；语义上的干净槽壁不足以声明亚像素或姿态角精度，也不授权调门限。
 - **BLOCKED-B07**: 本轮工具只能准备和校验独立人工任务；实际145/147的3+3墙点、2端点及外圆参考必须由人工在原图上独立绘制，Codex不得从AUTO坐标代填。
+- **RESOLVED-R04**: 145/147的3+3墙点与2端点已正式校验，足以做墙/端点像素残差和共用AUTO圆心的条件方向诊断。
+- **BLOCKED-B08**: 145/147仍无同图独立外圆弧或圆心，因此最终姿态角精度、外圆误差及生产角度accuracy继续不可评价。
+- **BLOCKED-B09**: 实验同源候选目前只有一个正样品part-008与一个已知混合负样品part-019的development证据；在新增独立物理零件真值前不得默认启用或宣称泛化。
 - **RESOLVED-R01**: 服务器已在Git外复核原始人工LabelMe、安全派生副本和压缩包SHA-256；三者不得提交Git，派生副本仍禁止作为运行时或完整槽姿态真值。

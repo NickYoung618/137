@@ -101,3 +101,27 @@ human truth命名空间隔离，拟合圆可在算法诊断中保留但不进入
 **Rationale**: 即使AUTO线在语义上正确，显示或复制其点列也会让人工结果失去独立性。3个点是验证一条直壁的最小非退化支撑；两个端点直接决定槽口中点。外圆中心误差会传入最终角度，因此墙端点复核完成不能自动代表角度精度就绪。
 
 **Alternatives considered**: 把AUTO shape留在同一LabelMe会造成锚定偏差；用两点定义墙无法独立检查中间直线支撑；强迫本轮立即标外圆会把最小槽壁任务与最终角精度门混为一体。三者均拒绝。
+
+## Decision 15: 槽壁/端点残差与最终姿态角精度分开
+
+**Decision**: 145/147的3+3墙点与2端点只用于离线评估AUTO墙线、槽肩交点、槽口中点和槽宽。没有独立外圆弧或圆心时，方向残差必须让HUMAN/AUTO中点共用同一个runtime物理圆心，并明确称为条件方向残差。
+
+**Rationale**: 槽姿态方向同时依赖槽口中点和圆心。共用runtime圆心可以隔离槽口定位对角度的贡献，但不能测量圆心偏差，也不能代表完整姿态角精度。
+
+**Alternatives considered**: 把runtime圆心当人工真值会自证外圆算法；仅比较两端点欧氏距离会隐藏墙拟合与槽宽误差；因缺圆真值完全不做诊断又浪费已完成的独立槽像素证据。三者均拒绝。
+
+## Decision 16: 不放宽contrast门，增加不可升权的多证据候选
+
+**Decision**: 保留现有`edge_contrast_asymmetry <= 0.12`生产硬门不变。新增默认关闭的development-only候选：只有原结果恰好只失败contrast、其余原检查均通过，并且独立端点结构差异门通过时，才输出`CANDIDATE_SUPPORTED`诊断；原结果继续失败且不得输出姿态。
+
+**Rationale**: 145/147人工确认的真实双壁contrast normalized difference约0.173–0.193，反而高于part-019已知混合边约0.127–0.138。单纯放宽contrast会先恢复已知错误配对。两组现有证据中，端点结构差异的范围分离（145/147所在part-008约0.019–0.023，part-019约0.076–0.081），可用于验证一种更合理的多证据候选，但样品数太少，不能生产启用。
+
+**Alternatives considered**: 把contrast阈值放宽到0.20会放过part-019；用part/sample ID或固定角规则会把真值泄漏到运行时；直接用HUMAN坐标纠正AUTO会违反独立验证。均拒绝。
+
+## Decision 17: runtime按image SHA关联而不是近似AUTO审阅产物
+
+**Decision**: 残差CLI按正式validation中的image SHA与canonical runtime JSONL唯一关联，并验证HUMAN LabelMe SHA。AUTO审阅LabelMe只保留来源审计，不在源文件SHA不一致时用basename近似替代。
+
+**Rationale**: 服务器已有的历史AUTO审阅副本与Mac任务清单中的AUTO SHA不同；按文件名近似匹配会破坏溯源。runtime JSONL包含同图物理圆、墙线、支持点和交点，并可用图像SHA精确绑定。
+
+**Alternatives considered**: 使用同名历史AUTO文件会混淆版本；要求上传原图或复制9.5MB LabelMe进Git没有必要；重跑图像会引入与已冻结结果不同的新状态。均拒绝。

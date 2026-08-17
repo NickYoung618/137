@@ -228,3 +228,27 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 ## Phase 22: Independent Mac Gate - clean-groove pixel review preparation
 
 - [x] T099 记录Mac对e6a8ce1的11项聚焦、408项全量、16项平台skip、41份Schema、diff/status门及145/147 Git外空白任务`shapes=0`证据；明确未重跑140 BMP、未改算法/阈值/PLC且下一步只等待145人工点标，提交推送021且不合main per SC-031-SC-036
+
+## Phase 23: Clean-groove residual diagnostic and default-off consistency candidate
+
+**Goal**: 用145/147正式独立墙点/端点量化AUTO残差，拆分槽口定位贡献与外圆真值缺口；增加不改变任何权威结果的默认关闭多证据候选，保护part-019已知混合边。
+
+**Independent Test**: 临时validation/HUMAN LabelMe/runtime JSONL覆盖精确SHA关联、墙/端点/条件方向数学和所有fail-closed分支；纯数值source-consistency正负例证明候选不依赖文件/样品/固定角且永不提升姿态。
+
+- [x] T100 [US9] 更新spec、plan、research、data-model、contract与checklist，固化墙/端点残差、条件方向、无外圆精度声明、默认关闭候选及part-019保护边界 per FR-089-FR-104/SC-037-SC-044
+- [x] T101 [P] [US9] 先新增tests/test_clean_groove_residual_diagnostic.py，覆盖SHA关联、左右映射、TLS墙线、端点/中点/槽宽、无向角和±180条件方向，以及状态/SHA/物理圆/sealed/Git内失败 per FR-089-FR-096/FR-103/SC-037-SC-040
+- [x] T102 [P] [US9] 新增contracts/clean-groove-residual-diagnostic.schema.json并用Draft 2020-12验证严格字段、有限值、false权限及无绝对路径/原始坐标输出 per FR-089-FR-095/SC-037-SC-040
+- [x] T103 [US9] 实现tools/compare_clean_groove_pixel_truth.py，按image SHA唯一关联正式validation、HUMAN LabelMe和canonical runtime JSONL，成功产物只写Git外 per FR-089-FR-096/FR-103
+- [x] T104 [P] [US9] 先新增tests/test_sidewall_source_consistency_candidate.py，覆盖contrast-only支持、part-019式端点结构拒绝、多失败/缺证据拒绝、缺失/关闭不输出及顶层结果不变 per FR-097-FR-102/SC-041-SC-043
+- [x] T105 [US9] 实现algorithms/slot_pose/sidewall_consistency_candidate.py、配置Schema和默认关闭示例；只消费现有数值证据并固定全部非权威字段 per FR-097-FR-102
+- [x] T106 [US9] 在legacy_adapter/contract/config Schema增加可选诊断钩子；验证开关缺失/关闭逐字段不回退，开启SUPPORTED仍保持原GROOVE_SOURCE_INCONSISTENT、valid=false、角度null和PLC空 per FR-097-FR-104/SC-042-SC-043
+- [x] T107 [US9] 对服务器Git外145/147正式证据与冻结fold-03 runtime运行残差CLI，按SHA对账并生成外置报告；只汇报墙/端点及条件方向，不称最终角度精度 per SC-037-SC-040
+- [x] T108 [US9] 用既有非sealed JSONL只读汇总part-008/part-019数值候选，证明已知混合负例不SUPPORTED；不重跑140 BMP、不读取part-006、不按结果调阈值 per FR-101-FR-104/SC-041-SC-044
+- [x] T109 更新README、quickstart、completion-audit和evidence，记录实测残差、根因、限制、Mac命令及独立复跑门 per FR-094-FR-104/SC-040-SC-044
+- [x] T110 运行SpecKit analyze、聚焦/全量、全部Schema、CLI、diff/JSON/媒体/绝对路径/阈值污染门；只提交推送021功能分支，不合main、不碰PLC per SC-043-SC-044
+
+### Phase 23 Dependencies
+
+- T100先于T101-T102/T104；T101与T104必须先出现红门，再实现T103/T105-T106。
+- T107只读取正式145/147 Git外人工证据和现有runtime JSONL；T108只读取非sealed历史结果，不运行图像算法。
+- T109-T110在实现、外置实跑与只读负例门全部通过后收尾。

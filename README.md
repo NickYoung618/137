@@ -141,6 +141,15 @@ Git外人工确认可以说明某个cluster是真壁，但人工标签绝不进�
 端点。校验器把墙/端点完成与同图独立外圆弧/圆心参考分开；缺外圆参考时不得评价最终角度精度。旧
 fixture污染标注工具继续DORMANT/INAPPLICABLE，所有复核产物禁止runtime、调参和PLC输入。
 
+145/147现已完成独立3+3墙点与左右槽口端点复核，但尚无同图独立外圆/圆心。可用
+`tools/compare_clean_groove_pixel_truth.py`按图像SHA把HUMAN点与冻结runtime JSONL对照，分别报告墙线、
+端点、中点、槽宽和“共用runtime圆心”的条件方向残差；后者只隔离槽口定位贡献，不能称为最终姿态角精度。
+
+`detector.sidewall_source_consistency_candidate`是默认不存在/关闭的development-only诊断。它不放宽现有
+`0.12`对比不对称门；只在原结果恰好仅失败contrast、其他原检查通过且更严格端点结构证据通过时标记
+`CANDIDATE_SUPPORTED`。无论结果如何，原`GROOVE_SOURCE_INCONSISTENT`、`valid=false`、空角度和空PLC
+都不改变。当前证据仅有part-008一个人工正样品和part-019一个已知混合负样品，禁止默认启用或宣称泛化。
+
 ## 007单真槽闭环图像引导
 
 `single-real-groove-pose-config/3`修正了旧v2把“当前不在85°附近”和“PLC映射未确认”混入失败状态的问题。
