@@ -17,3 +17,13 @@
 ## Visual change discipline
 
 本提交不改变视觉算法。后续若圆/槽失败需要算法修改，固定执行：少量物理零件复现→分层根因→只读审计yyh/gyj可复用实现→SpecKit修改→小样本验证→独立回归。人工语义不足时停止调参，并提供代表图与最少审核动作。
+
+## 2026-08-17 Mac independent focused gate
+
+- Mac候选：`023-mac-validation@b38ffd25a0297839efa5f582b7c6651d1d842204`，由远程`023-half-turn-paired-guidance`显式抓取并fast-forward验证；工作树干净。
+- 聚焦命令：`uv run --with jsonschema python -m unittest tests.test_half_turn_guidance tests.test_paired_capture_slot_pose -q`。
+- 结果：38/38通过，0 failure/error。
+- 安全边界：没有修改阈值、PLC/HMI或main；没有合并或push main；没有用旋转单张图片伪造真实双拍。
+- 单拍代表复核与服务器一致：145 current约`29.578°`、correction约`+55.422°`；147 current约`29.579°`、correction约`+55.421°`；141为`HOUSING_CIRCLE_NOT_FOUND`且不输出角度。
+- 已有失败代表覆盖：161外圆未找到、441物理外圆验证失败、281凹槽识别失败、261凹槽歧义、401槽壁精修失败、374真实槽壁与固定阴影混合。
+- 裁决：该Mac门只证明023单图/半圈双图编排的聚焦契约跨平台通过，不证明底层图片检测改善；真实同件180°pair仍是`REAL_PAIR_VALIDATION_MISSING`。

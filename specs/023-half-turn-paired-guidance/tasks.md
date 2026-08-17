@@ -33,6 +33,7 @@
 - [x] T014 运行聚焦/旧paired/全量/Schema/CLI/diff/污染检查并记录 evidence.md
 - [x] T015 勾选任务、本地提交并推送023独立功能分支；不合main、不碰PLC
 - [x] T016 用少量非sealed真实单帧结果验证两种输入编排可追溯性；无真实pair时明确缺证据，不旋转图片伪造
+- [x] T017 记录Mac对b38ffd2的38/38独立聚焦门、单拍代表判读和真实pair缺失边界到 specs/023-half-turn-paired-guidance/evidence.md；不改算法/阈值/main/PLC
 
 ## Dependencies
 
