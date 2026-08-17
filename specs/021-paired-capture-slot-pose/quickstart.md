@@ -261,3 +261,23 @@ partial/mixed负例，二者都通过显式审计排除项记录，不是固定�
 Mac在`fc9210d`上已完成140张独立回放与队列重建，结果同样选中part-008的147/145，并保持
 `0/140 valid`。因此当前不需要重跑140张或重建队列；下一步只查看已生成的RAW/SIMPLIFIED联系表，
 逐张回答上述四问。审阅结论未形成前，禁止从AUTO预测反推HUMAN标注或修改门限。
+
+145/147现已得到相同人工语义回答：同一真实方形槽=YES、两侧完整无遮挡=YES、端点位于真实外圆
+槽肩=YES、存在局部fixture shadow污染=YES但不是整条。该回答不是像素真值。Mac应从原review bundle
+生成只要求污染子段的派生LabelMe：
+
+    uv run --with jsonschema python tools/prepare_fixture_contamination_annotation.py \
+      --review-index "$A2_WORK/complete-groove-review-021/review-bundle/review-index.json" \
+      --image-id normal:part-008:fixed-pose:0005 \
+      --image-id normal:part-008:fixed-pose:0007 \
+      --same-real-square-groove YES \
+      --fully-visible-unoccluded YES \
+      --endpoints-on-outer-shoulders YES \
+      --fixture-shadow-overlap PARTIAL \
+      --output-dir "$A2_WORK/complete-groove-review-021/fixture-contamination-review"
+
+工具输出`fixture-contamination-review.json`和`labelme-contamination/*.json`，不复制原图、不改变AUTO
+shape、不自动添加HUMAN坐标。人工只需在受污染部分新增
+`HUMAN_fixture_shadow_overlap_on_detected_wall_left`和/或
+`HUMAN_fixture_shadow_overlap_on_detected_wall_right` linestrip。不要延长到未确认区域，也不要重画完整槽。
+完成前affectedWall、supportPointOverlap和endpointOverlap均保持UNCONFIRMED，禁止调门限或评价干净像素精度。

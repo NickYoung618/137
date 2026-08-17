@@ -100,3 +100,17 @@ distance. Queue entries are pending human review and contain no truth.
 `local-second-wall-trace-export/1` is a path-free read-only projection of result JSONL. It includes basenames
 and algorithm/config hashes but no pixels, absolute paths or human truth. It is root-cause evidence only and
 sets `thresholdTuningAllowed=false`.
+
+## Fixture contamination semantic review
+
+`fixture-contamination-review/1` records semantic human answers for queue entries and creates a Git-external
+LabelMe annotation request. For the confirmed 145/147 case the four answers are YES/YES/YES/YES and
+`fixtureShadowContaminationExtent=PARTIAL`. This confirms real-groove identity, full visibility and shoulder
+endpoint semantics, but not clean pixel coordinates.
+
+The request verifies review-index, raw image and AUTO LabelMe SHA-256 values. It preserves every AUTO shape
+and point exactly and adds no HUMAN coordinates. A reviewer may later add only
+`HUMAN_fixture_shadow_overlap_on_detected_wall_left` and/or
+`HUMAN_fixture_shadow_overlap_on_detected_wall_right` linestrips covering contaminated subsegments.
+Until those shapes exist, affected wall, support-point overlap and endpoint overlap remain UNCONFIRMED;
+accuracy evaluation, threshold tuning, runtime use and PLC use remain forbidden.

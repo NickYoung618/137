@@ -124,6 +124,23 @@
 
 规则：relativePath必须为A2根相对安全路径；一个sample不得因角度或置信度被拆选；已知partial/mixed sample不得进入完整槽正向队列。
 
+## CompleteGrooveSemanticReview
+
+- schemaVersion：fixture-contamination-review/1
+- sourceReviewIndexSha256
+- entries[]：imageId、sourceImageSha256、sourceAutoLabelmeSha256、四项YES回答、fixtureShadowContaminationExtent=PARTIAL
+- semanticConclusions：realGrooveIdentityConfirmed=true、endpointSemanticsConfirmed=true、pixelTruthAvailable=false
+- truthPolicy：autoLinesArePixelTruth=false、cleanAccuracyEvaluationAllowed=false、thresholdTuningAllowed=false、runtimeInputAllowed=false
+
+## FixtureContaminationAnnotationRequest
+
+- derivedLabelmeRelativePath、derivedLabelmeSha256
+- allowedHumanLabels：left/right两种fixture overlap linestrip
+- affectedWall、supportPointOverlap、endpointOverlap：人工补画前均为UNCONFIRMED
+- AUTO shapes：与来源LabelMe逐点一致；工具生成时HUMAN shape计数为0
+
+规则：语义确认不等于像素坐标确认。污染子段只标注AUTO墙与fixture shadow的实际重叠部分；未标部分不得自动解释为干净真值，派生文件不得作为运行时输入。
+
 ## State Transitions
 
 disabled → EXPERIMENT_DISABLED

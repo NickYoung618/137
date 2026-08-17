@@ -168,3 +168,17 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 ## Phase 16: Independent Mac Gate - completion audit
 
 - [x] T076 将Mac对6f12585的六模块、全量、39份Schema、三个CLI与diff独立通过结果记录到 specs/021-paired-capture-slot-pose/evidence.md 和 completion-audit.md；明确预期trace拒绝文本不是失败、无需重跑140 BMP且145/147人工门不变，只提交推送021分支，不合main、不碰PLC per SC-008/SC-009/SC-025
+
+## Phase 17: Human Review - 局部fixture污染定位
+
+**Goal**: 原样保存145/147的YES/YES/YES/YES+PARTIAL语义，并生成不自动造HUMAN坐标的最小污染子段标注请求。
+
+**Independent Test**: 临时review-index、raw与AUTO LabelMe按SHA关联；派生AUTO shapes逐点不变，错误身份/哈希/已有人工内容/非PARTIAL响应在写出前拒绝。
+
+- [x] T077 [US8] 更新 specs/021-paired-capture-slot-pose/spec.md、plan.md、research.md、data-model.md和contracts/paired-capture.md，区分真实槽身份确认、端点语义确认、局部fixture污染和像素真值不可用 per FR-071-FR-078/SC-026
+- [x] T078 [P] [US8] 先在 tests/test_fixture_contamination_annotation.py 添加精确语义、SHA关联、AUTO shape守恒、零自动HUMAN坐标和失败分支测试 per FR-071-FR-076/SC-026-SC-029
+- [x] T079 [P] [US8] 新增 contracts/fixture-contamination-review.schema.json，固化四项回答、PARTIAL污染、UNCONFIRMED重叠状态及所有禁止升权策略 per FR-071-FR-073/FR-076/SC-026
+- [x] T080 [US8] 实现 tools/prepare_fixture_contamination_annotation.py，验证review-index/raw/AUTO SHA，Git外逐点派生LabelMe并只声明left/right污染子段标签 per FR-073-FR-075/SC-027-SC-029
+- [x] T081 [US8] 更新 specs/021-paired-capture-slot-pose/quickstart.md、completion-audit.md和evidence.md，记录145/147精确语义、Mac命令及后续支持点重叠诊断边界 per FR-077-FR-078/SC-030
+- [x] T082 运行SpecKit analyze、聚焦/全量、全部Schema、CLI、diff/媒体/绝对路径/阈值污染门，不读取sealed part-006、不重跑140张 per SC-030
+- [x] T083 提交并推送021功能分支，保持main隔离、PLC未授权，等待Mac对新工具及真实外置review bundle独立验证 per SC-030

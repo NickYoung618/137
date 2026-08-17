@@ -1,10 +1,10 @@
 # Spec 021 需求逐条完成审计
 
-**审计基线**: `021-paired-capture-slot-pose@30a70456999cc20f266d5967da302ead9b36660a`
+**审计基线**: `021-paired-capture-slot-pose@f8f957d9198161eb2a233ef45b4b90bcbdf82a83`
 
 **审计日期**: 2026-08-17
 
-**范围**: Spec 021的FR-001—FR-070、SC-001—SC-025；不使用sealed part-006，不把part-008 145/147的AUTO结果当真值。
+**范围**: Spec 021的FR-001—FR-078、SC-001—SC-030；不使用sealed part-006，不把part-008 145/147的AUTO结果当像素真值。
 
 ## 状态定义
 
@@ -20,6 +20,7 @@
 - `L`: `algorithms/slot_pose/local_second_wall.py` + `tests/test_local_second_wall.py` + diagnostic v4 Schema。
 - `S`: `tests/test_single_real_groove.py`的完整双壁、partial、85±5和PLC阻断回归。
 - `R`: `tools/prepare_slot_pose_prefill_review.py`、`tools/build_complete_groove_review_queue.py`及对应测试/Schema。
+- `C`: `tools/prepare_fixture_contamination_annotation.py`、`tests/test_fixture_contamination_annotation.py`与`fixture-contamination-review/1` Schema。
 - `E`: `evidence.md`的服务器、Mac 140 BMP、part-019人工单壁和最终跨平台门记录。
 
 ## Functional Requirements
@@ -96,6 +97,14 @@
 | FR-068 | PROVEN | R：多manifest/JSONL、sample汇总、路径安全和只读CLI已测。 |
 | FR-069 | PROVEN | R/E：先sample证据、后SHA稳定抽帧，禁止角度/置信/门限择样。 |
 | FR-070 | PROVEN | R/E：队列JSON/CSV/manifest外置，A2相对路径、SHA和三个false声明完整。 |
+| FR-071 | PROVEN | C/E：145/147均逐项保留YES/YES/YES/YES+PARTIAL，没有将“部分线受污染”改写为整线或端点真值。 |
+| FR-072 | PROVEN | C：身份、端点语义、局部污染和pixel truth分字段表达；AUTO像素不升权。 |
+| FR-073 | PROVEN | C：版本化记录按imageId、image SHA、review-index SHA关联，重复/未知身份在写出前拒绝。 |
+| FR-074 | PROVEN | C：测试逐点比较AUTO shapes，输出0个自动HUMAN shape，并拒绝已有HUMAN内容。 |
+| FR-075 | PROVEN | C：请求只允许left/right污染子段linestrip，不要求重画完整槽。 |
+| FR-076 | PROVEN | C：未标污染子段前affected wall/support/endpoint均为UNCONFIRMED，准确率与调参权限为false。 |
+| FR-077 | MISSING_EXTERNAL_EVIDENCE | 需人工污染子段后，才能对显示延长线、实际拟合支持点和端点分别做重叠诊断；当前不能推断。 |
+| FR-078 | GUARDRAIL_PROVEN | C：Schema和工具固化runtime/PLC/truth/tuning全部false，未改生产检测。 |
 
 ## Success Criteria
 
@@ -126,6 +135,11 @@
 | SC-023 | PROVEN_SYNTHETIC | S：完整双壁运行时语义无回退；真实完整双壁尚待人工裁决。 |
 | SC-024 | PROVEN | R/E：140张按sample对账，排除part-006/019，Mac/服务器均选147、145。 |
 | SC-025 | PROVEN | E：6f12585的服务器/Mac全量、39份Schema及CLI门通过，默认、0.12、0.5°、main和PLC不变。 |
+| SC-026 | PROVEN | C：精确四项回答及三项禁止升权字段有固定值测试。 |
+| SC-027 | PROVEN | C：派生前后AUTO shape和点坐标100%相同，且无自动HUMAN shape。 |
+| SC-028 | PROVEN | C：未知ID、重复ID、AUTO SHA不一致、已有HUMAN内容和非PARTIAL回答均被拒绝。 |
+| SC-029 | PROVEN | C：只有两个允许的HUMAN linestrip标签，三个像素重叠结论保持UNCONFIRMED。 |
+| SC-030 | PROVEN | C/E：见本轮最终工程门记录；算法、140图结果、门限、main和PLC未改。 |
 
 ## 被证据否定或纠正的旧理解
 
@@ -134,30 +148,38 @@
 3. **“单帧必须恢复另一壁”已被纠正**: 如果相对壁被遮挡，算法不能从不可见像素补造；正确结果是fail-closed/partial，双拍需至少一帧完整可见。
 4. **真实完整姿态链尚未证明**: 当前140张的实验结果是0/140顶层valid；它证明fail-closed和诊断可复现，不证明真实槽角精度或检出率。
 
-## 人工真值前可安全完成的工作
+## 当前人工语义后可安全完成的工作
 
 - 已完成FR-038语义澄清，无运行时变更。
 - 已完成paired manifest Schema与运行时的跨平台先验一致性。
 - 已完成本逐条审计；它明确区分“实现完成”和“真实验收完成”。
-- 除了测试/契约维护，**没有其他对齐的核心算法修改可在不看人工真值的情况下安全继续**。继续改候选、给门限调整或把145/147当正例都会造成结果泄漏。
+- 已原样记录145/147的身份、可见性、端点语义和PARTIAL污染回答。
+- 已安全生成“只标局部fixture污染子段”的外置请求工具。
+- **在污染子段坐标返回前，没有对齐的核心算法或门限修改可安全继续**。
 
 ## 当前缺失的验收证据
 
-### A. part-008 145/147的最小人工裁决
+### A. part-008 145/147已获得的最小人工裁决
 
-每张只需先对现有RAW/SIMPLIFIED回答四个不含算法分数的物理问题：
+两张都已得到下列回答：
 
 1. 两条AUTO墙是否确实属于**同一个真实方形槽口**？
 2. 该槽口是否**两侧完整可见、未遮挡**？
 3. 两个AUTO槽口端点是否位于**真实外圆槽肩交点**？
-4. 任一墙或端点是否混入**fixture shadow/occlusion边界**？
+4. 有部分标记线落在**fixture shadow**上，但不是整条：**YES + PARTIAL**。
 
-这四问可以裁决“是完整槽候选还是另一个混合边负例”，但仍不是亚像素精度真值。
+这四问确认槽身份和端点物理语义，但仍不是亚像素精度真值，也不能说整条AUTO墙干净。
 
-### B. 像素级姿态精度验收
+### B. 下一个最小人工动作：污染子段
+
+在派生LabelMe中，只用`HUMAN_fixture_shadow_overlap_on_detected_wall_left`和/或
+`HUMAN_fixture_shadow_overlap_on_detected_wall_right`沿实际受污染的部分画linestrip。不重画整个槽，
+不把未标部分解释为干净真值。返回前，受影响的墙、支持点重叠和端点重叠均为UNCONFIRMED。
+
+### C. 像素级姿态精度验收
 
 若145或147中至少一张被确认为完整可见，还需对同一图像SHA保存Git外的LabelMe真值：左/右真槽壁、两个槽口端点（或完整开放槽边界），以及能独立复核圆心的外圆可见弧/圆心真值。算法自己的拟合圆不能同时作为自己的准确度真值。
 
-### C. 双拍验收
+### D. 双拍验收
 
 至少需一个同物理件真实pair，包含capture 1/2的原图SHA、CONFIRMED nominalRotationDeg、rotationDirection、rotationToleranceDeg，并人工确认至少一拍完整无遮挡。要声称生产性能，还需多物理件、多角度的独立真值集与端到端耗时/有效率/失败率报告。

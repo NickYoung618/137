@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fixture-contamination-review.schema.json",
+  "title": "完整槽语义复核与fixture污染子段标注请求",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceReviewIndexSha256", "entries", "truthPolicy"],
+  "properties": {
+    "schemaVersion": {"const": "fixture-contamination-review/1"},
+    "sourceReviewIndexSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "imageId", "sourceImageSha256", "sourceAutoLabelmeSha256",
+          "answers", "semanticConclusions", "annotationRequest"
+        ],
+        "properties": {
+          "imageId": {"type": "string", "minLength": 1},
+          "sourceImageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "sourceAutoLabelmeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "answers": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "detectedWallsSameRealSquareGroove",
+              "grooveSidesFullyVisibleUnoccluded",
+              "endpointsOnRealOuterCircleShoulders",
+              "anyMarkedLineOnFixtureShadow",
+              "fixtureShadowContaminationExtent"
+            ],
+            "properties": {
+              "detectedWallsSameRealSquareGroove": {"const": "YES"},
+              "grooveSidesFullyVisibleUnoccluded": {"const": "YES"},
+              "endpointsOnRealOuterCircleShoulders": {"const": "YES"},
+              "anyMarkedLineOnFixtureShadow": {"const": "YES"},
+              "fixtureShadowContaminationExtent": {"const": "PARTIAL"}
+            }
+          },
+          "semanticConclusions": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "realGrooveIdentityConfirmed", "endpointSemanticsConfirmed",
+              "pixelTruthAvailable", "wholeAutoWallConfirmedClean"
+            ],
+            "properties": {
+              "realGrooveIdentityConfirmed": {"const": true},
+              "endpointSemanticsConfirmed": {"const": true},
+              "pixelTruthAvailable": {"const": false},
+              "wholeAutoWallConfirmedClean": {"const": false}
+            }
+          },
+          "annotationRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "derivedLabelmeRelativePath", "derivedLabelmeSha256",
+              "allowedHumanLabels", "requiredShapeType", "minimumHumanSegments",
+              "affectedWall", "supportPointOverlap", "endpointOverlap"
+            ],
+            "properties": {
+              "derivedLabelmeRelativePath": {
+                "type": "string",
+                "pattern": "^labelme-contamination/[^/]+\\.json$"
+              },
+              "derivedLabelmeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "allowedHumanLabels": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "uniqueItems": true,
+                "prefixItems": [
+                  {"const": "HUMAN_fixture_shadow_overlap_on_detected_wall_left"},
+                  {"const": "HUMAN_fixture_shadow_overlap_on_detected_wall_right"}
+                ],
+                "items": false
+              },
+              "requiredShapeType": {"const": "linestrip"},
+              "minimumHumanSegments": {"const": 1},
+              "affectedWall": {"const": "UNCONFIRMED"},
+              "supportPointOverlap": {"const": "UNCONFIRMED"},
+              "endpointOverlap": {"const": "UNCONFIRMED"}
+            }
+          }
+        }
+      }
+    },
+    "truthPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semanticReviewOnly", "autoLinesArePixelTruth",
+        "cleanAccuracyEvaluationAllowed", "thresholdTuningAllowed",
+        "runtimeInputAllowed", "plcInputAllowed"
+      ],
+      "properties": {
+        "semanticReviewOnly": {"const": true},
+        "autoLinesArePixelTruth": {"const": false},
+        "cleanAccuracyEvaluationAllowed": {"const": false},
+        "thresholdTuningAllowed": {"const": false},
+        "runtimeInputAllowed": {"const": false},
+        "plcInputAllowed": {"const": false}
+      }
+    }
+  }
+}

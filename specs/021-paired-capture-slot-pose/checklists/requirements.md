@@ -37,3 +37,4 @@
 - 2026-08-17 human-review correction revalidated through FR-061 and SC-020: the mislabeled line confirms one visible real-groove wall, never the opposite wall; hidden-wall synthesis is prohibited and a single visible wall remains fail-closed.
 - Original Mac LabelMe, derived semantic copy and archive SHA values were independently verified on the server outside Git; none is runtime or complete-groove truth.
 - 2026-08-17 MVP increment revalidated through FR-070 and SC-025: PARTIALLY_OBSERVED is non-authoritative evidence sufficiency only; complete-groove review selection is sample-first, SHA-stable and truth-free.
+- 2026-08-17 semantic-review increment revalidated through FR-078 and SC-030: 145/147 are identity/endpoint-confirmed but only PARTIALLY clean; AUTO geometry is not pixel truth and only the contaminated wall subsegment is requested next.

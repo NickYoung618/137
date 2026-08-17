@@ -202,3 +202,19 @@
 - 测试中出现的“trace output must be outside the Git worktree”文字是被断言覆盖的预期fail-closed拒绝路径，不是测试失败。
 - 本提交只改变manifest先验校验、Spec和测试，没有改变图像检测、任何阈值或默认开关，因此不重跑140张原始BMP是有证据支持的最小验证策略。
 - 该Mac门只证明跨平台契约和工程门通过，不改变真实数据结论。part-008 145/147仍需人工确认完整同源双壁、槽肩端点和fixture污染；确认前不得调参、声明真实准确率或合并main，PLC继续未授权。
+
+## part-008 145/147 Semantic Review and Minimal Contamination Action
+
+- 人工复核对`normal:part-008:fixed-pose:0005`（145）和`normal:part-008:fixed-pose:0007`（147）给出完全相同回答：两检测墙属于同一真实方形槽=YES；两侧完整可见无遮挡=YES；两端点位于真实外圆槽肩=YES；有部分标记线落在fixture shadow上=YES，且不是整条（PARTIAL）。
+- 这是物理身份与端点语义确认，不是像素坐标、干净mask或整条AUTO线真值。当前不知污染落在left/right哪一墙的哪一小段，也不知是否进入实际拟合支持点或端点。
+- 最小安全动作是从现有review-index按SHA派生LabelMe，不改任何AUTO shape，不自动生成HUMAN坐标；人工只在受污染局部添加left/right专用linestrip。未标段不得反推为干净真值。
+- 污染子段返回后，下一步只做诊断对账：分别检查它与审阅显示线延长、实际拟合支持点和槽口端点的重叠。在诊断结果前不调门限、不声明像素精度、不把AUTO线用于运行时或PLC。
+- 本增量不修改检测算法、实验门限、默认配置、140张回放结论、main或PLC；因此无需重跑140张。
+
+## Verification for Fixture-contamination Review Increment
+
+- SpecKit analyze对FR-001—FR-078、SC-001—SC-030和T077—T083对账；完成审计各有78/30条、无缺号/重号、无NEEDS CLARIFICATION或Constitution冲突。唯一外部缺口是污染子段像素坐标，已保留为`BLOCKED-B06`。
+- TDD红门先以缺少工具的`ModuleNotFoundError`失败；实现后新增聚焦测试3/3通过。七个021契约/运行时/审阅模块聚焦套件全部通过。
+- 服务器权威全量门：`uv run --with jsonschema python -m unittest discover -s tests -q`运行`428 tests in 140.788s`，全部通过。测试中的Git内trace输出拒绝文字是预期fail-closed分支，不是失败。
+- 全40份JSON Schema通过Draft 2020-12 meta-validation；新CLI help、Python compile和`git diff --check`通过。FR/SC自动计数与审计行数均为78/30。
+- 污染门确认未修改`algorithms/`或`config/`，无BMP/JPEG/PNG/MP4/RAR/ZIP/JSONL、无新现场绝对路径、无大于等于1 MiB变更文件。sealed part-006未读取，140张未重跑。
