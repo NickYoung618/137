@@ -268,7 +268,7 @@ MVP先完成manifest+纯匹配+UNCONFIRMED安全状态；随后增加第二拍�
 - [x] T117 [US10] 更新README.md、completion-audit.md和evidence.md，记录临时诊断数值、最终null结论和需追加至少120°同图外圆弧 per FR-116-FR-120/SC-049-SC-052
 - [x] T118 运行SpecKit analyze、聚焦/全量测试、全部Schema、CLI、diff/JSON/媒体/绝对路径/大文件污染门，不重跑140 BMP per SC-047-SC-052
 - [x] T119 核对本增量未修改检测算法、0.12等门限、默认配置、main或PLC/HMI，并更新脱敏证据 per FR-117/FR-120/SC-051
-- [ ] T120 本地提交并推送021功能分支，不合main；给出Mac独立复算命令与不需重跑140 BMP的理由 per SC-052
+- [x] T120 本地提交并推送021功能分支，不合main；给出Mac独立复算命令与不需重跑140 BMP的理由 per SC-052
 
 ### Phase 24 Dependencies
 

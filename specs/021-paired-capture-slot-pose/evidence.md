@@ -307,3 +307,4 @@
 - SpecKit最终对账为FR-001—FR-120、SC-001—SC-052、T001—T120编号连续无缺号；匹配到的`NEEDS CLARIFICATION`均是历史“无该标记”的证据句或checklist文字，不是未解问题。
 - 服务器新评估器聚焦8项全通过；权威全量门`454 tests in 122.828s`全通过。`contracts/`下44份根Schema全部通过Draft 2020-12 `check_schema`；CLI help、Python compile、JSON解析和`git diff --check`通过。
 - 污染门确认`algorithms/`和`config/`零差异，无媒体、JSONL、外置LabelMe/报告、新现场绝对路径或大文件进入Git。测试中Git内trace拒绝文字仍是预期fail-closed路径。未读sealed part-006、未重跑140 BMP、未改0.12/其他检测门限、默认配置、main或PLC/HMI。
+- 评估器实现提交`7cbf6a4`已推送到远程`021-paired-capture-slot-pose`功能分支；未推送/合并main，PLC/HMI未触碰。下一门是Mac对该候选的跨平台测试与同输入离线复算，不需重跑140 BMP。
