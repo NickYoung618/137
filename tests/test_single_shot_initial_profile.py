@@ -199,6 +199,41 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         )
         jsonschema.validate(report, schema)
 
+    def test_v5_enables_sidewall_source_family_without_mutating_v4(self) -> None:
+        from tools.prepare_single_shot_initial_config import (
+            build_initial_config_v4, build_initial_config_v5, build_profile_report_v5,
+        )
+
+        source = base_config()
+        v4 = build_initial_config_v4(source)
+        v5 = build_initial_config_v5(v4)
+        self.assertNotIn(
+            "wall_edge_family", v4["detector"]["groove_refinement"],
+        )
+        family = v5["detector"]["groove_refinement"]["wall_edge_family"]
+        self.assertEqual("groove-wall-edge-family/2", family["schema_version"])
+        self.assertEqual("shared-longitudinal-wall-family-v2", family["strategy_version"])
+        self.assertTrue(family["enabled"])
+        self.assertEqual("single-real-groove-85deg-sidewall-family-dedup-v5", v5["config_id"])
+        report = build_profile_report_v5(
+            source_config_sha256="a" * 64, output_config_sha256="b" * 64,
+        )
+        self.assertEqual("single-shot-initial-profile/5", report["schemaVersion"])
+        self.assertTrue(report["wallSourceFamilySelection"]["completeLinkRequired"])
+        self.assertTrue(report["wallSourceFamilySelection"]["fixtureSourceExclusionRequired"])
+        self.assertTrue(report["wallSourceFamilySelection"]["radialSidewallEvidenceRequired"])
+        self.assertEqual(
+            "source-consistency-adjudication/3",
+            v5["detector"]["source_consistency_adjudication"]["schema_version"],
+        )
+        self.assertFalse(report["wallSourceFamilySelection"]["manualTruthAppliedAtRuntime"])
+        schema = json.loads(
+            (ROOT / "contracts/single-shot-initial-profile-v5.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        jsonschema.Draft202012Validator(schema).validate(report)
+
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]
         examples = (

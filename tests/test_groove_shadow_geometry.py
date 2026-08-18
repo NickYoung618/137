@@ -121,6 +121,34 @@ class GrooveShadowGeometryTests(unittest.TestCase):
         self.assertFalse(lower["fixtureSourceExcluded"])
         self.assertIn("lower_fixture_false_candidate", lower["failedChecks"])
 
+    def test_radial_recovered_u_contour_between_bodies_excludes_fixture_source(self) -> None:
+        side = {
+            "lineFitStrategy": "shared-longitudinal-wall-family-v2",
+            "radialAlignmentPassed": True,
+        }
+        refinement = {
+            "status": "accepted", "startSide": side,
+            "endSide": {**side, "lineFitStrategy": "deterministic-consensus-tls-v2-preserved"},
+            "outerCircleIntersections": [{"x": 1, "y": 2}, {"x": 3, "y": 4}],
+        }
+        floor = {"schemaVersion": "groove-floor-evidence/1", "status": "accepted", "failedChecks": []}
+        result = build_fixture_source_exclusion(
+            candidate("between", 350.0, 25.0), self.verified_fixture(), refinement,
+            groove_floor_evidence=floor,
+        )
+        self.assertEqual("fixture-groove-source-exclusion/2", result["schemaVersion"])
+        self.assertEqual("verified", result["status"], result)
+        self.assertTrue(result["radialSidewallsVerified"])
+        self.assertTrue(result["fixtureSourceExcluded"])
+
+        incomplete = build_fixture_source_exclusion(
+            candidate("between", 350.0, 25.0), self.verified_fixture(),
+            {**refinement, "endSide": {**refinement["endSide"], "radialAlignmentPassed": False}},
+            groove_floor_evidence=floor,
+        )
+        self.assertEqual("rejected", incomplete["status"])
+        self.assertIn("multiple_fixture_overlap", incomplete["failedChecks"])
+
     def test_curved_five_track_floor_is_accepted_but_straight_shadow_edge_is_not(self) -> None:
         yy, xx = np.mgrid[:260, :260]
         center = (130.0, 130.0)

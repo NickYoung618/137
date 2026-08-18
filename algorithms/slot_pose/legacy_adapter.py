@@ -74,6 +74,37 @@ class LegacyAdapterError(RuntimeError):
         self.diagnostics = diagnostics or {}
 
 
+def wall_family_recovery_used(refinement: dict[str, Any]) -> bool:
+    """Recognize supported recovery evidence without coupling safety to one version."""
+    return any(
+        isinstance(refinement.get(side_name), dict)
+        and (
+            refinement[side_name].get("wallFamilyRecoveryUsed") is True
+            or refinement[side_name].get("lineFitStrategy") in {
+                "bounded-cross-radius-wall-family-v1",
+                "shared-longitudinal-wall-family-v2",
+            }
+        )
+        for side_name in ("startSide", "endSide")
+    )
+
+
+def recovery_fixture_exclusion_verified(evidence: dict[str, Any] | None) -> bool:
+    """Require the complete fixture/U-contour proof for every recovery path."""
+    return bool(
+        isinstance(evidence, dict)
+        and evidence.get("schemaVersion") in {
+            "fixture-groove-source-exclusion/1",
+            "fixture-groove-source-exclusion/2",
+        }
+        and evidence.get("status") == "verified"
+        and evidence.get("fixtureBodiesVerified") is True
+        and evidence.get("uContourComplete") is True
+        and evidence.get("fixtureSourceExcluded") is True
+        and evidence.get("candidateSelectionUsedFixedAngle") is False
+    )
+
+
 @dataclass(frozen=True)
 class LegacyPaths:
     source: Path
@@ -830,7 +861,9 @@ class LegacyAEndFaceAdapter:
                                     "schemaVersion", "status", "fixtureBodiesVerified",
                                     "uContourComplete", "fixtureSourceExcluded",
                                     "candidateSelectionUsedFixedAngle",
+                                    "radialSidewallsVerified", "radialRecoveryApplied",
                                 )
+                                if key in fixture_source_exclusion
                             }
                             if isinstance(fixture_source_exclusion, dict) else None
                         ),
@@ -867,26 +900,15 @@ class LegacyAEndFaceAdapter:
                             and source_adjudication["imagePoseReleaseAllowed"] is True
                         )
                     )
-                    wall_family_recovery_used = any(
-                        isinstance(refinement.get(side_name), dict)
-                        and refinement[side_name].get("lineFitStrategy")
-                        == "bounded-cross-radius-wall-family-v1"
-                        for side_name in ("startSide", "endSide")
-                    )
+                    wall_recovery_used = wall_family_recovery_used(refinement)
                     recovery_requires_fixture_exclusion = bool(
                         candidate.get("provisionalRecognition") is True
-                        or wall_family_recovery_used
+                        or wall_recovery_used
                     )
                     recovery_without_fixture_exclusion = (
-                        recovery_requires_fixture_exclusion and not (
-                            isinstance(output.get("fixtureSourceExclusion"), dict)
-                            and output["fixtureSourceExclusion"].get("status") == "verified"
-                            and output["fixtureSourceExclusion"].get("fixtureBodiesVerified") is True
-                            and output["fixtureSourceExclusion"].get("uContourComplete") is True
-                            and output["fixtureSourceExclusion"].get("fixtureSourceExcluded") is True
-                            and output["fixtureSourceExclusion"].get(
-                                "candidateSelectionUsedFixedAngle"
-                            ) is False
+                        recovery_requires_fixture_exclusion
+                        and not recovery_fixture_exclusion_verified(
+                            output.get("fixtureSourceExclusion")
                         )
                     )
                     if recovery_without_fixture_exclusion:

@@ -263,6 +263,23 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
             "candidateSelectionUsedFixedAngle": False,
         }
 
+    def enabled_v3_config(self) -> dict:
+        return {
+            "schema_version": "source-consistency-adjudication/3",
+            "enabled": True,
+            "strategy_version": "locked-shape-profile-fixture-gates-v3",
+            "development_only": True,
+        }
+
+    def radial_fixture_source_excluded(self) -> dict:
+        return {
+            "schemaVersion": "fixture-groove-source-exclusion/2",
+            "status": "verified", "fixtureBodiesVerified": True,
+            "uContourComplete": True, "fixtureSourceExcluded": True,
+            "candidateSelectionUsedFixedAngle": False,
+            "radialSidewallsVerified": True, "radialRecoveryApplied": True,
+        }
+
     def test_v2_uses_locked_noncontrast_checks_without_own_numeric_threshold(self) -> None:
         source = source_evidence(endpoint=0.149)
         before = copy.deepcopy(source)
@@ -302,6 +319,38 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
         malformed["metrics"]["radialCoverageDifference"] = math.nan
         result = adjudicate_source_consistency(malformed, self.enabled_v2_config())
         self.assertEqual("NOT_EVALUATED", result["decision"])
+
+    def test_v3_allows_only_photometric_asymmetry_with_radial_u_contour_proof(self) -> None:
+        source = source_evidence(
+            endpoint=0.139,
+            failed=["edge_contrast_asymmetry", "edge_gradient_asymmetry"],
+        )
+        accepted = adjudicate_source_consistency(
+            source, self.enabled_v3_config(),
+            fixture_source_evidence=self.radial_fixture_source_excluded(),
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", accepted["decision"], accepted)
+        self.assertTrue(accepted["imagePoseReleaseAllowed"])
+        without_geometry = adjudicate_source_consistency(
+            source, self.enabled_v3_config(), fixture_source_evidence=None,
+        )
+        self.assertEqual("REJECTED", without_geometry["decision"])
+        structural = source_evidence(
+            endpoint=0.2,
+            failed=["edge_contrast_asymmetry", "endpoint_structure_inconsistent"],
+        )
+        rejected = adjudicate_source_consistency(
+            structural, self.enabled_v3_config(),
+            fixture_source_evidence=self.radial_fixture_source_excluded(),
+        )
+        self.assertEqual("REJECTED", rejected["decision"])
+        self.assertIn("photometric_only_failure", rejected["failedChecks"])
+
+        legacy_contrast_only = adjudicate_source_consistency(
+            source_evidence(endpoint=0.02), self.enabled_v3_config(),
+            fixture_source_evidence=self.fixture_source_excluded(),
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", legacy_contrast_only["decision"])
 
 
 if __name__ == "__main__":

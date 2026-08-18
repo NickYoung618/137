@@ -14,6 +14,7 @@ from algorithms.slot_pose.angular_profile import circular_distance_deg, wrap_360
 SCHEMA_VERSION = "slot-groove-subpixel-opening/1"
 SCHEMA_VERSION_V2 = "slot-groove-subpixel-opening/2"
 SCHEMA_VERSION_V3 = "slot-groove-subpixel-opening/3"
+SCHEMA_VERSION_V4 = "slot-groove-subpixel-opening/4"
 THRESHOLD_VERSION_V1 = "groove-sidewall-subpixel-v1"
 THRESHOLD_VERSION_V2 = "groove-sidewall-subpixel-v2"
 DEFAULT_GROOVE_REFINEMENT_CONFIG: dict[str, Any] = {
@@ -45,6 +46,22 @@ DEFAULT_WALL_EDGE_FAMILY_CONFIG: dict[str, Any] = {
     "max_peaks_per_row": 4,
     "min_peak_separation_px": 1.5,
     "max_hypotheses": 64,
+}
+WALL_EDGE_FAMILY_V2_CONFIG: dict[str, Any] = {
+    "schema_version": "groove-wall-edge-family/2",
+    "enabled": False,
+    "strategy_version": "shared-longitudinal-wall-family-v2",
+    "max_peaks_per_row": 4,
+    "min_peak_separation_px": 1.5,
+    "max_hypotheses": 64,
+    "min_shared_support_count": 16,
+    "min_shared_span_ratio": 0.7,
+    "max_direction_delta_deg": 0.5,
+    "max_shared_separation_p95_px": 6.0,
+    "max_shared_separation_px": 6.0,
+    "max_endpoint_chord_distance_px": 6.0,
+    "max_endpoint_angle_delta_deg": 0.25,
+    "max_radial_alignment_delta_deg": 8.0,
 }
 
 
@@ -112,14 +129,26 @@ def validate_groove_refinement_config(config: dict[str, Any]) -> None:
         family = config["wall_edge_family"]
         if not isinstance(family, dict):
             raise ValueError("groove_refinement.wall_edge_family must be an object")
-        merged_family = {**DEFAULT_WALL_EDGE_FAMILY_CONFIG, **family}
-        unknown = sorted(set(merged_family) - set(DEFAULT_WALL_EDGE_FAMILY_CONFIG))
+        schema = family.get("schema_version", DEFAULT_WALL_EDGE_FAMILY_CONFIG["schema_version"])
+        strategy = family.get("strategy_version", DEFAULT_WALL_EDGE_FAMILY_CONFIG["strategy_version"])
+        pair = (schema, strategy)
+        allowed = {
+            (
+                DEFAULT_WALL_EDGE_FAMILY_CONFIG["schema_version"],
+                DEFAULT_WALL_EDGE_FAMILY_CONFIG["strategy_version"],
+            ): DEFAULT_WALL_EDGE_FAMILY_CONFIG,
+            (
+                WALL_EDGE_FAMILY_V2_CONFIG["schema_version"],
+                WALL_EDGE_FAMILY_V2_CONFIG["strategy_version"],
+            ): WALL_EDGE_FAMILY_V2_CONFIG,
+        }
+        if pair not in allowed:
+            raise ValueError("groove_refinement.wall_edge_family schema/strategy pair is unsupported")
+        defaults = allowed[pair]
+        merged_family = {**defaults, **family}
+        unknown = sorted(set(merged_family) - set(defaults))
         if unknown:
             raise ValueError(f"groove_refinement.wall_edge_family has unsupported fields: {unknown}")
-        if merged_family["schema_version"] != "groove-wall-edge-family/1":
-            raise ValueError("groove_refinement.wall_edge_family.schema_version is unsupported")
-        if merged_family["strategy_version"] != "bounded-cross-radius-wall-family-v1":
-            raise ValueError("groove_refinement.wall_edge_family.strategy_version is unsupported")
         if not isinstance(merged_family["enabled"], bool):
             raise ValueError("groove_refinement.wall_edge_family.enabled must be boolean")
         for key, low, high in (("max_peaks_per_row", 2, 8), ("max_hypotheses", 2, 128)):
@@ -132,6 +161,39 @@ def validate_groove_refinement_config(config: dict[str, Any]) -> None:
             or not math.isfinite(float(separation)) or float(separation) <= 0.0
         ):
             raise ValueError("groove_refinement.wall_edge_family.min_peak_separation_px must be positive")
+        if defaults is WALL_EDGE_FAMILY_V2_CONFIG:
+            for key in ("min_shared_support_count",):
+                value = merged_family[key]
+                if isinstance(value, bool) or not isinstance(value, int) or not 3 <= value <= 128:
+                    raise ValueError(f"groove_refinement.wall_edge_family.{key} must be in [3,128]")
+            ratio = merged_family["min_shared_span_ratio"]
+            if (
+                isinstance(ratio, bool) or not isinstance(ratio, (int, float))
+                or not math.isfinite(float(ratio)) or not 0.0 < float(ratio) <= 1.0
+            ):
+                raise ValueError("groove_refinement.wall_edge_family.min_shared_span_ratio must be in (0,1]")
+            for key in (
+                "max_direction_delta_deg", "max_shared_separation_p95_px",
+                "max_shared_separation_px", "max_endpoint_chord_distance_px",
+                "max_endpoint_angle_delta_deg", "max_radial_alignment_delta_deg",
+            ):
+                value = merged_family[key]
+                if (
+                    isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value)) or float(value) <= 0.0
+                ):
+                    raise ValueError(f"groove_refinement.wall_edge_family.{key} must be positive and finite")
+            if float(merged_family["max_direction_delta_deg"]) > 45.0:
+                raise ValueError("groove_refinement.wall_edge_family.max_direction_delta_deg must be <=45")
+            if float(merged_family["max_endpoint_angle_delta_deg"]) > 45.0:
+                raise ValueError("groove_refinement.wall_edge_family.max_endpoint_angle_delta_deg must be <=45")
+            if float(merged_family["max_radial_alignment_delta_deg"]) > 45.0:
+                raise ValueError("groove_refinement.wall_edge_family.max_radial_alignment_delta_deg must be <=45")
+            if (
+                float(merged_family["max_shared_separation_p95_px"])
+                > float(merged_family["max_shared_separation_px"])
+            ):
+                raise ValueError("groove_refinement.wall_edge_family separation bounds must be ordered")
         config["wall_edge_family"] = merged_family
 
 
@@ -212,6 +274,22 @@ def _line_projection_coverage(points: np.ndarray, mask: np.ndarray, line: tuple[
 
 def _circular_delta_abs(left: float, right: float) -> float:
     return abs((float(left) - float(right) + 180.0) % 360.0 - 180.0)
+
+
+def _radial_line_alignment_deg(
+    line: tuple[float, float, float], intersection: tuple[float, float],
+    center: tuple[float, float],
+) -> float:
+    direction = np.asarray((-float(line[1]), float(line[0])), dtype=float)
+    radial = np.asarray(intersection, dtype=float) - np.asarray(center, dtype=float)
+    direction_norm = float(np.linalg.norm(direction))
+    radial_norm = float(np.linalg.norm(radial))
+    if direction_norm <= 1e-9 or radial_norm <= 1e-9:
+        return math.inf
+    cosine = float(np.clip(abs(np.dot(
+        direction / direction_norm, radial / radial_norm,
+    )), 0.0, 1.0))
+    return math.degrees(math.acos(cosine))
 
 
 def _select_consensus_line(
@@ -392,6 +470,238 @@ def _select_consensus_line(
     }
 
 
+def _hypothesis_rank(item: dict[str, Any]) -> tuple[Any, ...]:
+    line = tuple(round(float(value), 12) for value in item["line"])
+    signature = tuple(sorted(item["candidateSignature"]))
+    return (
+        -int(item["supportCount"]), float(item["residualP95Px"]),
+        -float(item["longitudinalCoverage"]), float(item["intersectionAngleDeg"]),
+        line, signature,
+    )
+
+
+def _exact_hypothesis_dedup(hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    exact: dict[frozenset[tuple[int, int, int]], dict[str, Any]] = {}
+    for item in sorted(hypotheses, key=_hypothesis_rank):
+        signature = item["candidateSignature"]
+        if signature not in exact:
+            exact[signature] = item
+    ordered = sorted(exact.values(), key=_hypothesis_rank)
+    for index, item in enumerate(ordered, start=1):
+        item["hypothesisId"] = f"wall-hypothesis-{index:03d}"
+    return ordered
+
+
+def _wall_hypothesis_equivalence(
+    left: dict[str, Any], right: dict[str, Any], *, center: tuple[float, float],
+    config: dict[str, Any], pixel_scale: float,
+) -> dict[str, Any]:
+    base = {
+        "leftHypothesisId": left["hypothesisId"],
+        "rightHypothesisId": right["hypothesisId"],
+        "finiteGeometry": False, "equivalent": False, "failedChecks": [],
+    }
+    try:
+        line_left = np.asarray(left["line"], dtype=float)
+        line_right = np.asarray(right["line"], dtype=float)
+        if line_left.shape != (3,) or line_right.shape != (3,):
+            raise ValueError("invalid line")
+        left_points = np.asarray([item[1]["point"] for item in left["selected"]], dtype=float)
+        right_points = np.asarray([item[1]["point"] for item in right["selected"]], dtype=float)
+        intersections = np.asarray([left["intersection"], right["intersection"]], dtype=float)
+        if (
+            left_points.ndim != 2 or right_points.ndim != 2
+            or left_points.shape[1:] != (2,) or right_points.shape[1:] != (2,)
+            or not np.isfinite(line_left).all() or not np.isfinite(line_right).all()
+            or not np.isfinite(left_points).all() or not np.isfinite(right_points).all()
+            or not np.isfinite(intersections).all()
+        ):
+            raise ValueError("nonfinite geometry")
+        direction_left = np.asarray((-line_left[1], line_left[0]), dtype=float)
+        direction_right = np.asarray((-line_right[1], line_right[0]), dtype=float)
+        direction_left /= np.linalg.norm(direction_left)
+        direction_right /= np.linalg.norm(direction_right)
+        if float(np.dot(direction_left, direction_right)) < 0.0:
+            direction_right = -direction_right
+        dot = float(np.clip(np.dot(direction_left, direction_right), -1.0, 1.0))
+        direction_delta = math.degrees(math.acos(dot))
+        common = direction_left + direction_right
+        common_norm = float(np.linalg.norm(common))
+        if not math.isfinite(common_norm) or common_norm <= 1e-9:
+            raise ArithmeticError("degenerate common frame")
+        longitudinal = common / common_norm
+        transverse = np.asarray((-longitudinal[1], longitudinal[0]), dtype=float)
+        origin = np.asarray(center, dtype=float)
+        left_projection = (left_points - origin) @ longitudinal
+        right_projection = (right_points - origin) @ longitudinal
+        left_range = (float(np.min(left_projection)), float(np.max(left_projection)))
+        right_range = (float(np.min(right_projection)), float(np.max(right_projection)))
+        shared_start = max(left_range[0], right_range[0])
+        shared_end = min(left_range[1], right_range[1])
+        shared_span = shared_end - shared_start
+        shorter_span = min(left_range[1] - left_range[0], right_range[1] - right_range[0])
+        if not all(math.isfinite(value) for value in (*left_range, *right_range, shared_span, shorter_span)):
+            raise ValueError("nonfinite projection")
+        shared_ratio = shared_span / shorter_span if shorter_span > 1e-9 and shared_span > 0.0 else 0.0
+        left_shared = int(np.count_nonzero((left_projection >= shared_start) & (left_projection <= shared_end)))
+        right_shared = int(np.count_nonzero((right_projection >= shared_start) & (right_projection <= shared_end)))
+
+        def transverse_coordinate(line: np.ndarray, position: float) -> float:
+            denominator = float(line[0] * transverse[0] + line[1] * transverse[1])
+            if abs(denominator) <= 1e-9:
+                raise ArithmeticError("degenerate common frame")
+            point = origin + position * longitudinal
+            return -float(line[0] * point[0] + line[1] * point[1] + line[2]) / denominator
+
+        shared_positions = [shared_start, (shared_start + shared_end) * 0.5, shared_end]
+        if shared_span > 0.0:
+            shared_positions.extend(float(value) for value in left_projection if shared_start <= value <= shared_end)
+            shared_positions.extend(float(value) for value in right_projection if shared_start <= value <= shared_end)
+        signed = np.asarray([
+            transverse_coordinate(line_left, position) - transverse_coordinate(line_right, position)
+            for position in shared_positions
+        ], dtype=float)
+        if not np.isfinite(signed).all():
+            raise ValueError("nonfinite separation")
+        absolute = np.abs(signed)
+        separation_p95 = _small_percentile_95(absolute)
+        separation_max = float(np.max(absolute))
+        endpoint_chord = float(np.linalg.norm(intersections[0] - intersections[1]))
+        endpoint_angle = _circular_delta_abs(
+            float(left["intersectionAngleDeg"]), float(right["intersectionAngleDeg"]),
+        )
+    except ArithmeticError:
+        return {**base, "failedChecks": ["degenerate_common_frame"]}
+    except (ValueError, TypeError, ZeroDivisionError, np.linalg.LinAlgError):
+        return {**base, "failedChecks": ["nonfinite_equivalence_geometry"]}
+
+    thresholds = {
+        "minSharedSupportCount": int(config["min_shared_support_count"]),
+        "minSharedSpanRatio": float(config["min_shared_span_ratio"]),
+        "maxDirectionDeltaDeg": float(config["max_direction_delta_deg"]),
+        "maxSharedSeparationP95Px": float(config["max_shared_separation_p95_px"]) * pixel_scale,
+        "maxSharedSeparationPx": float(config["max_shared_separation_px"]) * pixel_scale,
+        "maxEndpointChordDistancePx": float(config["max_endpoint_chord_distance_px"]) * pixel_scale,
+        "maxEndpointAngleDeltaDeg": float(config["max_endpoint_angle_delta_deg"]),
+    }
+    failed: list[str] = []
+    if left_shared < thresholds["minSharedSupportCount"] or right_shared < thresholds["minSharedSupportCount"]:
+        failed.append("insufficient_shared_support")
+    if shared_ratio < thresholds["minSharedSpanRatio"]:
+        failed.append("insufficient_shared_span")
+    if direction_delta > thresholds["maxDirectionDeltaDeg"]:
+        failed.append("direction_mismatch")
+    if (
+        separation_p95 > thresholds["maxSharedSeparationP95Px"]
+        or separation_max > thresholds["maxSharedSeparationPx"]
+    ):
+        failed.append("shared_span_separation")
+    if endpoint_chord > thresholds["maxEndpointChordDistancePx"]:
+        failed.append("outer_endpoint_distance")
+    if endpoint_angle > thresholds["maxEndpointAngleDeltaDeg"]:
+        failed.append("outer_endpoint_angle")
+    return {
+        **base, "finiteGeometry": True,
+        "sharedRangePx": [shared_start, shared_end], "sharedSpanPx": shared_span,
+        "sharedSpanRatioOfShorter": shared_ratio,
+        "leftSharedSupportCount": left_shared, "rightSharedSupportCount": right_shared,
+        "directionDeltaDeg": direction_delta,
+        "signedSeparationStartPx": float(signed[0]),
+        "signedSeparationMidPx": float(signed[1]),
+        "signedSeparationEndPx": float(signed[2]),
+        "separationP95Px": separation_p95, "separationMaxPx": separation_max,
+        "endpointChordDistancePx": endpoint_chord, "endpointAngleDeltaDeg": endpoint_angle,
+        "thresholds": thresholds, "equivalent": not failed, "failedChecks": failed,
+    }
+
+
+def _group_wall_source_families(
+    hypotheses: list[dict[str, Any]], *, center: tuple[float, float],
+    config: dict[str, Any], pixel_scale: float,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    unique = _exact_hypothesis_dedup(hypotheses)
+    comparisons: list[dict[str, Any]] = []
+    equivalent: dict[tuple[str, str], bool] = {}
+    for left_index, left in enumerate(unique):
+        for right in unique[left_index + 1:]:
+            comparison = _wall_hypothesis_equivalence(
+                left, right, center=center, config=config, pixel_scale=pixel_scale,
+            )
+            comparisons.append(comparison)
+            equivalent[(left["hypothesisId"], right["hypothesisId"])] = bool(comparison["equivalent"])
+    families: list[list[dict[str, Any]]] = [[item] for item in unique]
+    while True:
+        mergeable: list[tuple[tuple[str, ...], int, int]] = []
+        for left_index, left_family in enumerate(families):
+            for right_index in range(left_index + 1, len(families)):
+                right_family = families[right_index]
+                if all(
+                    equivalent.get(tuple(sorted((left["hypothesisId"], right["hypothesisId"]))), False)
+                    for left in left_family for right in right_family
+                ):
+                    ids = tuple(sorted(
+                        item["hypothesisId"] for item in (*left_family, *right_family)
+                    ))
+                    mergeable.append((ids, left_index, right_index))
+        if not mergeable:
+            break
+        _, left_index, right_index = min(mergeable)
+        merged = sorted((*families[left_index], *families[right_index]), key=_hypothesis_rank)
+        families = [
+            family for index, family in enumerate(families)
+            if index not in {left_index, right_index}
+        ] + [merged]
+        families.sort(key=lambda family: tuple(item["hypothesisId"] for item in family))
+    representatives: list[dict[str, Any]] = []
+    eligible_representatives: list[dict[str, Any]] = []
+    summaries: list[dict[str, Any]] = []
+    for index, family in enumerate(sorted(families, key=lambda items: _hypothesis_rank(min(items, key=_hypothesis_rank))), start=1):
+        representative = min(family, key=_hypothesis_rank)
+        family_id = f"wall-source-family-{index:03d}"
+        representatives.append(representative)
+        alignment_delta = _radial_line_alignment_deg(
+            representative["line"], representative["intersection"], center,
+        )
+        alignment_passed = bool(
+            math.isfinite(alignment_delta)
+            and alignment_delta <= float(config["max_radial_alignment_delta_deg"])
+        )
+        if alignment_passed:
+            eligible_representatives.append(representative)
+        summaries.append({
+            "familyId": family_id,
+            "memberHypothesisIds": sorted(item["hypothesisId"] for item in family),
+            "representativeHypothesisId": representative["hypothesisId"],
+            "effectiveSupportCount": int(representative["supportCount"]),
+            "residualP95Px": float(representative["residualP95Px"]),
+            "longitudinalCoverage": float(representative["longitudinalCoverage"]),
+            "intersectionAngleDeg": float(representative["intersectionAngleDeg"]),
+            "canonicalLine": {
+                "a": float(representative["line"][0]),
+                "b": float(representative["line"][1]),
+                "c": float(representative["line"][2]),
+            },
+            "radialAlignmentDeltaDeg": alignment_delta if math.isfinite(alignment_delta) else None,
+            "radialAlignmentThresholdDeg": float(config["max_radial_alignment_delta_deg"]),
+            "radialAlignmentPassed": alignment_passed,
+        })
+    representatives.sort(key=_hypothesis_rank)
+    return representatives, {
+        "wallFamilySchemaVersion": "groove-wall-source-family-diagnostic/1",
+        "wallFamilyStrategyVersion": "shared-longitudinal-wall-family-v2",
+        "rawHypothesisCount": len(unique),
+        "physicalSourceFamilyCount": len(representatives),
+        "eligiblePhysicalSourceFamilyCount": len(eligible_representatives),
+        "sourceFamilyComparisons": comparisons,
+        "sourceFamilySummaries": summaries,
+        "wallFamilyRecoveryUsed": True,
+        "_sourceFamilyRepresentatives": representatives,
+        "_eligibleSourceFamilyRepresentatives": sorted(
+            eligible_representatives, key=_hypothesis_rank,
+        ),
+    }
+
+
 def _select_wall_family(
     candidate_rows: list[list[dict[str, Any]]], *, minimum: int,
     center: tuple[float, float], outer_radius: float, coarse_angle_deg: float,
@@ -555,26 +865,80 @@ def _select_wall_family(
         -item["supportCount"], item["residualP95Px"],
         -item["longitudinalCoverage"], item["intersectionAngleDeg"],
     ))
-    distinct: list[dict[str, Any]] = []
-    merge_deg = float(config["line_consensus_model_merge_deg"])
-    for hypothesis in hypotheses:
-        if any(
-            (
-                _circular_delta_abs(
-                    hypothesis["intersectionAngleDeg"], existing["intersectionAngleDeg"],
-                ) <= merge_deg
-                or (
-                    len(hypothesis["candidateSignature"] & existing["candidateSignature"])
-                    / max(1, len(hypothesis["candidateSignature"] | existing["candidateSignature"]))
-                    >= float(config["line_consensus_min_inlier_ratio"])
+    family_selection_started_ns = time.perf_counter_ns()
+    def legacy_distinct_hypotheses() -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        merge_deg = float(config["line_consensus_model_merge_deg"])
+        for hypothesis in hypotheses:
+            if any(
+                (
+                    _circular_delta_abs(
+                        hypothesis["intersectionAngleDeg"], existing["intersectionAngleDeg"],
+                    ) <= merge_deg
+                    or (
+                        len(hypothesis["candidateSignature"] & existing["candidateSignature"])
+                        / max(1, len(hypothesis["candidateSignature"] | existing["candidateSignature"]))
+                        >= float(config["line_consensus_min_inlier_ratio"])
+                    )
+                )
+                for existing in output
+            ):
+                continue
+            output.append(hypothesis)
+        return output
+
+    def has_unique_best(items: list[dict[str, Any]]) -> bool:
+        if not items:
+            return False
+        best_item = items[0]
+        minimum_margin = int(config["line_consensus_min_support_margin"])
+        close = [
+            item for item in items[1:]
+            if best_item["supportCount"] - item["supportCount"] < minimum_margin
+        ]
+        return not any(
+            not (
+                best_item["supportCount"] >= item["supportCount"]
+                and best_item["residualP95Px"] <= item["residualP95Px"]
+                and best_item["longitudinalCoverage"] >= item["longitudinalCoverage"]
+                and (
+                    best_item["supportCount"] > item["supportCount"]
+                    or best_item["residualP95Px"] < item["residualP95Px"]
+                    or best_item["longitudinalCoverage"] > item["longitudinalCoverage"]
                 )
             )
-            for existing in distinct
-        ):
-            continue
-        distinct.append(hypothesis)
+            for item in close
+        )
+
+    family_config = config.get("wall_edge_family", DEFAULT_WALL_EDGE_FAMILY_CONFIG)
+    source_diagnostic: dict[str, Any] = {}
+    if family_config.get("strategy_version") == "shared-longitudinal-wall-family-v2":
+        legacy_distinct = legacy_distinct_hypotheses()
+        _, source_diagnostic = _group_wall_source_families(
+            hypotheses, center=center, config=family_config, pixel_scale=pixel_scale,
+        )
+        distinct = source_diagnostic.pop("_eligibleSourceFamilyRepresentatives")
+        source_representatives = source_diagnostic.pop("_sourceFamilyRepresentatives", [])
+        source_diagnostic["radialEligibilityFallbackApplied"] = False
+        source_diagnostic["legacyAcceptedRepresentativePreserved"] = False
+        if has_unique_best(legacy_distinct):
+            distinct = legacy_distinct
+            source_diagnostic["legacyAcceptedRepresentativePreserved"] = True
+        elif not distinct and source_representatives:
+            distinct = legacy_distinct
+            source_diagnostic["radialEligibilityFallbackApplied"] = True
+    else:
+        distinct = legacy_distinct_hypotheses()
     if not distinct:
-        return {**base, "hypothesisCount": 0}
+        return {
+            **base, **source_diagnostic, "hypothesisCount": 0,
+            **({
+                "selectedPhysicalSourceFamilyId": None,
+                "wallFamilySelectionElapsedMs": (
+                    time.perf_counter_ns() - family_selection_started_ns
+                ) / 1e6,
+            } if source_diagnostic else {}),
+        }
     best = distinct[0]
     second = distinct[1] if len(distinct) > 1 else None
     margin = None if second is None else best["supportCount"] - second["supportCount"]
@@ -597,7 +961,7 @@ def _select_wall_family(
         )
     ]
     common = {
-        **base, "hypothesisCount": len(distinct),
+        **base, **source_diagnostic, "hypothesisCount": len(distinct),
         "familySummaries": [{
             "familyId": f"wall-family-{index:03d}",
             "supportCount": item["supportCount"],
@@ -609,6 +973,21 @@ def _select_wall_family(
         "secondSupportCount": None if second is None else second["supportCount"],
         "supportMargin": margin,
     }
+    if source_diagnostic:
+        selected_summary = next(
+            (
+                item for item in source_diagnostic["sourceFamilySummaries"]
+                if best["hypothesisId"] in item["memberHypothesisIds"]
+            ), None,
+        )
+        common.update({
+            "selectedPhysicalSourceFamilyId": (
+                None if selected_summary is None else selected_summary["familyId"]
+            ),
+            "wallFamilySelectionElapsedMs": (
+                time.perf_counter_ns() - family_selection_started_ns
+            ) / 1e6,
+        })
     if nondominated_close:
         return {**common, "status": "ambiguous", "failedCheck": "wall_family_ambiguous"}
     return {
@@ -854,9 +1233,14 @@ def _circle_intersection(
 
 def _empty_result(candidate_id: str | None, config: dict[str, Any], failures: list[str]) -> dict[str, Any]:
     family_enabled = bool(config.get("wall_edge_family", {}).get("enabled", False))
+    family_v2 = bool(
+        family_enabled
+        and config.get("wall_edge_family", {}).get("strategy_version")
+        == "shared-longitudinal-wall-family-v2"
+    )
     return {
         "schemaVersion": (
-            SCHEMA_VERSION_V3 if family_enabled else (
+            SCHEMA_VERSION_V4 if family_v2 else SCHEMA_VERSION_V3 if family_enabled else (
                 SCHEMA_VERSION_V2
                 if config["threshold_version"] == THRESHOLD_VERSION_V2 else SCHEMA_VERSION
             )
@@ -939,6 +1323,7 @@ def refine_groove_opening(
     for name, coarse, polarity in (("startSide", start, "falling"), ("endSide", end, "rising")):
         family_enabled = bool(merged.get("wall_edge_family", {}).get("enabled", False))
         if family_enabled:
+            wall_family_strategy = str(merged["wall_edge_family"]["strategy_version"])
             candidate_rows = _side_candidate_rows(
                 array, center, radii, coarse, polarity,
                 bilinear_sample, parabolic_peak, merged,
@@ -978,7 +1363,8 @@ def refine_groove_opening(
             if not original_accepted and decision["status"] != "accepted":
                 failures.append(f"{name}_{decision['failedCheck']}")
                 sides[name] = {
-                    "lineFitStrategy": "bounded-cross-radius-wall-family-v1",
+                    "lineFitStrategy": wall_family_strategy,
+                    "wallFamilyRecoveryUsed": True,
                     "sampledPointCount": int(len(radii)),
                     "candidatePointCount": int(decision["candidateCount"]),
                     "wallFamilyStatus": decision["status"],
@@ -986,6 +1372,18 @@ def refine_groove_opening(
                     "wallFamilySeedCount": decision["seedCount"],
                     "wallFamilyHypothesisCount": decision["hypothesisCount"],
                     "wallFamilySummaries": decision["familySummaries"],
+                    **{
+                        key: decision[key] for key in (
+                            "wallFamilySchemaVersion", "wallFamilyStrategyVersion",
+                            "rawHypothesisCount", "physicalSourceFamilyCount",
+                            "eligiblePhysicalSourceFamilyCount",
+                            "selectedPhysicalSourceFamilyId",
+                            "wallFamilySelectionElapsedMs",
+                            "radialEligibilityFallbackApplied",
+                            "legacyAcceptedRepresentativePreserved",
+                            "sourceFamilyComparisons", "sourceFamilySummaries",
+                        ) if key in decision
+                    },
                     "bestSupportCount": decision["bestSupportCount"],
                     "secondSupportCount": decision["secondSupportCount"],
                     "supportMargin": decision["supportMargin"],
@@ -1012,7 +1410,7 @@ def refine_groove_opening(
                 effective_intersection = decision["intersection"]
                 effective_angle = decision["intersectionAngleDeg"]
                 effective_coverage = decision["longitudinalCoverage"]
-                effective_strategy = "bounded-cross-radius-wall-family-v1"
+                effective_strategy = wall_family_strategy
             points = [item["point"] for item in selected]
             contrasts = [float(item["contrast"]) for item in selected]
             gradients = [float(item["gradient"]) for item in selected]
@@ -1027,8 +1425,13 @@ def refine_groove_opening(
             residuals = effective_residuals
             intersection = effective_intersection
             angle = effective_angle
+            radial_alignment = _radial_line_alignment_deg(line, intersection, center)
+            radial_threshold = float(
+                merged["wall_edge_family"].get("max_radial_alignment_delta_deg", 8.0)
+            )
             sides[name] = {
                 "lineFitStrategy": effective_strategy,
+                "wallFamilyRecoveryUsed": not original_accepted,
                 "sampledPointCount": int(len(radii)),
                 "candidatePointCount": int(decision["candidateCount"]),
                 "supportPointCount": len(points),
@@ -1041,9 +1444,29 @@ def refine_groove_opening(
                 "wallFamilySeedCount": decision["seedCount"],
                 "wallFamilyHypothesisCount": decision["hypothesisCount"],
                 "wallFamilySummaries": decision["familySummaries"],
+                **{
+                    key: decision[key] for key in (
+                        "wallFamilySchemaVersion", "wallFamilyStrategyVersion",
+                        "rawHypothesisCount", "physicalSourceFamilyCount",
+                        "eligiblePhysicalSourceFamilyCount",
+                        "selectedPhysicalSourceFamilyId",
+                        "wallFamilySelectionElapsedMs",
+                        "radialEligibilityFallbackApplied",
+                        "legacyAcceptedRepresentativePreserved",
+                        "sourceFamilyComparisons", "sourceFamilySummaries",
+                    ) if key in decision
+                },
                 "bestSupportCount": decision["bestSupportCount"],
                 "secondSupportCount": decision["secondSupportCount"],
                 "supportMargin": decision["supportMargin"],
+                "radialAlignmentDeltaDeg": (
+                    radial_alignment if math.isfinite(radial_alignment) else None
+                ),
+                "radialAlignmentThresholdDeg": radial_threshold,
+                "radialAlignmentPassed": bool(
+                    math.isfinite(radial_alignment)
+                    and radial_alignment <= radial_threshold
+                ),
                 "lineLongitudinalCoverage": effective_coverage,
                 "originalStrongestEdgeDecision": original_summary,
                 "line": {"a": line[0], "b": line[1], "c": line[2]},
@@ -1180,7 +1603,11 @@ def refine_groove_opening(
     ]
     return finish({
         "schemaVersion": (
-            SCHEMA_VERSION_V3 if bool(
+            SCHEMA_VERSION_V4 if bool(
+                merged.get("wall_edge_family", {}).get("enabled", False)
+                and merged.get("wall_edge_family", {}).get("strategy_version")
+                == "shared-longitudinal-wall-family-v2"
+            ) else SCHEMA_VERSION_V3 if bool(
                 merged.get("wall_edge_family", {}).get("enabled", False)
             ) else (
                 SCHEMA_VERSION_V2

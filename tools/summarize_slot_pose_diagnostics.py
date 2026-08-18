@@ -213,6 +213,13 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         side for refinement in refinements for side_name in ("startSide", "endSide")
         if isinstance((side := refinement.get(side_name)), dict)
     ]
+    wall_family_strategy_counts = Counter(
+        str(side.get("wallFamilyStrategyVersion") or side.get("lineFitStrategy") or "unknown")
+        for side in sidewalls
+    )
+    wall_family_status_counts = Counter(
+        str(side.get("wallFamilyStatus") or "not_available") for side in sidewalls
+    )
     def side_values(key: str, nested: str | None = None) -> list[float]:
         output: list[float] = []
         for side in sidewalls:
@@ -351,6 +358,17 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
             "lineLongitudinalCoverage": distribution(side_values("lineLongitudinalCoverage")),
             "lineResidualP95Px": distribution(side_values("p95", "lineResidualPx")),
             "supportMargin": distribution(side_values("supportMargin")),
+            "rawHypothesisCount": distribution(side_values("rawHypothesisCount")),
+            "physicalSourceFamilyCount": distribution(side_values("physicalSourceFamilyCount")),
+            "eligiblePhysicalSourceFamilyCount": distribution(
+                side_values("eligiblePhysicalSourceFamilyCount")
+            ),
+            "radialAlignmentDeltaDeg": distribution(side_values("radialAlignmentDeltaDeg")),
+            "wallFamilySelectionElapsedMs": distribution(
+                side_values("wallFamilySelectionElapsedMs")
+            ),
+            "wallFamilyStrategyCounts": dict(sorted(wall_family_strategy_counts.items())),
+            "wallFamilyStatusCounts": dict(sorted(wall_family_status_counts.items())),
         },
         "yDownDatumAngleAvailable": {
             "count": len(y_down_angles), "rate": len(y_down_angles) / total if total else 0.0,

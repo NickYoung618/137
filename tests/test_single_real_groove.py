@@ -919,6 +919,79 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertIsNone(payload["result"]["plcCommand"])
         self.assertFalse(payload["result"]["plcExecutionAuthoritative"])
 
+    def test_v2_wall_recovery_and_v3_photometric_adjudication_require_verified_radial_u_contour(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["source_consistency_adjudication"] = {
+            "schema_version": "source-consistency-adjudication/3",
+            "enabled": True,
+            "strategy_version": "locked-shape-profile-fixture-gates-v3",
+            "development_only": True,
+        }
+        path = self.root / "single-v3-radial-u-contour-required.json"
+        write_json(path, config)
+        candidate = accepted_candidate("candidate-visible", 300.0)
+        recognition = {
+            "status": "accepted", "rawCandidateCount": 1, "acceptedCount": 1,
+            "acceptedCandidateIds": [candidate["candidateId"]],
+            "provisionalCandidateIds": [], "effectiveCandidateIds": [candidate["candidateId"]],
+            "assessments": [],
+        }
+        refinement = {
+            "schemaVersion": "slot-groove-subpixel-opening/4", "status": "accepted",
+            "openingEndpointProfileDeg": [295.0, 305.0],
+            "openingMidpointProfileDeg": 300.0,
+            "startSide": {
+                "wallFamilyRecoveryUsed": True,
+                "lineFitStrategy": "shared-longitudinal-wall-family-v2",
+                "radialAlignmentPassed": True,
+            },
+            "endSide": {"wallFamilyRecoveryUsed": False, "radialAlignmentPassed": True},
+            "outerCircleIntersections": [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}],
+            "failedChecks": [],
+        }
+        rejected_fixture = {
+            "schemaVersion": "fixture-groove-source-exclusion/2", "status": "rejected",
+            "fixtureBodiesVerified": True, "uContourComplete": False,
+            "radialSidewallsVerified": True, "radialRecoveryApplied": True,
+            "fixtureSourceExcluded": False, "candidateSelectionUsedFixedAngle": False,
+            "failedChecks": ["groove_floor_not_complete"],
+        }
+        source = rejected_source_consistency(
+            0.02,
+            failed_checks=["edge_contrast_asymmetry", "edge_gradient_asymmetry"],
+        )
+        with (
+            patch(
+                "algorithms.slot_pose.legacy_adapter.LegacyAEndFaceAdapter._recognize_target_grooves",
+                return_value=(recognition, [candidate]),
+            ),
+            patch("algorithms.slot_pose.legacy_adapter.refine_groove_opening", return_value=refinement),
+            patch("algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency", return_value=source),
+            patch("algorithms.slot_pose.legacy_adapter.build_fixture_source_exclusion", return_value=rejected_fixture),
+        ):
+            payload = run(
+                self.images / "one-real-left-lower.png", path,
+                "single:v3:radial-u-contour-required",
+            )
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_REFINEMENT_FAILED", payload["error"]["code"])
+        self.assertIn("recovery_fixture_source_exclusion_not_verified", payload["error"]["message"])
+        adjudication = payload["diagnostics"]["sidewallSourceConsistencyAdjudication"]
+        self.assertEqual("REJECTED", adjudication["decision"])
+        self.assertIn("fixture_source_exclusion_verified", adjudication["failedChecks"])
+        for field in (
+            "currentAngleDeg", "correctionRawDeg", "correctionDeg",
+            "imageFrameCorrectionDeg", "rotationDirection", "mechanicalCorrectionDeg", "plcCommand",
+        ):
+            self.assertIsNone(payload["result"][field], field)
+        self.assertFalse(payload["result"]["plcExecutionAuthoritative"])
+
     def test_two_provisional_physical_survivors_are_explicitly_ambiguous(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3

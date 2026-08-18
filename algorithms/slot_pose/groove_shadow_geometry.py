@@ -254,6 +254,23 @@ def build_fixture_source_exclusion(
     )
     floor_complete = floor.get("status") == "accepted"
     u_complete = bool(walls_complete and floor_complete)
+    radial_sidewalls_verified = bool(
+        walls_complete
+        and all(
+            isinstance(refinement.get(side), dict)
+            and refinement[side].get("radialAlignmentPassed") is True
+            for side in ("startSide", "endSide")
+        )
+    )
+    radial_recovery = bool(
+        radial_sidewalls_verified
+        and any(
+            isinstance(refinement.get(side), dict)
+            and refinement[side].get("lineFitStrategy")
+            == "shared-longitudinal-wall-family-v2"
+            for side in ("startSide", "endSide")
+        )
+    )
     overlap_role = overlap.get("overlapRole")
     # The lower body cannot occlude the groove in this fixture geometry.  A
     # candidate coincident with it is therefore a fixture-source candidate.
@@ -261,7 +278,10 @@ def build_fixture_source_exclusion(
     # floor plus both walls may exclude the fixture source there.
     excluded = bool(
         bodies_verified and overlap.get("status") == "evaluated" and u_complete
-        and overlap_role in {"none", "upper_fixture"}
+        and (
+            overlap_role in {"none", "upper_fixture"}
+            or (radial_recovery and overlap_role in {"lower_fixture", "multiple_fixture_bodies"})
+        )
     )
     failures: list[str] = []
     if not bodies_verified:
@@ -270,13 +290,13 @@ def build_fixture_source_exclusion(
         failures.append("two_sidewalls_not_complete")
     if not floor_complete:
         failures.append("groove_floor_not_complete")
-    if overlap_role == "lower_fixture":
+    if overlap_role == "lower_fixture" and not (radial_recovery and u_complete):
         failures.append("lower_fixture_false_candidate")
     elif overlap_role == "upper_fixture" and not u_complete:
         failures.append("upper_fixture_shadow_overlap")
-    elif overlap_role == "multiple_fixture_bodies":
+    elif overlap_role == "multiple_fixture_bodies" and not (radial_recovery and u_complete):
         failures.append("multiple_fixture_overlap")
-    return {
+    result = {
         "schemaVersion": "fixture-groove-source-exclusion/1",
         "status": "verified" if excluded else "rejected",
         "fixtureBodiesVerified": bodies_verified,
@@ -288,6 +308,13 @@ def build_fixture_source_exclusion(
         "candidateSelectionUsedFixedAngle": False,
         "failedChecks": failures,
     }
+    if radial_recovery:
+        result.update({
+            "schemaVersion": "fixture-groove-source-exclusion/2",
+            "radialSidewallsVerified": True,
+            "radialRecoveryApplied": True,
+        })
+    return result
 
 
 def assess_groove_floor_evidence(

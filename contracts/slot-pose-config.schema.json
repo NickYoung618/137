@@ -230,6 +230,16 @@
                 "strategy_version": {"const": "locked-noncontrast-gates-v2"},
                 "development_only": {"const": true}
               }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema_version", "enabled", "strategy_version", "development_only"],
+              "properties": {
+                "schema_version": {"const": "source-consistency-adjudication/3"},
+                "enabled": {"type": "boolean", "default": false},
+                "strategy_version": {"const": "locked-shape-profile-fixture-gates-v3"},
+                "development_only": {"const": true}
+              }
             }
           ]
         },
@@ -375,16 +385,40 @@
             "line_consensus_min_support_margin": {"type": "integer", "minimum": 1},
             "line_consensus_max_refit_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128},
             "wall_edge_family": {
-              "type": "object", "additionalProperties": false,
-              "required": ["schema_version", "enabled", "strategy_version", "max_peaks_per_row", "min_peak_separation_px", "max_hypotheses"],
-              "properties": {
-                "schema_version": {"const": "groove-wall-edge-family/1"},
-                "enabled": {"type": "boolean", "default": false},
-                "strategy_version": {"const": "bounded-cross-radius-wall-family-v1"},
-                "max_peaks_per_row": {"type": "integer", "minimum": 2, "maximum": 8},
-                "min_peak_separation_px": {"type": "number", "exclusiveMinimum": 0},
-                "max_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128}
-              }
+              "oneOf": [
+                {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["schema_version", "enabled", "strategy_version", "max_peaks_per_row", "min_peak_separation_px", "max_hypotheses"],
+                  "properties": {
+                    "schema_version": {"const": "groove-wall-edge-family/1"},
+                    "enabled": {"type": "boolean", "default": false},
+                    "strategy_version": {"const": "bounded-cross-radius-wall-family-v1"},
+                    "max_peaks_per_row": {"type": "integer", "minimum": 2, "maximum": 8},
+                    "min_peak_separation_px": {"type": "number", "exclusiveMinimum": 0},
+                    "max_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128}
+                  }
+                },
+                {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["schema_version", "enabled", "strategy_version", "max_peaks_per_row", "min_peak_separation_px", "max_hypotheses", "min_shared_support_count", "min_shared_span_ratio", "max_direction_delta_deg", "max_shared_separation_p95_px", "max_shared_separation_px", "max_endpoint_chord_distance_px", "max_endpoint_angle_delta_deg", "max_radial_alignment_delta_deg"],
+                  "properties": {
+                    "schema_version": {"const": "groove-wall-edge-family/2"},
+                    "enabled": {"type": "boolean", "default": false},
+                    "strategy_version": {"const": "shared-longitudinal-wall-family-v2"},
+                    "max_peaks_per_row": {"type": "integer", "minimum": 2, "maximum": 8},
+                    "min_peak_separation_px": {"type": "number", "exclusiveMinimum": 0},
+                    "max_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128},
+                    "min_shared_support_count": {"type": "integer", "minimum": 3, "maximum": 128},
+                    "min_shared_span_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                    "max_direction_delta_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 45},
+                    "max_shared_separation_p95_px": {"type": "number", "exclusiveMinimum": 0},
+                    "max_shared_separation_px": {"type": "number", "exclusiveMinimum": 0},
+                    "max_endpoint_chord_distance_px": {"type": "number", "exclusiveMinimum": 0},
+                    "max_endpoint_angle_delta_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 45},
+                    "max_radial_alignment_delta_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 45}
+                  }
+                }
+              ]
             }
           }
         },

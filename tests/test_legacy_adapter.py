@@ -18,6 +18,8 @@ from algorithms.slot_pose.legacy_adapter import (
     LegacyAdapterError,
     REQUIRED_FUNCTIONS,
     apply_normalized_face_search_roi,
+    recovery_fixture_exclusion_verified,
+    wall_family_recovery_used,
 )
 
 
@@ -42,6 +44,34 @@ class LegacyAdapterTests(unittest.TestCase):
         with self.assertRaises(LegacyAdapterError) as caught:
             LegacyAEndFaceAdapter(config)
         self.assertEqual("ASSET_MISMATCH", caught.exception.code)
+
+    def test_all_wall_recovery_versions_require_complete_fixture_exclusion(self) -> None:
+        for side in (
+            {"lineFitStrategy": "bounded-cross-radius-wall-family-v1"},
+            {"lineFitStrategy": "shared-longitudinal-wall-family-v2"},
+            {"wallFamilyRecoveryUsed": True},
+        ):
+            with self.subTest(side=side):
+                self.assertTrue(wall_family_recovery_used({"startSide": side, "endSide": {}}))
+        self.assertFalse(wall_family_recovery_used({"startSide": {}, "endSide": {}}))
+
+        base = {
+            "status": "verified", "fixtureBodiesVerified": True,
+            "uContourComplete": True, "fixtureSourceExcluded": True,
+            "candidateSelectionUsedFixedAngle": False,
+        }
+        for schema in (
+            "fixture-groove-source-exclusion/1",
+            "fixture-groove-source-exclusion/2",
+        ):
+            self.assertTrue(recovery_fixture_exclusion_verified({**base, "schemaVersion": schema}))
+        for mutation in (
+            {"status": "rejected"}, {"uContourComplete": False},
+            {"fixtureSourceExcluded": False}, {"candidateSelectionUsedFixedAngle": True},
+        ):
+            self.assertFalse(recovery_fixture_exclusion_verified({
+                **base, "schemaVersion": "fixture-groove-source-exclusion/2", **mutation,
+            }))
 
     def test_bundled_core_loads_without_gyj_source_tree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

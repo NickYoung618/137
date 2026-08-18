@@ -165,6 +165,54 @@ class SlotPoseContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unsupported fields"):
                 load_config(path)
 
+    def test_031_wall_source_family_v2_is_strict_and_v1_remains_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_single_groove_config()
+            config["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+                "wall_edge_family": {
+                    "schema_version": "groove-wall-edge-family/2",
+                    "enabled": True,
+                    "strategy_version": "shared-longitudinal-wall-family-v2",
+                    "max_peaks_per_row": 4,
+                    "min_peak_separation_px": 1.5,
+                    "max_hypotheses": 64,
+                    "min_shared_support_count": 16,
+                    "min_shared_span_ratio": 0.7,
+                    "max_direction_delta_deg": 0.5,
+                    "max_shared_separation_p95_px": 6.0,
+                    "max_shared_separation_px": 6.0,
+                    "max_endpoint_chord_distance_px": 6.0,
+                    "max_endpoint_angle_delta_deg": 0.25,
+                    "max_radial_alignment_delta_deg": 8.0,
+                },
+            }
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            family = loaded["detector"]["groove_refinement"]["wall_edge_family"]
+            self.assertEqual("groove-wall-edge-family/2", family["schema_version"])
+            self.assertEqual("shared-longitudinal-wall-family-v2", family["strategy_version"])
+
+            config["detector"]["groove_refinement"]["wall_edge_family"][
+                "strategy_version"
+            ] = "bounded-cross-radius-wall-family-v1"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "schema/strategy pair"):
+                load_config(path)
+
+            legacy = minimal_single_groove_config()
+            legacy["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+                "wall_edge_family": {"enabled": True},
+            }
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            legacy_loaded = load_config(path)
+            self.assertEqual(
+                "bounded-cross-radius-wall-family-v1",
+                legacy_loaded["detector"]["groove_refinement"]["wall_edge_family"]["strategy_version"],
+            )
+
     def test_groove_shadow_source_discrimination_is_default_off_and_strictly_gated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

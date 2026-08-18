@@ -79,6 +79,13 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点
   执行有上限的确定性直线共识。它同时要求最少内点、内点率、纵向覆盖和外圆交点一致，
   并对几何不同的次优直线执行支持度差距门。参数均已进入Schema，不得按某张图的点数写死。
+- `groove_refinement.wall_edge_family`的`groove-wall-edge-family/2`是031显式启用策略。它先用共享观测纵向区间、
+  方向、分离距离和外圆端点把同一物理边的重复响应组成complete-link族，再要求候选壁方向与其外圆端点径向
+  几何一致。旧v1若已有唯一代表则原样保留；只有v1无法决定时才启用径向v2恢复，缺少径向证据时回到原v1
+  fail-closed结果。仅把一个实际观测到的代表假设送入原唯一性门。它不改变原支持度、残差、coverage或ambiguity
+  阈值。`source-consistency-adjudication/3`只在两条径向壁、5轨弯曲槽底、图像检测出的两个固定件及归一化
+  槽壁形状/剖面检查全部通过时，允许绝对对比度和梯度强弱差异；任何结构、轮廓、覆盖、端点或固定件排除
+  失败都继续fail-closed。旧v1/v2配置行为不变，新策略仍为development-only且不授权PLC。
 - 020的`fixture_shadow_model`与`sidewall_source_consistency`默认关闭，且只允许
   `single_real_groove`模式启用。前者把约31度/328度当作可漂移的相机/夹具nuisance prior，禁止做
   ignore mask或候选硬删除；逐候选局部灰度、梯度剖面和成对完整性必须进入诊断。后者要求真实槽两侧壁
@@ -97,7 +104,7 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
 - 静态重复性只按Manifest中显式的同一样品、工位和条件分组，以检测角减同图人工真值角的环形残差统计；
   `groupingExplicit=false`、标注不完整或有效重复不足时不得输出重复性PASS/FAIL。
 - Manifest的`split`是评估用途：development/validation/test/acceptance必须按物理样品和源图lineage隔离。
-  当前唯一人工标注只能属于development；700张已检查结果属于锁定acceptance回归，不能用来选择阈值；
+  当前唯一人工标注只能属于development；700张已检查结果属于observed diagnostic回归，不能用来选择阈值或冒充acceptance；
   独立validation/test在新增样品并完成复核前必须报告`NOT_AVAILABLE`。
 - 009 canonical inventory的`relative_path`统一相对一个显式`data-root`，只处理清单列出的图；不要把根下normal和
   `坏/`拆成两个含义不同的相对路径基准。Mac若保留`A2/...`前缀，则`data-root`必须是A2的父目录。

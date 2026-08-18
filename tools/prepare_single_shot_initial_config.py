@@ -22,8 +22,13 @@ from algorithms.slot_pose.physical_outer_circle import (
     merged_physical_outer_circle_config,
 )
 from algorithms.slot_pose.groove_resolution import DEFAULT_AMBIGUITY_RESOLUTION_CONFIG
+from algorithms.slot_pose.groove_refinement import (
+    WALL_EDGE_FAMILY_V2_CONFIG,
+    merged_groove_refinement_config,
+)
 from algorithms.slot_pose.source_consistency_adjudication import (
     DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG,
+    SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG,
 )
 from tools.dataset_common import sha256_file, write_json
 from tools.prepare_source_consistency_adjudication_config import build_experimental_config
@@ -35,6 +40,8 @@ PROFILE_VERSION_V3 = "single-shot-initial-profile/3"
 PROFILE_ID_V3 = "single-real-groove-85deg-global-circle-family-v3"
 PROFILE_VERSION_V4 = "single-shot-initial-profile/4"
 PROFILE_ID_V4 = "single-real-groove-85deg-circle-family-consensus-v4"
+PROFILE_VERSION_V5 = "single-shot-initial-profile/5"
+PROFILE_ID_V5 = "single-real-groove-85deg-sidewall-family-dedup-v5"
 
 
 def _same_number(actual: Any, expected: float) -> bool:
@@ -158,6 +165,35 @@ def build_initial_config_v4(base: dict[str, Any]) -> dict[str, Any]:
     return configured
 
 
+def build_initial_config_v5(base: dict[str, Any]) -> dict[str, Any]:
+    """Enable physical wall-source grouping without mutating prior profiles."""
+    selection = (
+        base.get("detector", {}).get("physical_outer_circle", {})
+        .get("edge_family_selection") if isinstance(base, dict) else None
+    )
+    if (
+        isinstance(selection, dict) and selection.get("enabled") is True
+        and selection.get("strategy_version") == EDGE_FAMILY_STRATEGY_V2
+    ):
+        configured = copy.deepcopy(base)
+    else:
+        configured = build_initial_config_v4(base)
+    refinement = merged_groove_refinement_config(
+        configured["detector"].get("groove_refinement")
+    )
+    refinement["wall_edge_family"] = {
+        **WALL_EDGE_FAMILY_V2_CONFIG,
+        "enabled": True,
+    }
+    configured["detector"]["groove_refinement"] = refinement
+    configured["detector"]["source_consistency_adjudication"] = {
+        **SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG,
+        "enabled": True,
+    }
+    configured["config_id"] = PROFILE_ID_V5
+    return configured
+
+
 def build_profile_report(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
     return {
         "schemaVersion": PROFILE_VERSION,
@@ -227,12 +263,36 @@ def build_profile_report_v4(*, source_config_sha256: str, output_config_sha256: 
     return report
 
 
+def build_profile_report_v5(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
+    report = build_profile_report_v4(
+        source_config_sha256=source_config_sha256,
+        output_config_sha256=output_config_sha256,
+    )
+    report.update({"schemaVersion": PROFILE_VERSION_V5, "profileId": PROFILE_ID_V5})
+    report["wallSourceFamilySelection"] = {
+        "schemaVersion": WALL_EDGE_FAMILY_V2_CONFIG["schema_version"],
+        "strategyVersion": WALL_EDGE_FAMILY_V2_CONFIG["strategy_version"],
+        "enabled": True,
+        "completeLinkRequired": True,
+        "observedRepresentativeRequired": True,
+        "originalQualityGatesPreserved": True,
+        "fixtureSourceExclusionRequired": True,
+        "radialSidewallEvidenceRequired": True,
+        "shapeProfileConsistencyRequired": True,
+        "adjudicationSchemaVersion": SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG[
+            "schema_version"
+        ],
+        "manualTruthAppliedAtRuntime": False,
+    }
+    return report
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-config", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
-    parser.add_argument("--profile-version", choices=("2", "3", "4"), default="4")
+    parser.add_argument("--profile-version", choices=("2", "3", "4", "5"), default="5")
     return parser.parse_args()
 
 
@@ -255,6 +315,7 @@ def main() -> int:
             "2": build_initial_config,
             "3": build_initial_config_v3,
             "4": build_initial_config_v4,
+            "5": build_initial_config_v5,
         }
         configured = builders[args.profile_version](base)
         write_json(output, configured)
@@ -262,6 +323,7 @@ def main() -> int:
             "2": build_profile_report,
             "3": build_profile_report_v3,
             "4": build_profile_report_v4,
+            "5": build_profile_report_v5,
         }
         report_builder = report_builders[args.profile_version]
         report = report_builder(

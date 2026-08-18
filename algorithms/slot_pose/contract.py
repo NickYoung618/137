@@ -16,7 +16,7 @@ from tools.dataset_common import inspect_image
 SCHEMA_VERSION = "slot-pose-result/2"
 SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.18.0"
+ALGORITHM_VERSION = "0.19.0"
 BUNDLED_LEGACY_MODULE = "algorithms.end_face.core"
 PORTABLE_ASSET_PATH_MODE = "config_relative_v1"
 ERROR_CODES = {
@@ -420,7 +420,10 @@ def load_config(config_path: Path) -> dict[str, Any]:
                     source_consistency_adjudication is not None
                     and source_consistency_adjudication["enabled"]
                     and source_consistency_adjudication["schema_version"]
-                    != "source-consistency-adjudication/2"
+                    not in {
+                        "source-consistency-adjudication/2",
+                        "source-consistency-adjudication/3",
+                    }
                 ):
                     raise ValueError(
                         "detector.groove_shadow_source_discrimination forbids "

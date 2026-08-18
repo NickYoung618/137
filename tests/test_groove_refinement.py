@@ -8,6 +8,7 @@ import numpy as np
 from algorithms.slot_pose.groove_refinement import (
     DEFAULT_GROOVE_REFINEMENT_CONFIG,
     _circle_intersection,
+    _group_wall_source_families,
     _robust_fit_line,
     _select_consensus_line,
     _select_wall_family,
@@ -92,7 +93,146 @@ def v2_config(**overrides: object) -> dict:
     }
 
 
+def source_family_v2_config(**overrides: object) -> dict:
+    return v2_config(wall_edge_family={
+        "schema_version": "groove-wall-edge-family/2",
+        "enabled": True,
+        "strategy_version": "shared-longitudinal-wall-family-v2",
+        "max_peaks_per_row": 4,
+        "min_peak_separation_px": 1.5,
+        "max_hypotheses": 64,
+        "min_shared_support_count": 16,
+        "min_shared_span_ratio": 0.7,
+        "max_direction_delta_deg": 0.5,
+        "max_shared_separation_p95_px": 6.0,
+        "max_shared_separation_px": 6.0,
+        "max_endpoint_chord_distance_px": 6.0,
+        "max_endpoint_angle_delta_deg": 0.25,
+        "max_radial_alignment_delta_deg": 8.0,
+        **overrides,
+    })
+
+
 class GrooveRefinementTests(unittest.TestCase):
+    def test_v2_wall_source_family_merges_nearby_same_source_responses_deterministically(self) -> None:
+        def hypothesis(offset: float, angle: float) -> dict:
+            selected = [
+                (index, {"point": (float(x), offset + 0.03 * math.sin(index))}, 0.0)
+                for index, x in enumerate(np.linspace(1500.0, 1600.0, 24))
+            ]
+            return {
+                "line": (0.0, 1.0, -offset), "selected": selected,
+                "residuals": np.zeros(24), "supportCount": 24,
+                "supportRowIndices": list(range(24)), "longitudinalCoverage": 1.0,
+                "residualP95Px": 0.1, "intersection": (1640.0, offset),
+                "intersectionAngleDeg": angle,
+                "candidateSignature": frozenset(
+                    (index, int(round(item[1]["point"][0] * 1000)), int(round(item[1]["point"][1] * 1000)))
+                    for index, item in enumerate(selected)
+                ),
+            }
+        hypotheses = [hypothesis(0.0, 0.0), hypothesis(4.0, 0.14)]
+        _, decision = _group_wall_source_families(
+            hypotheses, center=(0.0, 0.0),
+            config=source_family_v2_config()["wall_edge_family"], pixel_scale=1.0,
+        )
+        _, reordered = _group_wall_source_families(
+            list(reversed(hypotheses)), center=(0.0, 0.0),
+            config=source_family_v2_config()["wall_edge_family"], pixel_scale=1.0,
+        )
+        self.assertEqual(2, decision["rawHypothesisCount"])
+        self.assertEqual(1, decision["physicalSourceFamilyCount"])
+        self.assertEqual(
+            decision["sourceFamilySummaries"], reordered["sourceFamilySummaries"],
+        )
+        self.assertTrue(decision["wallFamilyRecoveryUsed"])
+
+    def test_v2_wall_source_family_keeps_separated_parallel_edges_ambiguous(self) -> None:
+        rows = [[
+            {"point": (-50.0, float(y)), "strength": 12.0},
+            {"point": (-58.0, float(y)), "strength": 12.0},
+        ] for y in np.linspace(-70.0, 40.0, 24)]
+        decision = _select_wall_family(
+            rows, minimum=16, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=238.0, maximum_delta_deg=10.0,
+            config=source_family_v2_config(
+                max_radial_alignment_delta_deg=45.0,
+            ), pixel_scale=1.0, max_hypotheses=64,
+        )
+        self.assertEqual("ambiguous", decision["status"], decision)
+        self.assertGreaterEqual(decision["physicalSourceFamilyCount"], 2)
+        self.assertIn(
+            "shared_span_separation",
+            {check for item in decision["sourceFamilyComparisons"] for check in item["failedChecks"]},
+        )
+
+    def test_v2_wall_source_family_does_not_merge_insufficient_or_nonfinite_evidence(self) -> None:
+        config = source_family_v2_config()
+        rows = [[
+            {"point": (-50.0, float(y)), "strength": 12.0},
+            {"point": (-46.0, float(y)), "strength": 12.0},
+        ] for y in np.linspace(-70.0, 40.0, 24)]
+        for row in rows[8:]:
+            row.pop()
+        decision = _select_wall_family(
+            rows, minimum=8, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=10.0,
+            config=config, pixel_scale=1.0, max_hypotheses=64,
+        )
+        self.assertNotEqual(1, decision.get("physicalSourceFamilyCount"))
+        contaminated = [list(row) for row in rows]
+        contaminated[0] = [*contaminated[0], {"point": (math.nan, 0.0), "strength": 99.0}]
+        repeated = _select_wall_family(
+            contaminated, minimum=8, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=10.0,
+            config=config, pixel_scale=1.0, max_hypotheses=64,
+        )
+        self.assertEqual(decision["status"], repeated["status"])
+
+    def test_v2_crossing_lines_and_transitive_bridge_never_collapse_to_one_family(self) -> None:
+        def hypothesis(offset: float, slope: float, angle: float) -> dict:
+            xs = np.linspace(1500.0, 1600.0, 24)
+            points = [(float(x), float(offset + slope * (x - 1550.0))) for x in xs]
+            norm = math.hypot(slope, 1.0)
+            line = (slope / norm, -1.0 / norm, (offset - slope * 1550.0) / norm)
+            selected = [
+                (index, {"point": point}, 0.0) for index, point in enumerate(points)
+            ]
+            return {
+                "line": line, "selected": selected, "residuals": np.zeros(24),
+                "supportCount": 24, "supportRowIndices": list(range(24)),
+                "longitudinalCoverage": 1.0, "residualP95Px": 0.1,
+                "intersection": (1640.0, offset + slope * 90.0),
+                "intersectionAngleDeg": angle,
+                "candidateSignature": frozenset(
+                    (index, int(round(point[0] * 1000)), int(round(point[1] * 1000)))
+                    for index, point in enumerate(points)
+                ),
+            }
+
+        config = source_family_v2_config()["wall_edge_family"]
+        _, crossing = _group_wall_source_families(
+            [hypothesis(0.0, -0.1, 359.8), hypothesis(0.0, 0.1, 0.2)],
+            center=(0.0, 0.0), config=config, pixel_scale=1.0,
+        )
+        self.assertEqual(2, crossing["physicalSourceFamilyCount"])
+        self.assertIn(
+            "direction_mismatch", crossing["sourceFamilyComparisons"][0]["failedChecks"],
+        )
+
+        _, bridge = _group_wall_source_families(
+            [
+                hypothesis(0.0, 0.0, 0.0),
+                hypothesis(4.0, 0.0, 0.14),
+                hypothesis(8.0, 0.0, 0.28),
+            ], center=(0.0, 0.0), config=config, pixel_scale=1.0,
+        )
+        self.assertEqual(2, bridge["physicalSourceFamilyCount"])
+        self.assertEqual(
+            [1, 2],
+            sorted(len(item["memberHypothesisIds"]) for item in bridge["sourceFamilySummaries"]),
+        )
+
     def test_wall_family_selects_unique_cross_row_line_independent_of_candidate_order(self) -> None:
         rows = []
         for index, y in enumerate(np.linspace(-70.0, 40.0, 24)):

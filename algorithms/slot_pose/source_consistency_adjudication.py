@@ -25,6 +25,12 @@ SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG: dict[str, Any] = {
     "strategy_version": "locked-noncontrast-gates-v2",
     "development_only": True,
 }
+SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG: dict[str, Any] = {
+    "schema_version": "source-consistency-adjudication/3",
+    "enabled": False,
+    "strategy_version": "locked-shape-profile-fixture-gates-v3",
+    "development_only": True,
+}
 
 _CHECK_DEFINITIONS = (
     ("edge_contrast_asymmetry", "contrastNormalizedDifference", "max"),
@@ -44,7 +50,9 @@ def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> N
         raise ValueError("detector.source_consistency_adjudication must be an object")
     schema_version = config.get("schema_version")
     template = (
-        SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG
+        SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG
+        if schema_version == "source-consistency-adjudication/3"
+        else SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG
         if schema_version == "source-consistency-adjudication/2"
         else DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG
     )
@@ -57,6 +65,7 @@ def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> N
         raise ValueError(f"source_consistency_adjudication has unknown fields: {unknown}")
     if schema_version not in {
         "source-consistency-adjudication/1", "source-consistency-adjudication/2",
+        "source-consistency-adjudication/3",
     }:
         raise ValueError("source_consistency_adjudication.schema_version is unsupported")
     if not isinstance(config["enabled"], bool):
@@ -76,7 +85,11 @@ def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> N
             raise ValueError(
                 "source_consistency_adjudication.max_endpoint_structure_difference must be in [0,1]"
             )
-    elif config["strategy_version"] != "locked-noncontrast-gates-v2":
+    elif config["strategy_version"] != (
+        "locked-shape-profile-fixture-gates-v3"
+        if schema_version == "source-consistency-adjudication/3"
+        else "locked-noncontrast-gates-v2"
+    ):
         raise ValueError("source_consistency_adjudication.strategy_version is unsupported")
 
 
@@ -86,7 +99,10 @@ def merged_source_consistency_adjudication_config(
     if config is not None and not isinstance(config, dict):
         raise ValueError("detector.source_consistency_adjudication must be an object")
     template = (
-        SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG
+        SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG
+        if isinstance(config, dict)
+        and config.get("schema_version") == "source-consistency-adjudication/3"
+        else SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG
         if isinstance(config, dict)
         and config.get("schema_version") == "source-consistency-adjudication/2"
         else DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG
@@ -103,7 +119,10 @@ def _base(config: dict[str, Any]) -> dict[str, Any]:
         "schemaVersion": config["schema_version"],
         **(
             {"strategyVersion": config["strategy_version"]}
-            if config["schema_version"] == "source-consistency-adjudication/2"
+            if config["schema_version"] in {
+                "source-consistency-adjudication/2",
+                "source-consistency-adjudication/3",
+            }
             else {"thresholdVersion": config["threshold_version"]}
         ),
         "enabled": True,
@@ -244,35 +263,60 @@ def adjudicate_source_consistency(
     contrast_only = failed == ["edge_contrast_asymmetry"]
     non_contrast_pass = all(check_map[check_id]["passed"] is True for check_id in _NON_CONTRAST_CHECK_IDS)
     is_v2 = merged["schema_version"] == "source-consistency-adjudication/2"
+    is_v3 = merged["schema_version"] == "source-consistency-adjudication/3"
     endpoint_pass = (
-        True if is_v2
+        True if is_v2 or is_v3
         else endpoint <= float(merged["max_endpoint_structure_difference"])
+    )
+    photometric_only = bool(failed) and set(failed).issubset({
+        "edge_contrast_asymmetry", "edge_gradient_asymmetry",
+    })
+    locked_shape_profile_pass = all(
+        check_map[check_id]["passed"] is True
+        for check_id in (
+            "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
+            "radial_coverage_inconsistent", "endpoint_structure_inconsistent",
+        )
     )
     adjudication_checks = [
         {"checkId": "original_rejected", "passed": status == "rejected"},
-        {"checkId": "exact_contrast_only_failure", "passed": contrast_only},
+        {"checkId": (
+            "photometric_only_failure" if is_v3 else "exact_contrast_only_failure"
+        ), "passed": photometric_only if is_v3 else contrast_only},
         {
             "checkId": (
-                "all_locked_noncontrast_checks_pass" if is_v2
+                "all_locked_shape_profile_checks_pass" if is_v3
+                else "all_locked_noncontrast_checks_pass" if is_v2
                 else "all_required_noncontrast_checks_pass"
             ),
-            "passed": non_contrast_pass,
+            "passed": locked_shape_profile_pass if is_v3 else non_contrast_pass,
         },
     ]
-    if is_v2:
-        fixture_verified = fixture_source_evidence == {
-            "schemaVersion": "fixture-groove-source-exclusion/1",
+    if is_v2 or is_v3:
+        enhanced_v3 = bool(is_v3 and not contrast_only)
+        allowed_schemas = (
+            {"fixture-groove-source-exclusion/2"}
+            if enhanced_v3 else {
+                "fixture-groove-source-exclusion/1",
+                "fixture-groove-source-exclusion/2",
+            }
+        )
+        fixture_verified = isinstance(fixture_source_evidence, dict) and all(
+            fixture_source_evidence.get(key) == value for key, value in {
             "status": "verified",
             "fixtureBodiesVerified": True,
             "uContourComplete": True,
             "fixtureSourceExcluded": True,
             "candidateSelectionUsedFixedAngle": False,
-        }
+            **({
+                "radialSidewallsVerified": True, "radialRecoveryApplied": True,
+            } if enhanced_v3 else {}),
+        }.items()) and fixture_source_evidence.get("schemaVersion") in allowed_schemas
         adjudication_checks.append({
             "checkId": "fixture_source_exclusion_verified",
             "passed": fixture_verified,
         })
-    if not is_v2:
+    if not is_v2 and not is_v3:
         adjudication_checks.append({
             "checkId": "strict_endpoint_structure",
             "metric": "endpointStructureDifference",

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/groove-wall-source-family-diagnostic.schema.json",
+  "title": "Groove wall physical source family diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["wallFamilySchemaVersion", "wallFamilyStrategyVersion", "rawHypothesisCount", "physicalSourceFamilyCount", "eligiblePhysicalSourceFamilyCount", "selectedPhysicalSourceFamilyId", "wallFamilySelectionElapsedMs", "radialEligibilityFallbackApplied", "legacyAcceptedRepresentativePreserved", "sourceFamilyComparisons", "sourceFamilySummaries", "wallFamilyRecoveryUsed"],
+  "properties": {
+    "wallFamilySchemaVersion": {"const": "groove-wall-source-family-diagnostic/1"},
+    "wallFamilyStrategyVersion": {"const": "shared-longitudinal-wall-family-v2"},
+    "rawHypothesisCount": {"type": "integer", "minimum": 0, "maximum": 128},
+    "physicalSourceFamilyCount": {"type": "integer", "minimum": 0, "maximum": 128},
+    "eligiblePhysicalSourceFamilyCount": {"type": "integer", "minimum": 0, "maximum": 128},
+    "selectedPhysicalSourceFamilyId": {"type": ["string", "null"], "pattern": "^wall-source-family-[0-9]{3}$"},
+    "wallFamilySelectionElapsedMs": {"type": "number", "minimum": 0},
+    "radialEligibilityFallbackApplied": {"type": "boolean"},
+    "legacyAcceptedRepresentativePreserved": {"type": "boolean"},
+    "wallFamilyRecoveryUsed": {"const": true},
+    "sourceFamilyComparisons": {
+      "type": "array", "maxItems": 8128,
+      "items": {
+        "type": "object",
+        "required": ["leftHypothesisId", "rightHypothesisId", "finiteGeometry", "equivalent", "failedChecks"],
+        "properties": {
+          "leftHypothesisId": {"type": "string", "pattern": "^wall-hypothesis-[0-9]{3}$"},
+          "rightHypothesisId": {"type": "string", "pattern": "^wall-hypothesis-[0-9]{3}$"},
+          "finiteGeometry": {"type": "boolean"},
+          "equivalent": {"type": "boolean"},
+          "failedChecks": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        },
+        "additionalProperties": true
+      }
+    },
+    "sourceFamilySummaries": {
+      "type": "array", "maxItems": 128,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["familyId", "memberHypothesisIds", "representativeHypothesisId", "effectiveSupportCount", "residualP95Px", "longitudinalCoverage", "intersectionAngleDeg", "canonicalLine", "radialAlignmentDeltaDeg", "radialAlignmentThresholdDeg", "radialAlignmentPassed"],
+        "properties": {
+          "familyId": {"type": "string", "pattern": "^wall-source-family-[0-9]{3}$"},
+          "memberHypothesisIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+          "representativeHypothesisId": {"type": "string"},
+          "effectiveSupportCount": {"type": "integer", "minimum": 1},
+          "residualP95Px": {"type": "number", "minimum": 0},
+          "longitudinalCoverage": {"type": "number", "minimum": 0, "maximum": 1},
+          "intersectionAngleDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+          "radialAlignmentDeltaDeg": {"type": ["number", "null"], "minimum": 0, "maximum": 90},
+          "radialAlignmentThresholdDeg": {"type": "number", "exclusiveMinimum": 0, "maximum": 45},
+          "radialAlignmentPassed": {"type": "boolean"},
+          "canonicalLine": {
+            "type": "object", "additionalProperties": false,
+            "required": ["a", "b", "c"],
+            "properties": {"a": {"type": "number"}, "b": {"type": "number"}, "c": {"type": "number"}}
+          }
+        }
+      }
+    }
+  }
+}

@@ -103,6 +103,11 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
             "startSide": {
                 "lineInlierRatio": 0.8, "lineLongitudinalCoverage": 0.75,
                 "supportMargin": 3, "lineResidualPx": {"p95": 1.2},
+                "wallFamilyStrategyVersion": "shared-longitudinal-wall-family-v2",
+                "wallFamilyStatus": "accepted", "rawHypothesisCount": 5,
+                "physicalSourceFamilyCount": 3, "eligiblePhysicalSourceFamilyCount": 1,
+                "radialAlignmentDeltaDeg": 2.5,
+                "wallFamilySelectionElapsedMs": 1.25,
             },
             "endSide": {
                 "lineInlierRatio": 0.9, "lineLongitudinalCoverage": 0.85,
@@ -140,6 +145,13 @@ class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
         self.assertEqual({"slot-groove-subpixel-opening/2": 1, "unknown": 1}, run["grooveRefinementSchemaCounts"])
         self.assertEqual(12.0, run["grooveRefinementElapsedMs"]["p95"])
         self.assertEqual(0.8, run["grooveSidewallEvidence"]["lineInlierRatio"]["min"])
+        wall = run["grooveSidewallEvidence"]
+        self.assertEqual(5.0, wall["rawHypothesisCount"]["p95"])
+        self.assertEqual(1.0, wall["eligiblePhysicalSourceFamilyCount"]["p95"])
+        self.assertEqual(1.25, wall["wallFamilySelectionElapsedMs"]["p95"])
+        self.assertEqual(
+            {"accepted": 1, "not_available": 1}, wall["wallFamilyStatusCounts"],
+        )
 
     def test_v3_summary_counts_guidance_without_calling_adjustment_a_failure(self) -> None:
         in_position = record("a", [175.0], error="NONE")
