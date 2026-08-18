@@ -13,6 +13,7 @@ from algorithms.slot_pose.angular_profile import circular_distance_deg, wrap_360
 
 SCHEMA_VERSION = "slot-groove-subpixel-opening/1"
 SCHEMA_VERSION_V2 = "slot-groove-subpixel-opening/2"
+SCHEMA_VERSION_V3 = "slot-groove-subpixel-opening/3"
 THRESHOLD_VERSION_V1 = "groove-sidewall-subpixel-v1"
 THRESHOLD_VERSION_V2 = "groove-sidewall-subpixel-v2"
 DEFAULT_GROOVE_REFINEMENT_CONFIG: dict[str, Any] = {
@@ -37,6 +38,14 @@ DEFAULT_GROOVE_REFINEMENT_CONFIG: dict[str, Any] = {
     "line_consensus_min_support_margin": 2,
     "line_consensus_max_refit_hypotheses": 32,
 }
+DEFAULT_WALL_EDGE_FAMILY_CONFIG: dict[str, Any] = {
+    "schema_version": "groove-wall-edge-family/1",
+    "enabled": False,
+    "strategy_version": "bounded-cross-radius-wall-family-v1",
+    "max_peaks_per_row": 4,
+    "min_peak_separation_px": 1.5,
+    "max_hypotheses": 64,
+}
 
 
 def validate_groove_refinement_config(config: dict[str, Any]) -> None:
@@ -44,7 +53,7 @@ def validate_groove_refinement_config(config: dict[str, Any]) -> None:
         raise ValueError("groove_refinement must be an object")
     required = set(DEFAULT_GROOVE_REFINEMENT_CONFIG)
     missing = sorted(required - set(config))
-    unexpected = sorted(set(config) - required)
+    unexpected = sorted(set(config) - required - {"wall_edge_family"})
     if missing:
         raise ValueError(f"groove_refinement missing fields: {missing}")
     if unexpected:
@@ -99,6 +108,31 @@ def validate_groove_refinement_config(config: dict[str, Any]) -> None:
         ):
             suffix = f" in [{minimum},{maximum}]" if maximum is not None else f" >={minimum}"
             raise ValueError(f"groove_refinement.{key} must be an integer{suffix}")
+    if "wall_edge_family" in config:
+        family = config["wall_edge_family"]
+        if not isinstance(family, dict):
+            raise ValueError("groove_refinement.wall_edge_family must be an object")
+        merged_family = {**DEFAULT_WALL_EDGE_FAMILY_CONFIG, **family}
+        unknown = sorted(set(merged_family) - set(DEFAULT_WALL_EDGE_FAMILY_CONFIG))
+        if unknown:
+            raise ValueError(f"groove_refinement.wall_edge_family has unsupported fields: {unknown}")
+        if merged_family["schema_version"] != "groove-wall-edge-family/1":
+            raise ValueError("groove_refinement.wall_edge_family.schema_version is unsupported")
+        if merged_family["strategy_version"] != "bounded-cross-radius-wall-family-v1":
+            raise ValueError("groove_refinement.wall_edge_family.strategy_version is unsupported")
+        if not isinstance(merged_family["enabled"], bool):
+            raise ValueError("groove_refinement.wall_edge_family.enabled must be boolean")
+        for key, low, high in (("max_peaks_per_row", 2, 8), ("max_hypotheses", 2, 128)):
+            value = merged_family[key]
+            if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+                raise ValueError(f"groove_refinement.wall_edge_family.{key} must be in [{low},{high}]")
+        separation = merged_family["min_peak_separation_px"]
+        if (
+            isinstance(separation, bool) or not isinstance(separation, (int, float))
+            or not math.isfinite(float(separation)) or float(separation) <= 0.0
+        ):
+            raise ValueError("groove_refinement.wall_edge_family.min_peak_separation_px must be positive")
+        config["wall_edge_family"] = merged_family
 
 
 def merged_groove_refinement_config(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -358,6 +392,236 @@ def _select_consensus_line(
     }
 
 
+def _select_wall_family(
+    candidate_rows: list[list[dict[str, Any]]], *, minimum: int,
+    center: tuple[float, float], outer_radius: float, coarse_angle_deg: float,
+    maximum_delta_deg: float, config: dict[str, Any], pixel_scale: float,
+    max_hypotheses: int,
+) -> dict[str, Any]:
+    """Select one straight cross-radius edge family from bounded row candidates."""
+    base = {
+        "status": "not_found", "failedCheck": "wall_family_not_found",
+        "candidateCount": sum(len(row) for row in candidate_rows),
+        "seedCount": 0, "hypothesisCount": 0,
+        "familySummaries": [],
+        "bestSupportCount": None, "secondSupportCount": None,
+        "supportMargin": None, "supportRowIndices": [], "selectedCandidates": [],
+        "line": None, "residuals": None, "intersection": None,
+        "intersectionAngleDeg": None, "longitudinalCoverage": None,
+    }
+    if len(candidate_rows) < minimum:
+        return {**base, "failedCheck": "insufficient_rows"}
+    finite_rows: list[list[dict[str, Any]]] = []
+    for row in candidate_rows:
+        finite = []
+        for item in row:
+            point = item.get("point") if isinstance(item, dict) else None
+            if (
+                isinstance(point, (tuple, list)) and len(point) == 2
+                and all(math.isfinite(float(value)) for value in point)
+            ):
+                finite.append({**item, "point": (float(point[0]), float(point[1]))})
+        finite.sort(key=lambda item: (item["point"][0], item["point"][1]))
+        finite_rows.append(finite)
+    residual_gate = float(config["max_line_residual_p95_px"]) * pixel_scale
+    minimum_separation = max(
+        1, int(math.ceil(
+            float(config["line_consensus_min_pair_separation_ratio"])
+            * max(1, len(finite_rows) - 1)
+        )),
+    )
+    seeds: list[tuple[float, float, float]] = []
+    nonempty_indices = [index for index, row in enumerate(finite_rows) if row]
+    if len(nonempty_indices) > 8:
+        anchor_positions = np.linspace(0, len(nonempty_indices) - 1, 8)
+        anchor_indices = sorted({nonempty_indices[int(round(value))] for value in anchor_positions})
+    else:
+        anchor_indices = nonempty_indices
+    for first_offset, first_row in enumerate(anchor_indices):
+        for second_row in anchor_indices[first_offset + 1:]:
+            if second_row - first_row < minimum_separation:
+                continue
+            for first in finite_rows[first_row]:
+                for second in finite_rows[second_row]:
+                    x1, y1 = first["point"]
+                    x2, y2 = second["point"]
+                    dx, dy = x2 - x1, y2 - y1
+                    norm = math.hypot(dx, dy)
+                    if norm <= 1e-9:
+                        continue
+                    a, b = -dy / norm, dx / norm
+                    c = -(a * x1 + b * y1)
+                    if a < 0.0 or (abs(a) <= 1e-12 and b < 0.0):
+                        a, b, c = -a, -b, -c
+                    seeds.append((a, b, c))
+    base["seedCount"] = len(seeds)
+    preliminary: dict[tuple[int, ...], dict[str, Any]] = {}
+    for line in seeds:
+        selected: list[tuple[int, dict[str, Any], float]] = []
+        for row_index, row in enumerate(finite_rows):
+            ranked = sorted(
+                (
+                    abs(line[0] * item["point"][0] + line[1] * item["point"][1] + line[2]),
+                    item["point"][0], item["point"][1], item,
+                )
+                for item in row
+            )
+            if ranked and ranked[0][0] <= residual_gate:
+                selected.append((row_index, ranked[0][3], float(ranked[0][0])))
+        if len(selected) < minimum:
+            continue
+        key = tuple(
+            value
+            for row_index, item, _ in selected
+            for value in (
+                row_index,
+                int(round(item["point"][0] * 1000.0)),
+                int(round(item["point"][1] * 1000.0)),
+            )
+        )
+        rank = (-len(selected), _small_percentile_95(np.asarray([item[2] for item in selected])))
+        previous = preliminary.get(key)
+        if previous is None or rank < previous["rank"]:
+            preliminary[key] = {"line": line, "selected": selected, "rank": rank}
+    selected_seeds = sorted(preliminary.values(), key=lambda item: item["rank"])[:max_hypotheses]
+    hypotheses: list[dict[str, Any]] = []
+    minimum_ratio = float(config["line_consensus_min_inlier_ratio"])
+    minimum_coverage = float(config["line_consensus_min_span_ratio"])
+    for seed in selected_seeds:
+        selected = seed["selected"]
+        for _ in range(4):
+            points = np.asarray([item[1]["point"] for item in selected], dtype=float)
+            try:
+                line = _fit_line_tls(points)
+            except (ValueError, np.linalg.LinAlgError):
+                selected = []
+                break
+            updated: list[tuple[int, dict[str, Any], float]] = []
+            for row_index, row in enumerate(finite_rows):
+                ranked = sorted(
+                    (
+                        abs(line[0] * item["point"][0] + line[1] * item["point"][1] + line[2]),
+                        item["point"][0], item["point"][1], item,
+                    )
+                    for item in row
+                )
+                if ranked and ranked[0][0] <= residual_gate:
+                    updated.append((row_index, ranked[0][3], float(ranked[0][0])))
+            if [(i, x["point"]) for i, x, _ in updated] == [
+                (i, x["point"]) for i, x, _ in selected
+            ]:
+                selected = updated
+                break
+            selected = updated
+        if len(selected) < minimum:
+            continue
+        row_indices = [item[0] for item in selected]
+        ratio = len(selected) / len(finite_rows)
+        coverage = (
+            (max(row_indices) - min(row_indices)) / max(1, len(finite_rows) - 1)
+        )
+        if ratio < minimum_ratio or coverage < minimum_coverage:
+            continue
+        points = np.asarray([item[1]["point"] for item in selected], dtype=float)
+        try:
+            line = _fit_line_tls(points)
+        except (ValueError, np.linalg.LinAlgError):
+            continue
+        residuals = np.abs(line[0] * points[:, 0] + line[1] * points[:, 1] + line[2])
+        residual_p95 = _small_percentile_95(residuals)
+        if residual_p95 > residual_gate:
+            continue
+        try:
+            intersection, angle = _circle_intersection(
+                line, center, outer_radius, coarse_angle_deg, maximum_delta_deg,
+            )
+        except ValueError:
+            continue
+        hypotheses.append({
+            "line": line, "selected": selected, "residuals": residuals,
+            "supportCount": len(selected), "supportRowIndices": row_indices,
+            "longitudinalCoverage": coverage, "residualP95Px": residual_p95,
+            "intersection": intersection, "intersectionAngleDeg": angle,
+            "candidateSignature": frozenset(
+                (
+                    row_index,
+                    int(round(item["point"][0] * 1000.0)),
+                    int(round(item["point"][1] * 1000.0)),
+                )
+                for row_index, item, _ in selected
+            ),
+        })
+    hypotheses.sort(key=lambda item: (
+        -item["supportCount"], item["residualP95Px"],
+        -item["longitudinalCoverage"], item["intersectionAngleDeg"],
+    ))
+    distinct: list[dict[str, Any]] = []
+    merge_deg = float(config["line_consensus_model_merge_deg"])
+    for hypothesis in hypotheses:
+        if any(
+            (
+                _circular_delta_abs(
+                    hypothesis["intersectionAngleDeg"], existing["intersectionAngleDeg"],
+                ) <= merge_deg
+                or (
+                    len(hypothesis["candidateSignature"] & existing["candidateSignature"])
+                    / max(1, len(hypothesis["candidateSignature"] | existing["candidateSignature"]))
+                    >= float(config["line_consensus_min_inlier_ratio"])
+                )
+            )
+            for existing in distinct
+        ):
+            continue
+        distinct.append(hypothesis)
+    if not distinct:
+        return {**base, "hypothesisCount": 0}
+    best = distinct[0]
+    second = distinct[1] if len(distinct) > 1 else None
+    margin = None if second is None else best["supportCount"] - second["supportCount"]
+    minimum_support_margin = int(config["line_consensus_min_support_margin"])
+    close_competitors = [
+        item for item in distinct[1:]
+        if best["supportCount"] - item["supportCount"] < minimum_support_margin
+    ]
+    nondominated_close = [
+        item for item in close_competitors
+        if not (
+            best["supportCount"] >= item["supportCount"]
+            and best["residualP95Px"] <= item["residualP95Px"]
+            and best["longitudinalCoverage"] >= item["longitudinalCoverage"]
+            and (
+                best["supportCount"] > item["supportCount"]
+                or best["residualP95Px"] < item["residualP95Px"]
+                or best["longitudinalCoverage"] > item["longitudinalCoverage"]
+            )
+        )
+    ]
+    common = {
+        **base, "hypothesisCount": len(distinct),
+        "familySummaries": [{
+            "familyId": f"wall-family-{index:03d}",
+            "supportCount": item["supportCount"],
+            "residualP95Px": item["residualP95Px"],
+            "longitudinalCoverage": item["longitudinalCoverage"],
+            "intersectionAngleDeg": item["intersectionAngleDeg"],
+        } for index, item in enumerate(distinct[:8], start=1)],
+        "bestSupportCount": best["supportCount"],
+        "secondSupportCount": None if second is None else second["supportCount"],
+        "supportMargin": margin,
+    }
+    if nondominated_close:
+        return {**common, "status": "ambiguous", "failedCheck": "wall_family_ambiguous"}
+    return {
+        **common, "status": "accepted", "failedCheck": None,
+        "supportRowIndices": best["supportRowIndices"],
+        "selectedCandidates": [item[1] for item in best["selected"]],
+        "line": best["line"], "residuals": best["residuals"],
+        "intersection": best["intersection"],
+        "intersectionAngleDeg": best["intersectionAngleDeg"],
+        "longitudinalCoverage": best["longitudinalCoverage"],
+    }
+
+
 def _side_points(
     gray: np.ndarray,
     center: tuple[float, float],
@@ -430,6 +694,100 @@ def _side_points(
     return points, contrasts, gradients, observations
 
 
+def _side_candidate_rows(
+    gray: np.ndarray,
+    center: tuple[float, float],
+    radii: np.ndarray,
+    coarse_angle_deg: float,
+    polarity: str,
+    bilinear_sample: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+    parabolic_peak: Callable[[list[float], int], float],
+    config: dict[str, Any],
+) -> list[list[dict[str, Any]]]:
+    """Sample each radial row once and retain bounded polarity-correct peaks."""
+    family = config["wall_edge_family"]
+    rows: list[list[dict[str, Any]]] = []
+    margin_deg = float(config["tangential_search_margin_deg"])
+    target_step_px = float(config["tangential_sample_step_px"])
+    inner_offset = float(config["contrast_inner_offset_px"])
+    outer_offset = float(config["contrast_outer_offset_px"])
+    for radius in radii:
+        extent_px = radius * math.radians(margin_deg)
+        count = max(15, int(math.ceil(2.0 * extent_px / target_step_px)) + 1)
+        tangent = np.linspace(-extent_px, extent_px, count, dtype=float)
+        angle_deg = coarse_angle_deg + np.degrees(tangent / radius)
+        radians = np.radians(angle_deg)
+        xs = center[0] + radius * np.cos(radians)
+        ys = center[1] + radius * np.sin(radians)
+        values = np.asarray(bilinear_sample(gray, xs, ys), dtype=float)
+        if values.shape != tangent.shape or not np.isfinite(values).all():
+            rows.append([])
+            continue
+        smooth = np.convolve(values, np.asarray([1.0, 2.0, 1.0]) / 4.0, mode="same")
+        gradient = np.gradient(smooth, tangent)
+        signed = -gradient if polarity == "falling" else gradient
+        guard = max(3, int(math.ceil(inner_offset / max(target_step_px, 1e-9))))
+        peak_indices = [
+            index for index in range(guard, len(signed) - guard)
+            if signed[index] >= signed[index - 1]
+            and signed[index] > signed[index + 1]
+            and signed[index] >= float(config["min_edge_gradient_per_px"])
+        ]
+        peak_indices.sort(key=lambda index: (-float(signed[index]), float(tangent[index])))
+        accepted_offsets: list[float] = []
+        candidates: list[dict[str, Any]] = []
+        for local_index in peak_indices:
+            delta = max(-1.0, min(1.0, float(parabolic_peak(signed.tolist(), local_index))))
+            step_px = float(tangent[1] - tangent[0])
+            refined_tangent = float(tangent[local_index] + delta * step_px)
+            if any(
+                abs(refined_tangent - existing) < float(family["min_peak_separation_px"])
+                for existing in accepted_offsets
+            ):
+                continue
+            before = (
+                (tangent >= refined_tangent - outer_offset)
+                & (tangent <= refined_tangent - inner_offset)
+            )
+            after = (
+                (tangent >= refined_tangent + inner_offset)
+                & (tangent <= refined_tangent + outer_offset)
+            )
+            if int(np.count_nonzero(before)) < 2 or int(np.count_nonzero(after)) < 2:
+                continue
+            before_level = float(np.median(values[before]))
+            after_level = float(np.median(values[after]))
+            contrast = (
+                before_level - after_level if polarity == "falling"
+                else after_level - before_level
+            )
+            strength = float(signed[local_index])
+            if contrast < float(config["min_edge_contrast"]):
+                continue
+            refined_angle = math.radians(
+                coarse_angle_deg + math.degrees(refined_tangent / radius)
+            )
+            local_offsets = np.linspace(-outer_offset, outer_offset, 17, dtype=float)
+            canonical_offsets = local_offsets if polarity == "falling" else -local_offsets
+            local_profile = np.interp(refined_tangent + canonical_offsets, tangent, values)
+            accepted_offsets.append(refined_tangent)
+            candidates.append({
+                "point": (
+                    center[0] + radius * math.cos(refined_angle),
+                    center[1] + radius * math.sin(refined_angle),
+                ),
+                "radiusPx": float(radius), "tangentialOffsetPx": refined_tangent,
+                "contrast": contrast, "gradient": strength, "strength": strength,
+                "metalLevel": before_level if polarity == "falling" else after_level,
+                "grooveLevel": after_level if polarity == "falling" else before_level,
+                "canonicalGrayProfile": [float(value) for value in local_profile],
+            })
+            if len(candidates) >= int(family["max_peaks_per_row"]):
+                break
+        rows.append(candidates)
+    return rows
+
+
 def _profile_evidence(
     observations: list[dict[str, Any]], all_radii: np.ndarray,
 ) -> dict[str, Any] | None:
@@ -495,9 +853,13 @@ def _circle_intersection(
 
 
 def _empty_result(candidate_id: str | None, config: dict[str, Any], failures: list[str]) -> dict[str, Any]:
+    family_enabled = bool(config.get("wall_edge_family", {}).get("enabled", False))
     return {
         "schemaVersion": (
-            SCHEMA_VERSION_V2 if config["threshold_version"] == THRESHOLD_VERSION_V2 else SCHEMA_VERSION
+            SCHEMA_VERSION_V3 if family_enabled else (
+                SCHEMA_VERSION_V2
+                if config["threshold_version"] == THRESHOLD_VERSION_V2 else SCHEMA_VERSION
+            )
         ),
         "thresholdVersion": config["threshold_version"],
         "status": "failed",
@@ -575,6 +937,122 @@ def refine_groove_opening(
     intersections: list[tuple[float, float]] = []
     endpoint_angles: list[float] = []
     for name, coarse, polarity in (("startSide", start, "falling"), ("endSide", end, "rising")):
+        family_enabled = bool(merged.get("wall_edge_family", {}).get("enabled", False))
+        if family_enabled:
+            candidate_rows = _side_candidate_rows(
+                array, center, radii, coarse, polarity,
+                bilinear_sample, parabolic_peak, merged,
+            )
+            strongest = [row[0] for row in candidate_rows if row]
+            strongest_points = [item["point"] for item in strongest]
+            original = _select_consensus_line(
+                strongest_points, minimum=int(merged["min_side_points"]), center=center,
+                outer_radius=outer_radius, coarse_angle_deg=coarse,
+                maximum_delta_deg=float(merged["max_intersection_coarse_delta_deg"]),
+                config=merged, pixel_scale=pixel_scale,
+            )
+            original_summary = {
+                "status": original["status"], "failedCheck": original["failedCheck"],
+                "detectedPointCount": original["detectedPointCount"],
+                "bestSupportCount": original["bestSupportCount"],
+                "secondSupportCount": original["secondSupportCount"],
+                "supportMargin": original["supportMargin"],
+            }
+            original_accepted = original["status"] == "accepted"
+            decision = (
+                {
+                    "status": "not_evaluated", "failedCheck": None,
+                    "candidateCount": sum(len(row) for row in candidate_rows),
+                    "seedCount": 0, "hypothesisCount": 0, "familySummaries": [],
+                    "bestSupportCount": None, "secondSupportCount": None,
+                    "supportMargin": None,
+                }
+                if original_accepted else _select_wall_family(
+                    candidate_rows, minimum=int(merged["min_side_points"]), center=center,
+                    outer_radius=outer_radius, coarse_angle_deg=coarse,
+                    maximum_delta_deg=float(merged["tangential_search_margin_deg"]),
+                    config=merged, pixel_scale=pixel_scale,
+                    max_hypotheses=int(merged["wall_edge_family"]["max_hypotheses"]),
+                )
+            )
+            if not original_accepted and decision["status"] != "accepted":
+                failures.append(f"{name}_{decision['failedCheck']}")
+                sides[name] = {
+                    "lineFitStrategy": "bounded-cross-radius-wall-family-v1",
+                    "sampledPointCount": int(len(radii)),
+                    "candidatePointCount": int(decision["candidateCount"]),
+                    "wallFamilyStatus": decision["status"],
+                    "wallFamilyFailedCheck": decision["failedCheck"],
+                    "wallFamilySeedCount": decision["seedCount"],
+                    "wallFamilyHypothesisCount": decision["hypothesisCount"],
+                    "wallFamilySummaries": decision["familySummaries"],
+                    "bestSupportCount": decision["bestSupportCount"],
+                    "secondSupportCount": decision["secondSupportCount"],
+                    "supportMargin": decision["supportMargin"],
+                    "originalStrongestEdgeDecision": original_summary,
+                    "profileEvidence": None, "line": None,
+                    "lineResidualPx": None, "points": [],
+                }
+                continue
+            if original_accepted:
+                original_mask = np.asarray(original["inlierMask"], dtype=bool)
+                selected = [
+                    item for item, keep in zip(strongest, original_mask, strict=True) if keep
+                ]
+                effective_line = original["line"]
+                effective_residuals = np.asarray(original["residuals"], dtype=float)
+                effective_intersection = original["intersection"]
+                effective_angle = original["intersectionAngleDeg"]
+                effective_coverage = original["longitudinalCoverage"]
+                effective_strategy = "deterministic-consensus-tls-v2-preserved"
+            else:
+                selected = decision["selectedCandidates"]
+                effective_line = decision["line"]
+                effective_residuals = np.asarray(decision["residuals"], dtype=float)
+                effective_intersection = decision["intersection"]
+                effective_angle = decision["intersectionAngleDeg"]
+                effective_coverage = decision["longitudinalCoverage"]
+                effective_strategy = "bounded-cross-radius-wall-family-v1"
+            points = [item["point"] for item in selected]
+            contrasts = [float(item["contrast"]) for item in selected]
+            gradients = [float(item["gradient"]) for item in selected]
+            observations = [{
+                key: item[key] for key in (
+                    "radiusPx", "contrast", "gradient", "metalLevel", "grooveLevel",
+                    "canonicalGrayProfile",
+                )
+            } for item in selected]
+            profile_evidence = _profile_evidence(observations, radii)
+            line = effective_line
+            residuals = effective_residuals
+            intersection = effective_intersection
+            angle = effective_angle
+            sides[name] = {
+                "lineFitStrategy": effective_strategy,
+                "sampledPointCount": int(len(radii)),
+                "candidatePointCount": int(decision["candidateCount"]),
+                "supportPointCount": len(points),
+                "rejectedPointCount": int(decision["candidateCount"] - len(points)),
+                "edgeContrastMedian": float(np.median(contrasts)),
+                "edgeGradientMedianPerPx": float(np.median(gradients)),
+                "profileEvidence": profile_evidence,
+                "wallFamilyStatus": "not_needed" if original_accepted else decision["status"],
+                "wallFamilyFailedCheck": None,
+                "wallFamilySeedCount": decision["seedCount"],
+                "wallFamilyHypothesisCount": decision["hypothesisCount"],
+                "wallFamilySummaries": decision["familySummaries"],
+                "bestSupportCount": decision["bestSupportCount"],
+                "secondSupportCount": decision["secondSupportCount"],
+                "supportMargin": decision["supportMargin"],
+                "lineLongitudinalCoverage": effective_coverage,
+                "originalStrongestEdgeDecision": original_summary,
+                "line": {"a": line[0], "b": line[1], "c": line[2]},
+                "lineResidualPx": _summary(residuals),
+                "points": [[float(value) for value in point] for point in points],
+            }
+            intersections.append(intersection)
+            endpoint_angles.append(angle)
+            continue
         points, contrasts, gradients, observations = _side_points(
             array, center, radii, coarse, polarity, bilinear_sample, parabolic_peak, merged,
         )
@@ -702,7 +1180,12 @@ def refine_groove_opening(
     ]
     return finish({
         "schemaVersion": (
-            SCHEMA_VERSION_V2 if merged["threshold_version"] == THRESHOLD_VERSION_V2 else SCHEMA_VERSION
+            SCHEMA_VERSION_V3 if bool(
+                merged.get("wall_edge_family", {}).get("enabled", False)
+            ) else (
+                SCHEMA_VERSION_V2
+                if merged["threshold_version"] == THRESHOLD_VERSION_V2 else SCHEMA_VERSION
+            )
         ),
         "thresholdVersion": merged["threshold_version"],
         "status": "accepted",

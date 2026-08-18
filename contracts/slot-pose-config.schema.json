@@ -195,20 +195,37 @@
           }
         },
         "source_consistency_adjudication": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "schema_version", "enabled", "threshold_version", "development_only",
-            "max_endpoint_structure_difference"
-          ],
-          "properties": {
-            "schema_version": {"const": "source-consistency-adjudication/1"},
-            "enabled": {"type": "boolean", "default": false},
-            "threshold_version": {"type": "string", "minLength": 1},
-            "development_only": {"const": true},
-            "max_endpoint_structure_difference": {
-              "type": "number", "minimum": 0, "maximum": 1
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema_version", "enabled", "threshold_version", "development_only", "max_endpoint_structure_difference"],
+              "properties": {
+                "schema_version": {"const": "source-consistency-adjudication/1"},
+                "enabled": {"type": "boolean", "default": false},
+                "threshold_version": {"type": "string", "minLength": 1},
+                "development_only": {"const": true},
+                "max_endpoint_structure_difference": {"type": "number", "minimum": 0, "maximum": 1}
+              }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema_version", "enabled", "strategy_version", "development_only"],
+              "properties": {
+                "schema_version": {"const": "source-consistency-adjudication/2"},
+                "enabled": {"type": "boolean", "default": false},
+                "strategy_version": {"const": "locked-noncontrast-gates-v2"},
+                "development_only": {"const": true}
+              }
             }
+          ]
+        },
+        "groove_recognition_recovery": {
+          "type": "object", "additionalProperties": false,
+          "required": ["schema_version", "enabled", "strategy_version"],
+          "properties": {
+            "schema_version": {"const": "groove-recognition-recovery/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "strategy_version": {"const": "exact-width-only-downstream-proof-v1"}
           }
         },
         "groove_recognition": {
@@ -342,7 +359,19 @@
             "line_consensus_min_pair_separation_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
             "line_consensus_model_merge_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 180},
             "line_consensus_min_support_margin": {"type": "integer", "minimum": 1},
-            "line_consensus_max_refit_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128}
+            "line_consensus_max_refit_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128},
+            "wall_edge_family": {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema_version", "enabled", "strategy_version", "max_peaks_per_row", "min_peak_separation_px", "max_hypotheses"],
+              "properties": {
+                "schema_version": {"const": "groove-wall-edge-family/1"},
+                "enabled": {"type": "boolean", "default": false},
+                "strategy_version": {"const": "bounded-cross-radius-wall-family-v1"},
+                "max_peaks_per_row": {"type": "integer", "minimum": 2, "maximum": 8},
+                "min_peak_separation_px": {"type": "number", "exclusiveMinimum": 0},
+                "max_hypotheses": {"type": "integer", "minimum": 2, "maximum": 128}
+              }
+            }
           }
         },
         "ambiguity_resolution": {
@@ -359,10 +388,20 @@
           "additionalProperties": false,
           "required": ["schema_version", "enabled", "strategy_version"],
           "properties": {
-            "schema_version": {"const": "groove-shadow-source-discrimination/1"},
+            "schema_version": {"enum": ["groove-shadow-source-discrimination/1", "groove-shadow-source-discrimination/2"]},
             "enabled": {"type": "boolean", "default": false},
-            "strategy_version": {"const": "physical-sidewall-source-evidence/1"}
-          }
+            "strategy_version": {"enum": ["physical-sidewall-source-evidence/1", "fixture-role-u-contour-source-evidence/2"]}
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"schema_version": {"const": "groove-shadow-source-discrimination/1"}}},
+              "then": {"properties": {"strategy_version": {"const": "physical-sidewall-source-evidence/1"}}}
+            },
+            {
+              "if": {"properties": {"schema_version": {"const": "groove-shadow-source-discrimination/2"}}},
+              "then": {"properties": {"strategy_version": {"const": "fixture-role-u-contour-source-evidence/2"}}}
+            }
+          ]
         },
         "physical_outer_circle": {
           "type": "object",

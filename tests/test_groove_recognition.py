@@ -5,7 +5,11 @@ import unittest
 import numpy as np
 
 from algorithms.slot_pose.angular_profile import NotchCandidate
-from algorithms.slot_pose.groove_recognition import DEFAULT_GROOVE_RECOGNITION_CONFIG, recognize_grooves
+from algorithms.slot_pose.groove_recognition import (
+    DEFAULT_GROOVE_RECOGNITION_CONFIG,
+    provisional_candidate_ids,
+    recognize_grooves,
+)
 
 
 def candidate(candidate_id: str, center: float, half_width: float = 5.0) -> NotchCandidate:
@@ -100,6 +104,38 @@ class GrooveRecognitionTests(unittest.TestCase):
             DEFAULT_GROOVE_RECOGNITION_CONFIG, 2,
         )
         self.assertEqual("failed", insufficient["status"])
+
+    def test_provisional_recovery_is_exact_width_only_and_order_invariant(self) -> None:
+        width_only = {
+            "candidateId": "candidate-002", "accepted": False,
+            "rejectionReasons": ["width_variation_too_high"],
+        }
+        accepted = {
+            "candidateId": "candidate-001", "accepted": True,
+            "rejectionReasons": [],
+        }
+        structural = {
+            "candidateId": "candidate-003", "accepted": False,
+            "rejectionReasons": ["width_variation_too_high", "contour_discontinuous"],
+        }
+        config = {
+            "schema_version": "groove-recognition-recovery/1",
+            "enabled": True,
+            "strategy_version": "exact-width-only-downstream-proof-v1",
+        }
+        expected = ["candidate-002"]
+        self.assertEqual(expected, provisional_candidate_ids(
+            [width_only, structural], config,
+        ))
+        self.assertEqual(expected, provisional_candidate_ids(
+            [structural, width_only], config,
+        ))
+        self.assertEqual([], provisional_candidate_ids(
+            [width_only, accepted, structural], config,
+        ))
+        self.assertEqual([], provisional_candidate_ids([width_only], None))
+        with self.assertRaises(ValueError):
+            provisional_candidate_ids([width_only], {**config, "unknown": True})
 
 
 if __name__ == "__main__":

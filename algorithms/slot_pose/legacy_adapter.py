@@ -28,9 +28,15 @@ from algorithms.slot_pose.fixture_shadow import (
     analyze_fixture_shadows,
     build_fixture_overlap_evaluation_candidates,
 )
-from algorithms.slot_pose.groove_recognition import recognize_grooves
+from algorithms.slot_pose.groove_recognition import provisional_candidate_ids, recognize_grooves
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.groove_resolution import resolve_groove_candidates
+from algorithms.slot_pose.groove_shadow_geometry import (
+    assess_candidate_fixture_overlap,
+    assess_groove_floor_evidence,
+    build_fixture_source_exclusion,
+    detect_stationary_fixture_sectors,
+)
 from algorithms.slot_pose.groove_shadow_discrimination import (
     build_candidate_source_evidence,
     classify_groove_shadow_sources,
@@ -324,11 +330,24 @@ class LegacyAEndFaceAdapter:
             minimum_required_count, pixel_scale=scale,
         )
         by_id = {item["candidateId"]: item for item in recognition["assessments"]}
+        recovery_config = self.config["detector"].get("groove_recognition_recovery")
+        provisional_ids = provisional_candidate_ids(
+            recognition["assessments"], recovery_config,
+        )
+        if recovery_config is not None:
+            recognition["provisionalCandidateIds"] = provisional_ids
+            recognition["effectiveCandidateIds"] = sorted(set(
+                recognition["acceptedCandidateIds"] + provisional_ids
+            ))
         accepted: list[dict[str, Any]] = []
         for raw in raw_candidates:
             assessment = by_id[raw["candidateId"]]
-            if assessment["accepted"]:
+            if assessment["accepted"] or raw["candidateId"] in provisional_ids:
                 accepted.append({**raw, **assessment})
+                if recovery_config is not None:
+                    accepted[-1]["provisionalRecognition"] = (
+                        raw["candidateId"] in provisional_ids
+                    )
         return recognition, accepted
 
     def estimate(self, image_path: Path) -> dict[str, Any]:
@@ -614,6 +633,7 @@ class LegacyAEndFaceAdapter:
                             polar_quality_accepted="polar_score" not in failures,
                             existing_pose_chain_allowed=False,
                             terminal_stage="upstream_outer_circle",
+                            strategy_version=shadow_source_config["strategy_version"],
                         )
                     )
                 code = (
@@ -629,6 +649,31 @@ class LegacyAEndFaceAdapter:
             assert physical is not None
             groove_center = (float(physical["centerX"]), float(physical["centerY"]))
             groove_outer_radius = float(physical["radiusPx"])
+            fixture_geometry_enabled = bool(
+                (
+                    detector.get("groove_shadow_source_discrimination", {}).get("enabled", False)
+                    and detector.get("groove_shadow_source_discrimination", {}).get("schema_version")
+                    == "groove-shadow-source-discrimination/2"
+                )
+                or detector.get("groove_recognition_recovery", {}).get("enabled", False)
+                or detector.get("groove_refinement", {}).get("wall_edge_family", {}).get(
+                    "enabled", False
+                )
+                or (
+                    detector.get("source_consistency_adjudication", {}).get("enabled", False)
+                    and detector.get("source_consistency_adjudication", {}).get("schema_version")
+                    == "source-consistency-adjudication/2"
+                )
+            )
+            fixture_body_evidence = (
+                detect_stationary_fixture_sectors(
+                    target_gray, groove_center, groove_outer_radius,
+                )
+                if mode == "single_real_groove" and fixture_geometry_enabled
+                else None
+            )
+            if fixture_body_evidence is not None:
+                diagnostics["stationaryFixtureGeometry"] = fixture_body_evidence
             try:
                 target_roles = self._candidate_profile(
                     target_gray, groove_center, groove_outer_radius, scale, "target physical outer circle",
@@ -645,6 +690,7 @@ class LegacyAEndFaceAdapter:
                             polar_quality_accepted="polar_score" not in failures,
                             existing_pose_chain_allowed=False,
                             terminal_stage="candidate_generation",
+                            strategy_version=shadow_source_config["strategy_version"],
                         )
                     )
                 exc.diagnostics = diagnostics
@@ -657,6 +703,64 @@ class LegacyAEndFaceAdapter:
                 target_gray, groove_center, groove_outer_radius, scale,
                 target_roles["evaluationCandidates"], minimum_required,
             )
+            fixture_candidate_screening = None
+            if isinstance(fixture_body_evidence, dict):
+                assessment_by_id = {
+                    item["candidateId"]: item
+                    for item in recognition.get("assessments", [])
+                    if isinstance(item, dict) and isinstance(item.get("candidateId"), str)
+                }
+                screening_items = []
+                for raw in target_roles["evaluationCandidates"][:16]:
+                    assessment = assessment_by_id.get(raw.get("candidateId"), {})
+                    candidate_evidence = {**raw, **assessment}
+                    overlap = assess_candidate_fixture_overlap(
+                        candidate_evidence, fixture_body_evidence,
+                    )
+                    floor = assess_groove_floor_evidence(
+                        target_gray, groove_center, groove_outer_radius,
+                        candidate_evidence, self.module.bilinear_sample,
+                        pixel_scale=scale,
+                        search_depth_px=float(
+                            detector["groove_recognition"]["radial_span_px"]
+                        ) * scale,
+                    )
+                    role = overlap.get("overlapRole")
+                    if role == "lower_fixture":
+                        disposition = "LOWER_FIXTURE_FALSE_SOURCE"
+                    elif role in {"upper_fixture", "multiple_fixture_bodies"} and floor.get("status") == "accepted":
+                        disposition = "UPPER_FIXTURE_OVERLAP_WITH_FLOOR_EVIDENCE"
+                    elif role in {"upper_fixture", "multiple_fixture_bodies"}:
+                        disposition = "UPPER_FIXTURE_MIXED_OR_OCCLUDED_RISK"
+                    elif floor.get("status") == "accepted":
+                        disposition = "NONFIXTURE_U_FLOOR_EVIDENCE"
+                    else:
+                        disposition = "INSUFFICIENT_SOURCE_EVIDENCE"
+                    screening_items.append({
+                        "candidateId": raw.get("candidateId"),
+                        "originalRecognitionAccepted": assessment.get("accepted") is True,
+                        "originalRecognitionFailedChecks": list(
+                            assessment.get("rejectionReasons") or []
+                        ),
+                        "overlap": overlap, "floor": floor,
+                        "disposition": disposition,
+                    })
+                fixture_candidate_screening = {
+                    "schemaVersion": "fixture-candidate-source-screening/1",
+                    "status": "evaluated",
+                    "candidateCount": len(screening_items),
+                    "candidates": screening_items,
+                    "lowerFixtureFalseSourceCount": sum(
+                        item["disposition"] == "LOWER_FIXTURE_FALSE_SOURCE"
+                        for item in screening_items
+                    ),
+                    "upperFixtureMixedOrOccludedRiskCount": sum(
+                        item["disposition"] == "UPPER_FIXTURE_MIXED_OR_OCCLUDED_RISK"
+                        for item in screening_items
+                    ),
+                    "candidateSelectionUsedFixedAngle": False,
+                    "manualTruthAppliedAtRuntime": False,
+                }
             diagnostics.update({
                 "angularProfile": target_roles["angularProfile"],
                 "candidates": target_roles["candidates"],
@@ -673,6 +777,8 @@ class LegacyAEndFaceAdapter:
                     "provesA2FeatureMapping": False,
                 },
             })
+            if fixture_candidate_screening is not None:
+                diagnostics["fixtureCandidateSourceScreening"] = fixture_candidate_screening
             if mode == "single_real_groove":
                 pose_config = detector["single_groove_pose"]
                 is_refined = pose_config["schema_version"] in {
@@ -694,7 +800,20 @@ class LegacyAEndFaceAdapter:
                         refinement,
                         detector.get("sidewall_source_consistency"),
                     )
+                    fixture_source_exclusion = (
+                        build_fixture_source_exclusion(
+                            candidate, fixture_body_evidence, refinement,
+                            groove_floor_evidence=assess_groove_floor_evidence(
+                                target_gray, groove_center, groove_outer_radius,
+                                candidate, self.module.bilinear_sample,
+                                pixel_scale=scale,
+                            ),
+                        )
+                        if isinstance(fixture_body_evidence, dict) else None
+                    )
                     output = {**refinement, "sourceConsistency": source_consistency}
+                    if fixture_source_exclusion is not None:
+                        output["fixtureSourceExclusion"] = fixture_source_exclusion
                     source_candidate = assess_sidewall_consistency_candidate(
                         source_consistency,
                         detector.get("sidewall_source_consistency_candidate"),
@@ -704,6 +823,17 @@ class LegacyAEndFaceAdapter:
                     source_adjudication = adjudicate_source_consistency(
                         source_consistency,
                         detector.get("source_consistency_adjudication"),
+                        fixture_source_evidence=(
+                            {
+                                key: fixture_source_exclusion[key]
+                                for key in (
+                                    "schemaVersion", "status", "fixtureBodiesVerified",
+                                    "uContourComplete", "fixtureSourceExcluded",
+                                    "candidateSelectionUsedFixedAngle",
+                                )
+                            }
+                            if isinstance(fixture_source_exclusion, dict) else None
+                        ),
                     )
                     if source_adjudication is not None:
                         output["sourceConsistencyAdjudication"] = source_adjudication
@@ -737,6 +867,38 @@ class LegacyAEndFaceAdapter:
                             and source_adjudication["imagePoseReleaseAllowed"] is True
                         )
                     )
+                    wall_family_recovery_used = any(
+                        isinstance(refinement.get(side_name), dict)
+                        and refinement[side_name].get("lineFitStrategy")
+                        == "bounded-cross-radius-wall-family-v1"
+                        for side_name in ("startSide", "endSide")
+                    )
+                    recovery_requires_fixture_exclusion = bool(
+                        candidate.get("provisionalRecognition") is True
+                        or wall_family_recovery_used
+                    )
+                    recovery_without_fixture_exclusion = (
+                        recovery_requires_fixture_exclusion and not (
+                            isinstance(output.get("fixtureSourceExclusion"), dict)
+                            and output["fixtureSourceExclusion"].get("status") == "verified"
+                            and output["fixtureSourceExclusion"].get("fixtureBodiesVerified") is True
+                            and output["fixtureSourceExclusion"].get("uContourComplete") is True
+                            and output["fixtureSourceExclusion"].get("fixtureSourceExcluded") is True
+                            and output["fixtureSourceExclusion"].get(
+                                "candidateSelectionUsedFixedAngle"
+                            ) is False
+                        )
+                    )
+                    if recovery_without_fixture_exclusion:
+                        return {
+                            **output,
+                            "physicalRefinementStatus": refinement["status"],
+                            "status": "failed",
+                            "failedChecks": list(dict.fromkeys(
+                                list(refinement.get("failedChecks") or [])
+                                + ["recovery_fixture_source_exclusion_not_verified"]
+                            )),
+                        }
                     if source_consistency["status"] == "rejected" and not source_effective_accepted:
                         return {
                             **output,
@@ -777,6 +939,8 @@ class LegacyAEndFaceAdapter:
                         "grooveRefinement": refinement,
                     }]
                     diagnostics["grooveCandidates"] = groove_candidates
+                    if refinement["status"] == "accepted":
+                        pose_recognition_status = "accepted"
                 elif is_refined and len(groove_candidates) > 1 and detector["ambiguity_resolution"]["enabled"]:
                     resolution = resolve_groove_candidates(
                         groove_candidates, refine_candidate, detector["ambiguity_resolution"],
@@ -873,6 +1037,8 @@ class LegacyAEndFaceAdapter:
                                 "sourceConsistency": detector["sidewall_source_consistency"]["threshold_version"],
                                 "ambiguity": detector["ambiguity_resolution"]["schema_version"],
                             },
+                            strategy_version=shadow_source_config["strategy_version"],
+                            raw_candidate_screening=fixture_candidate_screening,
                         )
                     )
                 if single_pose["status"] != "accepted":

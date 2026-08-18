@@ -178,6 +178,8 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "grooveCandidates": diagnostics.get("grooveCandidates") or [],
         "grooveRefinement": groove_refinement,
         "grooveShadowSourceDiscrimination": diagnostics.get("grooveShadowSourceDiscrimination"),
+        "stationaryFixtureGeometry": diagnostics.get("stationaryFixtureGeometry"),
+        "fixtureCandidateSourceScreening": diagnostics.get("fixtureCandidateSourceScreening"),
         "singleGroovePose": single_groove_pose,
         "yDownTargetDiagnostic": y_down_target,
         "guidance": guidance_record,
@@ -305,23 +307,58 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
             for item in source_diagnostic.get("candidateEvidence") or []
             if isinstance(item, dict)
         }
+        fixture_screening = record.get("fixtureCandidateSourceScreening") or {}
+        fixture_by_candidate = {
+            str(item.get("candidateId")): item
+            for item in fixture_screening.get("candidates") or []
+            if isinstance(item, dict)
+        }
+        fixture_geometry = record.get("stationaryFixtureGeometry") or {}
+        fixture_radius = radius * 1.04
+        fixture_bounds = (
+            center[0] - fixture_radius, center[1] - fixture_radius,
+            center[0] + fixture_radius, center[1] + fixture_radius,
+        )
+        for sector in fixture_geometry.get("sectors") or []:
+            if not isinstance(sector, dict):
+                continue
+            start = sector.get("startDeg")
+            span = sector.get("spanDeg")
+            if not isinstance(start, (int, float)) or not isinstance(span, (int, float)):
+                continue
+            fixture_color = "#35c7ff" if sector.get("role") == "upper_fixture" else "#ff9f43"
+            draw.arc(
+                fixture_bounds, start=float(start), end=float(start) + float(span),
+                fill=fixture_color, width=width * 3,
+            )
         for candidate in record.get("candidates") or []:
             candidate_id = str(candidate["candidateId"])
             role = role_by_candidate.get(candidate_id)
             assessment = assessments.get(candidate_id)
             source_item = source_by_candidate.get(candidate_id) or {}
+            fixture_item = fixture_by_candidate.get(candidate_id) or {}
             source_color = {
                 "REAL_GROOVE_SURVIVOR": "#38d66b",
                 "NON_GROOVE_SOURCE_REJECTED": "#ff5dce",
                 "MIXED_OR_OCCLUDED_EVIDENCE": "#ff5d73",
                 "INDETERMINATE": "#ffe14f",
             }.get(source_item.get("sourceDisposition"))
-            color = source_color or ROLE_COLORS.get(role, "#ffe14f" if assessment is None else ("#38d66b" if assessment.get("accepted") else "#ff5d73"))
+            fixture_color = {
+                "LOWER_FIXTURE_FALSE_SOURCE": "#ff9f43",
+                "UPPER_FIXTURE_OVERLAP_WITH_FLOOR_EVIDENCE": "#35c7ff",
+                "UPPER_FIXTURE_MIXED_OR_OCCLUDED_RISK": "#ff5d73",
+                "NONFIXTURE_U_FLOOR_EVIDENCE": "#38d66b",
+                "INSUFFICIENT_SOURCE_EVIDENCE": "#ffe14f",
+            }.get(fixture_item.get("disposition"))
+            color = source_color or fixture_color or ROLE_COLORS.get(role, "#ffe14f" if assessment is None else ("#38d66b" if assessment.get("accepted") else "#ff5d73"))
             angle = float(candidate["centerDeg"])
             endpoint = _point(center, radius, angle)
             draw.line((center, endpoint), fill=color, width=width)
             groove_label = "" if assessment is None else f" G={float(assessment['grooveScore']):.2f} {'ACCEPT' if assessment.get('accepted') else 'REJECT'}"
+            source_role = fixture_item.get("disposition")
             label = candidate_id if role is None else f"{candidate_id} / {role}"
+            if source_role:
+                label += f" / {source_role}"
             draw.text(endpoint, f" {label} {angle:.2f}deg{groove_label}", fill=color, font=font, stroke_width=2, stroke_fill="black")
         single_pose = record.get("singleGroovePose") or {}
         measurement = single_pose.get("imageMeasurement") or {}
@@ -374,12 +411,18 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
             f" y-down={float(measured_y):.2f}deg target={target_diagnostic.get('toleranceStatus')}"
         )
     source_diagnostic = record.get("grooveShadowSourceDiscrimination") or {}
+    fixture_screening = record.get("fixtureCandidateSourceScreening") or {}
     source_text = ""
     if source_diagnostic:
         source_text = (
             f" source={source_diagnostic.get('classification')}"
             f" status={source_diagnostic.get('status')}"
             f" failed={'|'.join(source_diagnostic.get('failedChecks') or [])}"
+        )
+    if fixture_screening:
+        source_text += (
+            f" fixtureLowerFalse={fixture_screening.get('lowerFixtureFalseSourceCount')}"
+            f" fixtureUpperRisk={fixture_screening.get('upperFixtureMixedOrOccludedRiskCount')}"
         )
     draw.text(
         (18, 12),
@@ -388,7 +431,7 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
     )
     draw.text(
         (18, 56),
-        "cyan=all side points; green=survivor; magenta=non-groove; red=mixed/rejected; white=line/intersection"
+        "cyan=upper fixture/family; orange=lower fixture false-source; green=U evidence; red=mixed/rejected; white=line/intersection"
         + source_text,
         fill="white", font=font,
     )
@@ -519,6 +562,16 @@ def render_review(
     source_overlay_statuses = Counter(
         record.get("sourceOverlayStatus", "unavailable") for record in records
     )
+    groove_source_classifications = Counter(
+        (record.get("grooveShadowSourceDiscrimination") or {}).get("classification")
+        or "not_evaluated"
+        for record in records
+    )
+    fixture_dispositions: Counter[str] = Counter()
+    for record in records:
+        for item in (record.get("fixtureCandidateSourceScreening") or {}).get("candidates") or []:
+            if isinstance(item, dict) and isinstance(item.get("disposition"), str):
+                fixture_dispositions[item["disposition"]] += 1
     summary = {
         "schemaVersion": "slot-pose-review/2" if any(
             key != "not_available" for key in detection_statuses
@@ -543,6 +596,8 @@ def render_review(
         "physicalOuterCircleAcceptedCount": physical_circle_accepted_count,
         "circleLocalizationStatusCounts": dict(sorted(localization_statuses.items())),
         "sourceOverlayStatusCounts": dict(sorted(source_overlay_statuses.items())),
+        "grooveSourceClassificationCounts": dict(sorted(groove_source_classifications.items())),
+        "fixtureCandidateDispositionCounts": dict(sorted(fixture_dispositions.items())),
         "records": records,
     }
     write_json(output_dir / "review.json", summary)
@@ -552,6 +607,7 @@ def render_review(
             "prominence", "start_deg", "end_deg", "wraps_boundary", "groove_score", "accepted",
             "rejection_reasons", "radial_depth_px", "tangential_width_px", "paired_edge_support",
             "contour_continuity", "threshold_version", "suggested_role", "authoritative",
+            "fixture_disposition", "fixture_overlap_role", "groove_floor_status",
         ])
         writer.writeheader()
         for record in records:
@@ -561,8 +617,14 @@ def render_review(
                 item["candidateId"]: item
                 for item in (record.get("grooveRecognition") or {}).get("assessments") or []
             }
+            fixture_assessments = {
+                str(item.get("candidateId")): item
+                for item in (record.get("fixtureCandidateSourceScreening") or {}).get("candidates") or []
+                if isinstance(item, dict)
+            }
             for candidate in record["candidates"]:
                 assessment = assessments.get(candidate["candidateId"]) or {}
+                fixture = fixture_assessments.get(candidate["candidateId"]) or {}
                 writer.writerow({
                     "image_id": record["imageId"], "relative_path": record["relativePath"],
                     "candidate_id": candidate["candidateId"], "rank": candidate["rank"],
@@ -577,6 +639,9 @@ def render_review(
                     "contour_continuity": assessment.get("contourContinuity"),
                     "threshold_version": assessment.get("thresholdVersion"),
                     "suggested_role": role_by_candidate.get(candidate["candidateId"]), "authoritative": False,
+                    "fixture_disposition": fixture.get("disposition"),
+                    "fixture_overlap_role": (fixture.get("overlap") or {}).get("overlapRole"),
+                    "groove_floor_status": (fixture.get("floor") or {}).get("status"),
                 })
     with (output_dir / "guidance.csv").open("w", newline="", encoding="utf-8") as handle:
         fields = [

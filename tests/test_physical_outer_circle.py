@@ -402,6 +402,13 @@ class PhysicalOuterCircleTests(unittest.TestCase):
         self.assertIn("residual_p95", result["failedChecks"])
         self.assertEqual("rejected", result["robustRefit"]["status"])
         self.assertIn("too_many_suspect_sectors", result["robustRefit"]["reasons"])
+        self.assertAlmostEqual(5.0, result["residualThresholdPx"])
+        self.assertLess(result["residualMarginPx"], 0.0)
+        self.assertEqual(36, result["sectorEvidence"]["binCount"])
+        self.assertGreater(
+            result["sectorEvidence"]["suspectSectorCount"],
+            physical_module.DEFAULT_SECTOR_ROBUSTNESS_CONFIG["max_excluded_sector_count"],
+        )
 
     def test_sector_runs_merge_across_zero_degrees(self):
         truth = (200.0, 210.0, 100.0)

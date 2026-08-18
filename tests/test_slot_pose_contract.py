@@ -61,6 +61,42 @@ def minimal_single_groove_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_028_recovery_configs_are_strict_default_off_and_dependency_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_single_groove_config()
+            config["detector"]["ambiguity_resolution"] = {"enabled": True}
+            config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+            config["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+                "wall_edge_family": {"enabled": True},
+            }
+            config["detector"]["groove_recognition_recovery"] = {"enabled": True}
+            config["detector"]["groove_shadow_source_discrimination"] = {
+                "schema_version": "groove-shadow-source-discrimination/2",
+                "enabled": True,
+                "strategy_version": "fixture-role-u-contour-source-evidence/2",
+            }
+            config["detector"]["source_consistency_adjudication"] = {
+                "schema_version": "source-consistency-adjudication/2",
+                "enabled": True,
+                "strategy_version": "locked-noncontrast-gates-v2",
+                "development_only": True,
+            }
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertTrue(loaded["detector"]["groove_recognition_recovery"]["enabled"])
+            self.assertTrue(loaded["detector"]["groove_refinement"]["wall_edge_family"]["enabled"])
+            self.assertEqual(
+                "source-consistency-adjudication/2",
+                loaded["detector"]["source_consistency_adjudication"]["schema_version"],
+            )
+
+            config["detector"]["groove_recognition_recovery"]["unsafe_threshold"] = 0.1
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unsupported fields"):
+                load_config(path)
+
     def test_groove_shadow_source_discrimination_is_default_off_and_strictly_gated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -102,6 +138,18 @@ class SlotPoseContractTests(unittest.TestCase):
             enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
             configured = load_config(enabled_path)
             self.assertTrue(configured["detector"]["groove_shadow_source_discrimination"]["enabled"])
+
+            enabled["detector"]["groove_shadow_source_discrimination"] = {
+                "schema_version": "groove-shadow-source-discrimination/2",
+                "enabled": True,
+                "strategy_version": "fixture-role-u-contour-source-evidence/2",
+            }
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            configured_v2 = load_config(enabled_path)
+            self.assertEqual(
+                "groove-shadow-source-discrimination/2",
+                configured_v2["detector"]["groove_shadow_source_discrimination"]["schema_version"],
+            )
 
             enabled["detector"]["source_consistency_adjudication"] = {"enabled": True}
             enabled_path.write_text(json.dumps(enabled), encoding="utf-8")

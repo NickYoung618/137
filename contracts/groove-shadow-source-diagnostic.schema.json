@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "strategyVersion", "enabled", "status", "classification", "terminalStage", "poseChainAllowed", "selectedCandidateId", "candidateCount", "candidateEvidence", "passedChecks", "failedChecks", "lockedGateVersions"],
   "properties": {
-    "schemaVersion": {"const": "groove-shadow-source-diagnostic/1"},
-    "strategyVersion": {"const": "physical-sidewall-source-evidence/1"},
+    "schemaVersion": {"enum": ["groove-shadow-source-diagnostic/1", "groove-shadow-source-diagnostic/2"]},
+    "strategyVersion": {"enum": ["physical-sidewall-source-evidence/1", "fixture-role-u-contour-source-evidence/2"]},
     "enabled": {"type": "boolean"},
     "status": {"enum": ["disabled", "accepted", "rejected", "not_evaluated"]},
-    "classification": {"enum": ["REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW", "REAL_GROOVE_SHADOW_MIXED_OR_OCCLUDED", "INDETERMINATE", null]},
+    "classification": {"enum": ["REAL_GROOVE_COMPLETE_VISIBLE", "REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW", "REAL_GROOVE_SHADOW_MIXED_OR_OCCLUDED", "INDETERMINATE", null]},
     "terminalStage": {"enum": ["upstream_outer_circle", "candidate_generation", "groove_recognition", "groove_ambiguity", "polar_quality", "groove_refinement", "source_consistency", "valid"]},
     "poseChainAllowed": {"type": "boolean"},
     "selectedCandidateId": {"type": ["string", "null"]},
@@ -20,6 +20,16 @@
     "failedChecks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "lockedGateVersions": {"type": "object", "additionalProperties": {"type": "string"}}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"schemaVersion": {"const": "groove-shadow-source-diagnostic/1"}}},
+      "then": {"properties": {"strategyVersion": {"const": "physical-sidewall-source-evidence/1"}}}
+    },
+    {
+      "if": {"properties": {"schemaVersion": {"const": "groove-shadow-source-diagnostic/2"}}},
+      "then": {"properties": {"strategyVersion": {"const": "fixture-role-u-contour-source-evidence/2"}}}
+    }
+  ],
   "$defs": {
     "evaluation": {
       "type": "object", "additionalProperties": false,

@@ -5,14 +5,15 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion", "thresholdVersion", "enabled", "developmentOnly", "authoritative",
+    "schemaVersion", "enabled", "developmentOnly", "authoritative",
     "productionDefaultAllowed", "plcAllowed", "manualTruthAppliedAtRuntime", "decision",
     "originalStatus", "effectiveStatus", "originalFailedChecks", "metrics", "checks",
     "failedChecks", "imagePoseReleaseAllowed"
   ],
   "properties": {
-    "schemaVersion": {"const": "source-consistency-adjudication/1"},
+    "schemaVersion": {"enum": ["source-consistency-adjudication/1", "source-consistency-adjudication/2"]},
     "thresholdVersion": {"type": "string", "minLength": 1},
+    "strategyVersion": {"type": "string", "minLength": 1},
     "enabled": {"const": true},
     "developmentOnly": {"const": true},
     "authoritative": {"const": false},
@@ -57,6 +58,18 @@
     "imagePoseReleaseAllowed": {"type": "boolean"}
   },
   "allOf": [
+    {
+      "if": {"properties": {"schemaVersion": {"const": "source-consistency-adjudication/1"}}},
+      "then": {"required": ["thresholdVersion"], "not": {"required": ["strategyVersion"]}}
+    },
+    {
+      "if": {"properties": {"schemaVersion": {"const": "source-consistency-adjudication/2"}}},
+      "then": {
+        "required": ["strategyVersion"],
+        "not": {"required": ["thresholdVersion"]},
+        "properties": {"strategyVersion": {"const": "locked-noncontrast-gates-v2"}}
+      }
+    },
     {
       "if": {"properties": {"decision": {"const": "ACCEPTED_OVERRIDE"}}},
       "then": {

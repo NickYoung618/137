@@ -163,6 +163,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
         source_consistency_adjudication = merged_source_consistency_adjudication_config(
             detector.get("source_consistency_adjudication")
         )
+    recognition_recovery = None
+    if "groove_recognition_recovery" in detector:
+        from algorithms.slot_pose.groove_recognition import (
+            merged_groove_recognition_recovery_config,
+        )
+
+        recognition_recovery = merged_groove_recognition_recovery_config(
+            detector.get("groove_recognition_recovery")
+        )
     local_second_wall = None
     if "local_second_wall_diagnostic" in detector:
         from algorithms.slot_pose.local_second_wall import merged_local_second_wall_config
@@ -187,6 +196,10 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError(
                 "detector.source_consistency_adjudication can only be enabled in single_real_groove mode"
             )
+        if recognition_recovery is not None and recognition_recovery["enabled"]:
+            raise ValueError(
+                "detector.groove_recognition_recovery can only be enabled in single_real_groove mode"
+            )
         if local_second_wall is not None and local_second_wall["enabled"]:
             raise ValueError(
                 "detector.local_second_wall_diagnostic can only be enabled in single_real_groove mode"
@@ -204,6 +217,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["sidewall_source_consistency_candidate"] = source_consistency_candidate
     if source_consistency_adjudication is not None:
         detector["source_consistency_adjudication"] = source_consistency_adjudication
+    if recognition_recovery is not None:
+        detector["groove_recognition_recovery"] = recognition_recovery
     if local_second_wall is not None:
         detector["local_second_wall_diagnostic"] = local_second_wall
     if "groove_shadow_source_discrimination" in detector:
@@ -347,6 +362,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
                     raise ValueError(
                         "detector.source_consistency_adjudication requires groove refinement v2"
                     )
+            if recognition_recovery is not None and recognition_recovery["enabled"]:
+                if not detector["ambiguity_resolution"]["enabled"]:
+                    raise ValueError(
+                        "detector.groove_recognition_recovery requires ambiguity_resolution"
+                    )
+                if detector["groove_refinement"]["threshold_version"] != "groove-sidewall-subpixel-v2":
+                    raise ValueError(
+                        "detector.groove_recognition_recovery requires groove refinement v2"
+                    )
             if groove_shadow_source["enabled"]:
                 if not detector["ambiguity_resolution"]["enabled"]:
                     raise ValueError(
@@ -359,6 +383,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
                 if (
                     source_consistency_adjudication is not None
                     and source_consistency_adjudication["enabled"]
+                    and source_consistency_adjudication["schema_version"]
+                    != "source-consistency-adjudication/2"
                 ):
                     raise ValueError(
                         "detector.groove_shadow_source_discrimination forbids "
@@ -375,6 +401,10 @@ def load_config(config_path: Path) -> dict[str, Any]:
         elif source_consistency_adjudication is not None and source_consistency_adjudication["enabled"]:
             raise ValueError(
                 "detector.source_consistency_adjudication requires groove refinement v2"
+            )
+        elif recognition_recovery is not None and recognition_recovery["enabled"]:
+            raise ValueError(
+                "detector.groove_recognition_recovery requires groove refinement v2"
             )
         elif groove_shadow_source["enabled"]:
             raise ValueError(

@@ -19,6 +19,12 @@ DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG: dict[str, Any] = {
     "development_only": True,
     "max_endpoint_structure_difference": 0.05,
 }
+SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG: dict[str, Any] = {
+    "schema_version": "source-consistency-adjudication/2",
+    "enabled": False,
+    "strategy_version": "locked-noncontrast-gates-v2",
+    "development_only": True,
+}
 
 _CHECK_DEFINITIONS = (
     ("edge_contrast_asymmetry", "contrastNormalizedDifference", "max"),
@@ -36,31 +42,42 @@ _NON_CONTRAST_CHECK_IDS = _CHECK_IDS[1:]
 def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> None:
     if not isinstance(config, dict):
         raise ValueError("detector.source_consistency_adjudication must be an object")
-    required = set(DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG)
+    schema_version = config.get("schema_version")
+    template = (
+        SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG
+        if schema_version == "source-consistency-adjudication/2"
+        else DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG
+    )
+    required = set(template)
     missing = sorted(required - set(config))
     unknown = sorted(set(config) - required)
     if missing:
         raise ValueError(f"source_consistency_adjudication missing fields: {missing}")
     if unknown:
         raise ValueError(f"source_consistency_adjudication has unknown fields: {unknown}")
-    if config["schema_version"] != "source-consistency-adjudication/1":
+    if schema_version not in {
+        "source-consistency-adjudication/1", "source-consistency-adjudication/2",
+    }:
         raise ValueError("source_consistency_adjudication.schema_version is unsupported")
     if not isinstance(config["enabled"], bool):
         raise ValueError("source_consistency_adjudication.enabled must be boolean")
     if config["development_only"] is not True:
         raise ValueError("source_consistency_adjudication.development_only must be true")
-    if not isinstance(config["threshold_version"], str) or not config["threshold_version"].strip():
-        raise ValueError("source_consistency_adjudication.threshold_version must be non-empty")
-    endpoint = config["max_endpoint_structure_difference"]
-    if (
-        isinstance(endpoint, bool)
-        or not isinstance(endpoint, (int, float))
-        or not math.isfinite(float(endpoint))
-        or not 0.0 <= float(endpoint) <= 1.0
-    ):
-        raise ValueError(
-            "source_consistency_adjudication.max_endpoint_structure_difference must be in [0,1]"
-        )
+    if schema_version == "source-consistency-adjudication/1":
+        if not isinstance(config["threshold_version"], str) or not config["threshold_version"].strip():
+            raise ValueError("source_consistency_adjudication.threshold_version must be non-empty")
+        endpoint = config["max_endpoint_structure_difference"]
+        if (
+            isinstance(endpoint, bool)
+            or not isinstance(endpoint, (int, float))
+            or not math.isfinite(float(endpoint))
+            or not 0.0 <= float(endpoint) <= 1.0
+        ):
+            raise ValueError(
+                "source_consistency_adjudication.max_endpoint_structure_difference must be in [0,1]"
+            )
+    elif config["strategy_version"] != "locked-noncontrast-gates-v2":
+        raise ValueError("source_consistency_adjudication.strategy_version is unsupported")
 
 
 def merged_source_consistency_adjudication_config(
@@ -68,7 +85,13 @@ def merged_source_consistency_adjudication_config(
 ) -> dict[str, Any]:
     if config is not None and not isinstance(config, dict):
         raise ValueError("detector.source_consistency_adjudication must be an object")
-    merged = copy.deepcopy(DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG)
+    template = (
+        SOURCE_CONSISTENCY_ADJUDICATION_V2_CONFIG
+        if isinstance(config, dict)
+        and config.get("schema_version") == "source-consistency-adjudication/2"
+        else DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG
+    )
+    merged = copy.deepcopy(template)
     if config:
         merged.update(copy.deepcopy(config))
     validate_source_consistency_adjudication_config(merged)
@@ -77,8 +100,12 @@ def merged_source_consistency_adjudication_config(
 
 def _base(config: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schemaVersion": "source-consistency-adjudication/1",
-        "thresholdVersion": config["threshold_version"],
+        "schemaVersion": config["schema_version"],
+        **(
+            {"strategyVersion": config["strategy_version"]}
+            if config["schema_version"] == "source-consistency-adjudication/2"
+            else {"thresholdVersion": config["threshold_version"]}
+        ),
         "enabled": True,
         "developmentOnly": True,
         "authoritative": False,
@@ -172,6 +199,8 @@ def _validated_evidence(
 def adjudicate_source_consistency(
     source_consistency: dict[str, Any] | None,
     config: dict[str, Any] | None,
+    *,
+    fixture_source_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Return an independent effective decision; never mutate original evidence."""
     if config is None:
@@ -214,12 +243,37 @@ def adjudicate_source_consistency(
     check_map = {item["checkId"]: item for item in checks}
     contrast_only = failed == ["edge_contrast_asymmetry"]
     non_contrast_pass = all(check_map[check_id]["passed"] is True for check_id in _NON_CONTRAST_CHECK_IDS)
-    endpoint_pass = endpoint <= float(merged["max_endpoint_structure_difference"])
+    is_v2 = merged["schema_version"] == "source-consistency-adjudication/2"
+    endpoint_pass = (
+        True if is_v2
+        else endpoint <= float(merged["max_endpoint_structure_difference"])
+    )
     adjudication_checks = [
         {"checkId": "original_rejected", "passed": status == "rejected"},
         {"checkId": "exact_contrast_only_failure", "passed": contrast_only},
-        {"checkId": "all_required_noncontrast_checks_pass", "passed": non_contrast_pass},
         {
+            "checkId": (
+                "all_locked_noncontrast_checks_pass" if is_v2
+                else "all_required_noncontrast_checks_pass"
+            ),
+            "passed": non_contrast_pass,
+        },
+    ]
+    if is_v2:
+        fixture_verified = fixture_source_evidence == {
+            "schemaVersion": "fixture-groove-source-exclusion/1",
+            "status": "verified",
+            "fixtureBodiesVerified": True,
+            "uContourComplete": True,
+            "fixtureSourceExcluded": True,
+            "candidateSelectionUsedFixedAngle": False,
+        }
+        adjudication_checks.append({
+            "checkId": "fixture_source_exclusion_verified",
+            "passed": fixture_verified,
+        })
+    if not is_v2:
+        adjudication_checks.append({
             "checkId": "strict_endpoint_structure",
             "metric": "endpointStructureDifference",
             "value": endpoint,
@@ -227,8 +281,7 @@ def adjudicate_source_consistency(
             "thresholdKind": "max",
             "margin": float(merged["max_endpoint_structure_difference"]) - endpoint,
             "passed": endpoint_pass,
-        },
-    ]
+        })
     adjudication_failed = [item["checkId"] for item in adjudication_checks if not item["passed"]]
     accepted = not adjudication_failed
     return {

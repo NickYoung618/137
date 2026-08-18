@@ -11,11 +11,15 @@ from typing import Any
 
 
 SCHEMA_VERSION = "groove-shadow-source-diagnostic/1"
+SCHEMA_VERSION_V2 = "groove-shadow-source-diagnostic/2"
 CONFIG_SCHEMA_VERSION = "groove-shadow-source-discrimination/1"
+CONFIG_SCHEMA_VERSION_V2 = "groove-shadow-source-discrimination/2"
 STRATEGY_VERSION = "physical-sidewall-source-evidence/1"
+STRATEGY_VERSION_V2 = "fixture-role-u-contour-source-evidence/2"
 MAX_CANDIDATES = 3
 
 COMPLETE = "REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW"
+COMPLETE_VISIBLE = "REAL_GROOVE_COMPLETE_VISIBLE"
 MIXED = "REAL_GROOVE_SHADOW_MIXED_OR_OCCLUDED"
 INDETERMINATE = "INDETERMINATE"
 
@@ -23,6 +27,11 @@ DEFAULT_GROOVE_SHADOW_SOURCE_CONFIG: dict[str, Any] = {
     "schema_version": CONFIG_SCHEMA_VERSION,
     "enabled": False,
     "strategy_version": STRATEGY_VERSION,
+}
+GROOVE_SHADOW_SOURCE_V2_CONFIG: dict[str, Any] = {
+    "schema_version": CONFIG_SCHEMA_VERSION_V2,
+    "enabled": False,
+    "strategy_version": STRATEGY_VERSION_V2,
 }
 
 _EVALUATION_STATUSES = {"accepted", "failed", "not_evaluated"}
@@ -36,16 +45,25 @@ _TERMINAL_STAGES = {
 def merged_groove_shadow_source_config(config: dict[str, Any] | None) -> dict[str, Any]:
     if config is not None and not isinstance(config, dict):
         raise ValueError("groove_shadow_source_discrimination must be an object")
-    merged = {**DEFAULT_GROOVE_SHADOW_SOURCE_CONFIG, **(config or {})}
-    unexpected = sorted(set(merged) - set(DEFAULT_GROOVE_SHADOW_SOURCE_CONFIG))
+    template = (
+        GROOVE_SHADOW_SOURCE_V2_CONFIG
+        if isinstance(config, dict) and config.get("schema_version") == CONFIG_SCHEMA_VERSION_V2
+        else DEFAULT_GROOVE_SHADOW_SOURCE_CONFIG
+    )
+    merged = {**template, **(config or {})}
+    unexpected = sorted(set(merged) - set(template))
     if unexpected:
         raise ValueError(
             "groove_shadow_source_discrimination has unsupported fields: "
             f"{unexpected}"
         )
-    if merged["schema_version"] != CONFIG_SCHEMA_VERSION:
+    if merged["schema_version"] not in {CONFIG_SCHEMA_VERSION, CONFIG_SCHEMA_VERSION_V2}:
         raise ValueError("groove_shadow_source_discrimination.schema_version is unsupported")
-    if merged["strategy_version"] != STRATEGY_VERSION:
+    expected_strategy = (
+        STRATEGY_VERSION_V2
+        if merged["schema_version"] == CONFIG_SCHEMA_VERSION_V2 else STRATEGY_VERSION
+    )
+    if merged["strategy_version"] != expected_strategy:
         raise ValueError("groove_shadow_source_discrimination.strategy_version is unsupported")
     if not isinstance(merged["enabled"], bool):
         raise ValueError("groove_shadow_source_discrimination.enabled must be boolean")
@@ -110,10 +128,26 @@ def _normalize_candidate(value: Any) -> dict[str, Any]:
     failed = sorted(set(
         recognition["failedChecks"] + refinement["failedChecks"] + source["failedChecks"]
     ))[:32]
+    coarse_metrics = _metrics(value.get("coarseMetrics"))
+    provisional = bool(
+        isinstance(coarse_metrics, dict)
+        and coarse_metrics.get("provisionalRecognition") is True
+    )
+    fixture_excluded = bool(
+        isinstance(coarse_metrics, dict)
+        and coarse_metrics.get("fixtureSourceExcluded") is True
+    )
+    effective_source = bool(
+        source["status"] == "accepted"
+        or (
+            isinstance(coarse_metrics, dict)
+            and coarse_metrics.get("effectiveSourceAccepted") is True
+        )
+    )
     survivor = (
-        recognition["status"] == "accepted"
+        (recognition["status"] == "accepted" or (provisional and fixture_excluded))
         and refinement["status"] == "accepted"
-        and source["status"] == "accepted"
+        and effective_source
     )
     explicitly_rejected = (
         recognition["status"] == "failed"
@@ -131,7 +165,7 @@ def _normalize_candidate(value: Any) -> dict[str, Any]:
     return {
         "candidateId": candidate_id,
         "coarseRecognition": recognition,
-        "coarseMetrics": _metrics(value.get("coarseMetrics")),
+        "coarseMetrics": coarse_metrics,
         "physicalRefinement": refinement,
         "sidewallEvidence": _metrics(value.get("sidewallEvidence")),
         "sourceConsistency": source,
@@ -167,9 +201,12 @@ def build_candidate_source_evidence(
         "centerDriftRatio", "outerConnected",
     )
     output = []
+    provisional_ids = set(recognition.get("provisionalCandidateIds") or [])
     accepted_assessments = [
         item for item in recognition.get("assessments", [])
-        if isinstance(item, dict) and item.get("accepted") is True
+        if isinstance(item, dict) and (
+            item.get("accepted") is True or item.get("candidateId") in provisional_ids
+        )
     ]
     for assessment in accepted_assessments[:MAX_CANDIDATES]:
         if not isinstance(assessment, dict):
@@ -177,6 +214,18 @@ def build_candidate_source_evidence(
         candidate_id = str(assessment.get("candidateId", "invalid"))
         refinement = attempts.get(candidate_id)
         source = refinement.get("sourceConsistency") if isinstance(refinement, dict) else None
+        adjudication = (
+            refinement.get("sourceConsistencyAdjudication")
+            if isinstance(refinement, dict) else None
+        )
+        fixture_exclusion = (
+            refinement.get("fixtureSourceExclusion")
+            if isinstance(refinement, dict) else None
+        )
+        fixture_overlap = (
+            fixture_exclusion.get("candidateFixtureOverlap")
+            if isinstance(fixture_exclusion, dict) else None
+        )
         physical_status = "not_evaluated"
         if isinstance(refinement, dict):
             physical_raw = refinement.get("physicalRefinementStatus", refinement.get("status"))
@@ -192,11 +241,35 @@ def build_candidate_source_evidence(
         # near a fixture shadow can fail consensus. Only the original locked
         # two-wall source gate (or an explicit future evidence flag) supports
         # the semantic mixed/occluded label.
-        mixed = (
-            source_status == "failed"
-            or (
-                isinstance(refinement, dict)
-                and refinement.get("mixedOrOccludedEvidence") is True
+        structural_source_failure = any(
+            check != "edge_contrast_asymmetry" for check in source_checks
+        )
+        fixture_exclusion = (
+            refinement.get("fixtureSourceExclusion")
+            if isinstance(refinement, dict) else None
+        )
+        overlap = (
+            fixture_exclusion.get("candidateFixtureOverlap")
+            if isinstance(fixture_exclusion, dict) else None
+        )
+        upper_overlap_without_u_contour = bool(
+            isinstance(overlap, dict)
+            and overlap.get("upperFixtureOcclusionRisk") is True
+            and fixture_exclusion.get("uContourComplete") is not True
+        )
+        lower_fixture_false_source = bool(
+            isinstance(overlap, dict)
+            and overlap.get("lowerFixtureFalseSourceRisk") is True
+        )
+        mixed = bool(
+            not lower_fixture_false_source
+            and (
+                structural_source_failure
+                or upper_overlap_without_u_contour
+                or (
+                    isinstance(refinement, dict)
+                    and refinement.get("mixedOrOccludedEvidence") is True
+                )
             )
         )
         output.append({
@@ -206,7 +279,25 @@ def build_candidate_source_evidence(
                 "failedChecks": list(assessment.get("rejectionReasons") or []),
             },
             "coarseMetrics": {
-                name: assessment.get(name) for name in metric_names if name in assessment
+                **{name: assessment.get(name) for name in metric_names if name in assessment},
+                "originalRecognitionAccepted": assessment.get("accepted") is True,
+                "provisionalRecognition": candidate_id in provisional_ids,
+                "fixtureSourceExcluded": (
+                    fixture_exclusion.get("fixtureSourceExcluded") is True
+                    if isinstance(fixture_exclusion, dict) else False
+                ),
+                "fixtureOverlapRole": (
+                    fixture_overlap.get("overlapRole")
+                    if isinstance(fixture_overlap, dict) else None
+                ),
+                "effectiveSourceAccepted": bool(
+                    source_status == "accepted"
+                    or (
+                        isinstance(adjudication, dict)
+                        and adjudication.get("effectiveStatus") == "accepted"
+                        and adjudication.get("imagePoseReleaseAllowed") is True
+                    )
+                ),
             },
             "physicalRefinement": {
                 "status": physical_status,
@@ -235,13 +326,17 @@ def classify_groove_shadow_sources(
     upstream_accepted: bool, polar_quality_accepted: bool,
     existing_pose_chain_allowed: bool, terminal_stage: str,
     locked_gate_versions: dict[str, str] | None = None,
+    strategy_version: str = STRATEGY_VERSION,
+    raw_candidate_screening: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a bounded diagnostic without weakening any upstream gate."""
     if terminal_stage not in _TERMINAL_STAGES:
         terminal_stage = "upstream_outer_circle"
     base = {
-        "schemaVersion": SCHEMA_VERSION,
-        "strategyVersion": STRATEGY_VERSION,
+        "schemaVersion": (
+            SCHEMA_VERSION_V2 if strategy_version == STRATEGY_VERSION_V2 else SCHEMA_VERSION
+        ),
+        "strategyVersion": strategy_version,
         "enabled": bool(enabled),
         "terminalStage": terminal_stage,
         "poseChainAllowed": bool(existing_pose_chain_allowed),
@@ -294,7 +389,12 @@ def classify_groove_shadow_sources(
     elif len(survivors) > 1:
         failed.append("multiple_physical_survivors")
     elif len(survivors) == 1 and len(normalized) >= 2 and len(rejected) == len(normalized) - 1:
-        classification = COMPLETE
+        survivor_metrics = survivors[0].get("coarseMetrics") or {}
+        classification = (
+            COMPLETE_VISIBLE
+            if survivor_metrics.get("fixtureOverlapRole") == "none"
+            else COMPLETE
+        )
         local_accepted = True
         selected = survivors[0]["candidateId"]
         passed.extend([
@@ -304,8 +404,29 @@ def classify_groove_shadow_sources(
     elif not survivors and any(item["sourceDisposition"] == "MIXED_OR_OCCLUDED_EVIDENCE" for item in normalized):
         classification = MIXED
         failed.append("mixed_or_occluded_physical_evidence")
+    elif (
+        not survivors
+        and isinstance(raw_candidate_screening, dict)
+        and isinstance(
+            raw_candidate_screening.get("upperFixtureMixedOrOccludedRiskCount"), int,
+        )
+        and raw_candidate_screening["upperFixtureMixedOrOccludedRiskCount"] > 0
+    ):
+        classification = MIXED
+        failed.append("upper_fixture_mixed_or_occluded_candidate_evidence")
     elif len(survivors) == 1:
-        failed.append("no_competing_source_evidence")
+        survivor_metrics = survivors[0].get("coarseMetrics") or {}
+        classification = (
+            COMPLETE_VISIBLE
+            if survivor_metrics.get("fixtureOverlapRole") == "none"
+            else COMPLETE
+        )
+        if len(normalized) == 1 and existing_pose_chain_allowed:
+            local_accepted = True
+            selected = survivors[0]["candidateId"]
+            passed.append("unique_effective_candidate_survivor")
+        else:
+            failed.append("no_competing_source_evidence")
     elif not normalized:
         failed.append("no_candidate_evidence")
     else:

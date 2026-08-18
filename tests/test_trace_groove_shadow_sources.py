@@ -4,7 +4,8 @@ import json
 import unittest
 
 from tools.trace_groove_shadow_sources import (
-    normalize_terminal_stage, trace_failure, validate_acceptance_manifest,
+    fixture_screening_counts, normalize_terminal_stage, trace_failure,
+    validate_acceptance_manifest,
 )
 
 
@@ -42,6 +43,24 @@ def payload(code: str, stage: str, *, raw: int, accepted: list[str], polar: floa
 
 
 class GrooveShadowTraceTests(unittest.TestCase):
+    def test_fixture_screening_summary_distinguishes_lower_false_source_from_upper_risk(self) -> None:
+        diagnostics = {
+            "fixtureCandidateSourceScreening": {
+                "candidates": [
+                    {"candidateId": "a", "disposition": "LOWER_FIXTURE_FALSE_SOURCE"},
+                    {"candidateId": "b", "disposition": "UPPER_FIXTURE_MIXED_OR_OCCLUDED_RISK"},
+                    {"candidateId": "c", "disposition": "UPPER_FIXTURE_MIXED_OR_OCCLUDED_RISK"},
+                ]
+            }
+        }
+        self.assertEqual(
+            {
+                "LOWER_FIXTURE_FALSE_SOURCE": 1,
+                "UPPER_FIXTURE_MIXED_OR_OCCLUDED_RISK": 2,
+            },
+            fixture_screening_counts(diagnostics),
+        )
+
     def test_acceptance_manifest_requires_physical_separation_labels_and_frozen_hashes(self) -> None:
         manifest = {
             "datasetUse": "independent-acceptance",

@@ -880,6 +880,106 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         ):
             self.assertIsNone(payload["result"][field], field)
 
+    def test_provisional_candidate_with_zero_physical_survivors_fails_at_refinement(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["ambiguity_resolution"] = {"enabled": True}
+        config["detector"]["groove_recognition_recovery"] = {"enabled": True}
+        path = self.root / "single-v3-provisional-zero-survivors.json"
+        write_json(path, config)
+        candidate = {**accepted_candidate("candidate-provisional", 300.0), "provisionalRecognition": True}
+        recognition = {
+            "status": "accepted", "rawCandidateCount": 1, "acceptedCount": 0,
+            "acceptedCandidateIds": [], "provisionalCandidateIds": [candidate["candidateId"]],
+            "effectiveCandidateIds": [candidate["candidateId"]], "assessments": [],
+        }
+        failed_refinement = {
+            "schemaVersion": "slot-groove-subpixel-opening/2", "status": "failed",
+            "openingEndpointProfileDeg": None, "openingMidpointProfileDeg": None,
+            "startSide": None, "endSide": None, "outerCircleIntersections": None,
+            "failedChecks": ["endSide_wall_family_not_found"],
+        }
+        with (
+            patch(
+                "algorithms.slot_pose.legacy_adapter.LegacyAEndFaceAdapter._recognize_target_grooves",
+                return_value=(recognition, [candidate]),
+            ),
+            patch("algorithms.slot_pose.legacy_adapter.refine_groove_opening", return_value=failed_refinement),
+        ):
+            payload = run(self.images / "one-real-two-shadows.png", path, "single:v3:provisional-zero")
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_REFINEMENT_FAILED", payload["error"]["code"])
+        self.assertEqual("groove_refinement", payload["error"]["stage"])
+        self.assertIn("endSide_wall_family_not_found", payload["error"]["message"])
+        self.assertIsNone(payload["result"]["currentAngleDeg"])
+        self.assertIsNone(payload["result"]["plcCommand"])
+        self.assertFalse(payload["result"]["plcExecutionAuthoritative"])
+
+    def test_two_provisional_physical_survivors_are_explicitly_ambiguous(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["ambiguity_resolution"] = {"enabled": True}
+        config["detector"]["groove_recognition_recovery"] = {"enabled": True}
+        path = self.root / "single-v3-provisional-multiple-survivors.json"
+        write_json(path, config)
+        candidates = [
+            {**accepted_candidate("candidate-provisional-a", 300.0), "provisionalRecognition": True},
+            {**accepted_candidate("candidate-provisional-b", 30.0), "provisionalRecognition": True},
+        ]
+        recognition = {
+            "status": "ambiguous", "rawCandidateCount": 2, "acceptedCount": 0,
+            "acceptedCandidateIds": [],
+            "provisionalCandidateIds": [item["candidateId"] for item in candidates],
+            "effectiveCandidateIds": [item["candidateId"] for item in candidates],
+            "assessments": [],
+        }
+
+        def accepted_refinement(_gray, _center, _radius, candidate, *_args, **_kwargs):
+            return {
+                "schemaVersion": "slot-groove-subpixel-opening/2", "status": "accepted",
+                "coarseCandidateId": candidate["candidateId"],
+                "openingEndpointProfileDeg": [candidate["startDeg"], candidate["endDeg"]],
+                "openingMidpointProfileDeg": candidate["centerDeg"],
+                "startSide": {}, "endSide": {}, "outerCircleIntersections": [{}, {}],
+                "failedChecks": [],
+            }
+
+        verified_exclusion = {
+            "schemaVersion": "fixture-groove-source-exclusion/1", "status": "verified",
+            "fixtureBodiesVerified": True, "uContourComplete": True,
+            "fixtureSourceExcluded": True, "candidateSelectionUsedFixedAngle": False,
+            "failedChecks": [],
+        }
+        with (
+            patch(
+                "algorithms.slot_pose.legacy_adapter.LegacyAEndFaceAdapter._recognize_target_grooves",
+                return_value=(recognition, candidates),
+            ),
+            patch("algorithms.slot_pose.legacy_adapter.refine_groove_opening", side_effect=accepted_refinement),
+            patch(
+                "algorithms.slot_pose.legacy_adapter.build_fixture_source_exclusion",
+                return_value=verified_exclusion,
+            ),
+        ):
+            payload = run(self.images / "two-real-one-shadow.png", path, "single:v3:provisional-multiple")
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_RECOGNITION_AMBIGUOUS", payload["error"]["code"])
+        self.assertEqual("multiple_survived", payload["diagnostics"]["grooveResolution"]["status"])
+        for field in (
+            "currentAngleDeg", "correctionRawDeg", "correctionDeg",
+            "imageFrameCorrectionDeg", "rotationDirection", "mechanicalCorrectionDeg", "plcCommand",
+        ):
+            self.assertIsNone(payload["result"][field], field)
+        self.assertFalse(payload["result"]["plcExecutionAuthoritative"])
+
     def test_v2_refinement_quality_failure_is_explicit_and_never_uses_coarse_angle(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["config_id"] = "synthetic-single-real-groove-refinement-failure"

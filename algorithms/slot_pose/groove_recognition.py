@@ -35,6 +35,57 @@ DEFAULT_GROOVE_RECOGNITION_CONFIG: dict[str, Any] = {
     "ambiguity_margin": 0.05,
 }
 
+DEFAULT_GROOVE_RECOGNITION_RECOVERY_CONFIG: dict[str, Any] = {
+    "schema_version": "groove-recognition-recovery/1",
+    "enabled": False,
+    "strategy_version": "exact-width-only-downstream-proof-v1",
+}
+
+
+def merged_groove_recognition_recovery_config(
+    config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if config is not None and not isinstance(config, dict):
+        raise ValueError("groove_recognition_recovery must be an object")
+    merged = {**DEFAULT_GROOVE_RECOGNITION_RECOVERY_CONFIG, **(config or {})}
+    unknown = sorted(set(merged) - set(DEFAULT_GROOVE_RECOGNITION_RECOVERY_CONFIG))
+    if unknown:
+        raise ValueError(f"groove_recognition_recovery has unsupported fields: {unknown}")
+    if merged["schema_version"] != "groove-recognition-recovery/1":
+        raise ValueError("groove_recognition_recovery.schema_version is unsupported")
+    if merged["strategy_version"] != "exact-width-only-downstream-proof-v1":
+        raise ValueError("groove_recognition_recovery.strategy_version is unsupported")
+    if not isinstance(merged["enabled"], bool):
+        raise ValueError("groove_recognition_recovery.enabled must be boolean")
+    return merged
+
+
+def provisional_candidate_ids(
+    assessments: Iterable[dict[str, Any]], config: dict[str, Any] | None,
+) -> list[str]:
+    """Return bounded candidates eligible for downstream proof, never acceptance."""
+    merged = merged_groove_recognition_recovery_config(config)
+    if not merged["enabled"]:
+        return []
+    assessment_list = list(assessments)
+    if any(
+        isinstance(item, dict) and item.get("accepted") is True
+        for item in assessment_list
+    ):
+        return []
+    eligible: list[str] = []
+    for assessment in assessment_list:
+        if not isinstance(assessment, dict) or assessment.get("accepted") is True:
+            continue
+        candidate_id = assessment.get("candidateId")
+        reasons = assessment.get("rejectionReasons")
+        if (
+            isinstance(candidate_id, str) and candidate_id
+            and reasons == ["width_variation_too_high"]
+        ):
+            eligible.append(candidate_id)
+    return sorted(set(eligible))[:3]
+
 
 def validate_groove_config(config: dict[str, Any]) -> None:
     required = set(DEFAULT_GROOVE_RECOGNITION_CONFIG)

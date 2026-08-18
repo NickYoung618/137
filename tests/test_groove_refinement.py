@@ -10,6 +10,7 @@ from algorithms.slot_pose.groove_refinement import (
     _circle_intersection,
     _robust_fit_line,
     _select_consensus_line,
+    _select_wall_family,
     refine_groove_opening,
 )
 
@@ -92,6 +93,48 @@ def v2_config(**overrides: object) -> dict:
 
 
 class GrooveRefinementTests(unittest.TestCase):
+    def test_wall_family_selects_unique_cross_row_line_independent_of_candidate_order(self) -> None:
+        rows = []
+        for index, y in enumerate(np.linspace(-70.0, 40.0, 24)):
+            rows.append([
+                {"point": (-50.0 + 0.08 * math.sin(index), float(y)), "strength": 8.0},
+                {"point": (-33.0 + 4.0 * math.sin(index * 1.7), float(y)), "strength": 12.0},
+            ])
+        config = v2_config()
+        decision = _select_wall_family(
+            rows, minimum=16, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=4.0,
+            config=config, pixel_scale=1.0, max_hypotheses=64,
+        )
+        reversed_rows = [list(reversed(row)) for row in rows]
+        reordered = _select_wall_family(
+            reversed_rows, minimum=16, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=4.0,
+            config=config, pixel_scale=1.0, max_hypotheses=64,
+        )
+        self.assertEqual("accepted", decision["status"], decision)
+        self.assertEqual(decision["supportRowIndices"], reordered["supportRowIndices"])
+        self.assertAlmostEqual(
+            decision["intersectionAngleDeg"], reordered["intersectionAngleDeg"], places=9,
+        )
+
+    def test_wall_family_fails_closed_for_zero_or_equal_two_families(self) -> None:
+        empty = _select_wall_family(
+            [[] for _ in range(24)], minimum=16, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=240.0, maximum_delta_deg=10.0,
+            config=v2_config(), pixel_scale=1.0, max_hypotheses=64,
+        )
+        self.assertEqual("not_found", empty["status"])
+        rows = [[
+            {"point": (-50.0, float(y)), "strength": 8.0},
+            {"point": (-58.0, float(y)), "strength": 8.0},
+        ] for y in np.linspace(-70.0, 40.0, 24)]
+        ambiguous = _select_wall_family(
+            rows, minimum=16, center=(0.0, 0.0), outer_radius=100.0,
+            coarse_angle_deg=238.0, maximum_delta_deg=10.0,
+            config=v2_config(), pixel_scale=1.0, max_hypotheses=64,
+        )
+        self.assertEqual("ambiguous", ambiguous["status"], ambiguous)
     def test_refined_sides_preserve_canonical_local_gray_and_gradient_profiles(self) -> None:
         center, radius = (260.35, 251.65), 185.4
         result = refine_groove_opening(

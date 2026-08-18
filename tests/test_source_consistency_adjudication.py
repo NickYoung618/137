@@ -245,6 +245,64 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "changed original contrast threshold"):
             build_experimental_config(relaxed)
 
+    def enabled_v2_config(self) -> dict:
+        return {
+            "schema_version": "source-consistency-adjudication/2",
+            "enabled": True,
+            "strategy_version": "locked-noncontrast-gates-v2",
+            "development_only": True,
+        }
+
+    def fixture_source_excluded(self) -> dict:
+        return {
+            "schemaVersion": "fixture-groove-source-exclusion/1",
+            "status": "verified",
+            "fixtureBodiesVerified": True,
+            "uContourComplete": True,
+            "fixtureSourceExcluded": True,
+            "candidateSelectionUsedFixedAngle": False,
+        }
+
+    def test_v2_uses_locked_noncontrast_checks_without_own_numeric_threshold(self) -> None:
+        source = source_evidence(endpoint=0.149)
+        before = copy.deepcopy(source)
+        result = adjudicate_source_consistency(
+            source, self.enabled_v2_config(),
+            fixture_source_evidence=self.fixture_source_excluded(),
+        )
+        self.assertEqual(before, source)
+        self.assertEqual("source-consistency-adjudication/2", result["schemaVersion"])
+        self.assertEqual("ACCEPTED_OVERRIDE", result["decision"])
+        self.assertEqual("accepted", result["effectiveStatus"])
+        self.assertNotIn("strict_endpoint_structure", {
+            item["checkId"] for item in result["checks"]
+        })
+        self.assertFalse(result["authoritative"])
+        self.assertFalse(result["plcAllowed"])
+
+    def test_v2_contrast_only_is_diagnostic_without_fixture_source_exclusion(self) -> None:
+        result = adjudicate_source_consistency(
+            source_evidence(endpoint=0.02), self.enabled_v2_config(),
+        )
+        self.assertEqual("REJECTED", result["decision"])
+        self.assertEqual("rejected", result["effectiveStatus"])
+        self.assertFalse(result["imagePoseReleaseAllowed"])
+        self.assertIn("fixture_source_exclusion_verified", result["failedChecks"])
+
+    def test_v2_rejects_any_structural_failure_and_malformed_evidence(self) -> None:
+        multiple = source_evidence(
+            endpoint=0.20,
+            failed=["edge_contrast_asymmetry", "endpoint_structure_inconsistent"],
+        )
+        result = adjudicate_source_consistency(multiple, self.enabled_v2_config())
+        self.assertEqual("REJECTED", result["decision"])
+        self.assertIn("exact_contrast_only_failure", result["failedChecks"])
+        self.assertIn("all_locked_noncontrast_checks_pass", result["failedChecks"])
+        malformed = source_evidence()
+        malformed["metrics"]["radialCoverageDifference"] = math.nan
+        result = adjudicate_source_consistency(malformed, self.enabled_v2_config())
+        self.assertEqual("NOT_EVALUATED", result["decision"])
+
 
 if __name__ == "__main__":
     unittest.main()

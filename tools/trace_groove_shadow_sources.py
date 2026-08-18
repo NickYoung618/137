@@ -28,6 +28,16 @@ HUMAN_CLASSES = {
 }
 
 
+def fixture_screening_counts(diagnostics: dict[str, Any]) -> dict[str, int]:
+    """Return bounded candidate-source dispositions without exposing per-ray evidence."""
+    screening = diagnostics.get("fixtureCandidateSourceScreening") or {}
+    counts: Counter[str] = Counter()
+    for item in screening.get("candidates") or []:
+        if isinstance(item, dict) and isinstance(item.get("disposition"), str):
+            counts[item["disposition"]] += 1
+    return dict(sorted(counts.items()))
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -142,6 +152,7 @@ def aggregate_acceptance_results(
     }
     terminal_counts: Counter[str] = Counter()
     runtime_class_counts: Counter[str] = Counter()
+    fixture_disposition_counts: Counter[str] = Counter()
     elapsed: list[float] = []
     all_invalid_safe = True
     traces = []
@@ -158,6 +169,8 @@ def aggregate_acceptance_results(
         terminal = normalize_terminal_stage(payload)
         terminal_counts[terminal] += 1
         diagnostic = (payload.get("diagnostics") or {}).get("grooveShadowSourceDiscrimination") or {}
+        per_image_fixture_counts = fixture_screening_counts(payload.get("diagnostics") or {})
+        fixture_disposition_counts.update(per_image_fixture_counts)
         runtime_class_counts[str(diagnostic.get("classification") or "not_evaluated")] += 1
         elapsed_value = (payload.get("diagnostics") or {}).get("elapsedMs")
         if isinstance(elapsed_value, (int, float)):
@@ -176,6 +189,7 @@ def aggregate_acceptance_results(
             "terminalStage": terminal,
             "errorCode": (payload.get("error") or {}).get("code"),
             "safetyOutputsNullWhenInvalid": safety_null,
+            "fixtureScreeningDispositionCounts": per_image_fixture_counts,
         })
     elapsed.sort()
     p95 = None if not elapsed else elapsed[max(0, math.ceil(0.95 * len(elapsed)) - 1)]
@@ -191,6 +205,7 @@ def aggregate_acceptance_results(
             },
             "terminalStageCounts": dict(sorted(terminal_counts.items())),
             "runtimeClassificationCounts": dict(sorted(runtime_class_counts.items())),
+            "fixtureScreeningDispositionCounts": dict(sorted(fixture_disposition_counts.items())),
             "mixedOrOccludedAllFailClosed": mixed["released"] == 0,
             "allInvalidSafetyOutputsNull": all_invalid_safe,
             "elapsedMsP95": p95,
@@ -344,6 +359,7 @@ def trace_failure(
         "humanSemanticClass": None,
         "humanSemanticStatus": "not_labeled",
         "runtimeDisposition": diagnostics.get("grooveShadowSourceDiscrimination"),
+        "fixtureScreeningDispositionCounts": fixture_screening_counts(diagnostics),
         "safetyOutputsNull": safety_null,
         "overlayStatus": "indexed_existing" if overlay_row else "unavailable",
         "overlayRelativePath": overlay_row.get("overlay") if overlay_row else None,
@@ -366,6 +382,9 @@ def build_report(evidence_dir: Path, results_dir: Path) -> dict[str, Any]:
     terminal_counts = Counter(item["terminalStage"] for item in traces)
     error_counts = Counter(item["originalErrorCode"] for item in traces)
     availability_counts = Counter(item["candidateEvidenceAvailability"] for item in traces)
+    fixture_disposition_counts: Counter[str] = Counter()
+    for item in traces:
+        fixture_disposition_counts.update(item["fixtureScreeningDispositionCounts"])
     if not all(item["safetyOutputsNull"] for item in traces):
         raise ValueError("one or more frozen invalid results violate fail-closed null outputs")
     branch = subprocess.run(
@@ -390,6 +409,7 @@ def build_report(evidence_dir: Path, results_dir: Path) -> dict[str, Any]:
             "terminalStageCounts": dict(sorted(terminal_counts.items())),
             "originalErrorCounts": dict(sorted(error_counts.items())),
             "candidateEvidenceAvailabilityCounts": dict(sorted(availability_counts.items())),
+            "fixtureScreeningDispositionCounts": dict(sorted(fixture_disposition_counts.items())),
             "allInvalidSafetyOutputsNull": True,
             "humanSemanticLabeledCount": 0,
             "completeNearShadowSafeReleaseCount": None,
