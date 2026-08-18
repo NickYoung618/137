@@ -13,6 +13,7 @@
       "additionalProperties": false,
       "required": ["source_sha256", "annotation_path", "annotation_sha256", "reference_path", "reference_sha256"],
       "properties": {
+        "path_mode": {"enum": ["legacy", "config_relative_v1"], "default": "legacy"},
         "source_mode": {"enum": ["external_file", "bundled_module"], "default": "external_file"},
         "source_path": {"type": "string", "minLength": 1},
         "bundled_module": {"const": "algorithms.end_face.core"},
@@ -31,6 +32,19 @@
           },
           "then": {"required": ["bundled_module", "upstream_source_sha256"]},
           "else": {"required": ["source_path"]}
+        },
+        {
+          "if": {
+            "properties": {"path_mode": {"const": "config_relative_v1"}},
+            "required": ["path_mode"]
+          },
+          "then": {
+            "properties": {
+              "source_path": {"$ref": "#/$defs/portablePath"},
+              "annotation_path": {"$ref": "#/$defs/portablePath"},
+              "reference_path": {"$ref": "#/$defs/portablePath"}
+            }
+          }
         }
       ]
     },
@@ -558,6 +572,11 @@
     }
   },
   "$defs": {
+    "portablePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!\\\\\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+    },
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "fixtureShadowTemplate": {
       "type": "object",

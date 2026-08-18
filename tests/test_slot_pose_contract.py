@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -61,6 +62,73 @@ def minimal_single_groove_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_config_relative_assets_resolve_from_config_not_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as elsewhere:
+            root = Path(temporary)
+            config = minimal_config()
+            config["legacy_asset"].update({
+                "path_mode": "config_relative_v1",
+                "source_path": "assets/core.py",
+                "annotation_path": "assets/annotation.json",
+                "reference_path": "assets/reference.bmp",
+            })
+            path = root / "配置 目录" / "config.json"
+            path.parent.mkdir()
+            path.write_text(json.dumps(config), encoding="utf-8")
+            prior = Path.cwd()
+            try:
+                os.chdir(elsewhere)
+                loaded = load_config(path)
+            finally:
+                os.chdir(prior)
+            for field, name in (
+                ("source_path", "core.py"),
+                ("annotation_path", "annotation.json"),
+                ("reference_path", "reference.bmp"),
+            ):
+                self.assertEqual(path.parent / "assets" / name, Path(loaded["legacy_asset"][field]))
+
+    def test_config_relative_assets_reject_absolute_traversal_windows_and_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as outside:
+            root = Path(temporary)
+            path = root / "config.json"
+            base = minimal_config()
+            base["legacy_asset"]["path_mode"] = "config_relative_v1"
+            invalid = ["/tmp/annotation.json", "../annotation.json", "assets/../annotation.json", r"C:\\asset.json", r"\\server\\asset.json"]
+            for value in invalid:
+                with self.subTest(value=value):
+                    config = json.loads(json.dumps(base))
+                    config["legacy_asset"]["annotation_path"] = value
+                    path.write_text(json.dumps(config), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "annotation_path"):
+                        load_config(path)
+            (root / "escape").symlink_to(Path(outside), target_is_directory=True)
+            config = json.loads(json.dumps(base))
+            config["legacy_asset"]["annotation_path"] = "escape/annotation.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "outside"):
+                load_config(path)
+
+    def test_omitted_path_mode_preserves_legacy_path_values_and_effective_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_config()
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertEqual("legacy", loaded["legacy_asset"]["path_mode"])
+            self.assertEqual(config["legacy_asset"]["annotation_path"], loaded["legacy_asset"]["annotation_path"])
+            portable = json.loads(json.dumps(config))
+            portable["legacy_asset"]["path_mode"] = "config_relative_v1"
+            portable["legacy_asset"]["source_path"] = "assets/core.py"
+            portable["legacy_asset"]["annotation_path"] = "assets/annotation.json"
+            portable["legacy_asset"]["reference_path"] = "assets/reference.bmp"
+            portable_path = Path(temporary) / "portable.json"
+            portable_path.write_text(json.dumps(portable), encoding="utf-8")
+            self.assertEqual(
+                effective_config_identity(loaded),
+                effective_config_identity(load_config(portable_path)),
+            )
+
     def test_028_recovery_configs_are_strict_default_off_and_dependency_gated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

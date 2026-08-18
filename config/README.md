@@ -11,9 +11,12 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
   `algorithms.end_face.core`加载，`source_sha256`校验本地文件，
   `upstream_source_sha256`记录gyj审计源。旧配置未写`source_mode`时按
   `external_file`兼容，但不再是可移植默认。
-- LabelMe标注和参考图仍是Git外部署资产；换服务器或Mac时只改
-  `annotation_path/reference_path`，内容哈希必须继续一致。这两项是检测参考数据，
-  不是对gyj代码目录的运行依赖。
+- LabelMe标注和参考图仍是Git外部署资产，内容哈希必须保持锁定。历史配置不写
+  `legacy_asset.path_mode`时按`legacy`兼容原路径语义；跨服务器或Mac部署必须由
+  `tools/build_slot_pose_portable_bundle.py`生成单一受控包，并使用
+  `path_mode=config_relative_v1`从包内`config.json`所在目录解析两项资产。
+  `tools/verify_slot_pose_portable_bundle.py`会独立核验清单、逐文件SHA、bundled core和
+  effective config身份。Mac只需要指定Git提交和这一个包，不得再到外部工程目录寻找文件。
 - 历史图像坐标原点在左上，方位角随图像y轴向下而顺时针增加。`mechanical_zero_image_deg`与
   `positive_direction=cw|ccw`必须由机械/机器人负责人确认。
 - legacy、paired、multi-role和single v1/v2在`conventions_confirmed=false`时只允许诊断候选，正式机械角为空。
@@ -114,8 +117,9 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
   2或3折开发/验证Manifest。工具在打开图片或历史results前以part-006的sample和SHA双重拒绝泄漏；历史审计
   只解析目标SHA行并固定`accuracyEvaluated=false`。这些折用于防止针对单一零件调参，不是严格未见test。
 
-Mac运行时，历史源码、标注和参考图均由本机环境变量或不入Git的配置指向已核验同源文件，
-并重新核对哈希。不得把Mac绝对路径提交成服务器默认配置。
+Mac运行时不得提交或拼接本机绝对资产路径。应解压受控便携包并直接使用其中的
+`config.json`；包可以移动，资产解析不依赖shell当前目录。算法源码仍来自指定Git提交，
+大体积参考资产继续留在Git外。
 
 ## A端面与孔2配置
 

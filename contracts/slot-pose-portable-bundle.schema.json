@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "slot-pose-portable-bundle.schema.json",
+  "title": "Slot-pose portable runtime bundle manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "bundleId", "algorithm", "configuration", "archive", "files"],
+  "properties": {
+    "schemaVersion": {"const": "slot-pose-portable-bundle/1"},
+    "bundleId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "algorithm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "commit", "bundledModule", "sourceSha256"],
+      "properties": {
+        "branch": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "bundledModule": {"const": "algorithms.end_face.core"},
+        "sourceSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sourceConfigSha256", "portableConfigSha256", "effectiveConfigSha256"],
+      "properties": {
+        "path": {"const": "config.json"},
+        "sourceConfigSha256": {"$ref": "#/$defs/sha256"},
+        "portableConfigSha256": {"$ref": "#/$defs/sha256"},
+        "effectiveConfigSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "reproducibilityVersion"],
+      "properties": {
+        "format": {"const": "tar.gz"},
+        "reproducibilityVersion": {"const": "normalized-tar-gzip/1"}
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"$ref": "#/$defs/fileEntry"}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "portablePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!\\\\\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+    },
+    "fileEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "sizeBytes", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/portablePath"},
+        "role": {"enum": ["runtime_config", "annotation", "reference_image", "operator_instructions"]},
+        "sizeBytes": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

@@ -7,7 +7,7 @@ import json
 import math
 from copy import deepcopy
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from tools.dataset_common import inspect_image
@@ -18,6 +18,7 @@ SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
 ALGORITHM_VERSION = "0.18.0"
 BUNDLED_LEGACY_MODULE = "algorithms.end_face.core"
+PORTABLE_ASSET_PATH_MODE = "config_relative_v1"
 ERROR_CODES = {
     "INPUT_INVALID",
     "ASSET_MISMATCH",
@@ -88,6 +89,40 @@ def effective_config_sha256(config: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+def _resolve_config_relative_path(config_root: Path, value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"legacy_asset.{field} must be a non-empty portable path")
+    if value != value.strip() or "\\" in value:
+        raise ValueError(f"legacy_asset.{field} must use a normalized POSIX relative path")
+    posix = PurePosixPath(value)
+    windows = PureWindowsPath(value)
+    if posix.is_absolute() or windows.is_absolute() or windows.drive:
+        raise ValueError(f"legacy_asset.{field} must be relative to the configuration directory")
+    if any(part in {"", ".", ".."} for part in posix.parts):
+        raise ValueError(f"legacy_asset.{field} must not contain dot or parent traversal segments")
+    root = config_root.resolve()
+    resolved = (root / Path(*posix.parts)).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"legacy_asset.{field} resolves outside the configuration directory") from exc
+    return str(resolved)
+
+
+def _normalize_asset_paths(config_path: Path, assets: dict[str, Any]) -> None:
+    path_mode = assets.setdefault("path_mode", "legacy")
+    if path_mode == "legacy":
+        return
+    if path_mode != PORTABLE_ASSET_PATH_MODE:
+        raise ValueError(f"unsupported legacy_asset.path_mode: {path_mode!r}")
+    config_root = config_path.resolve().parent
+    fields = ["annotation_path", "reference_path"]
+    if assets.get("source_mode", "external_file") == "external_file":
+        fields.append("source_path")
+    for field in fields:
+        assets[field] = _resolve_config_relative_path(config_root, assets.get(field), field)
+
+
 def load_config(config_path: Path) -> dict[str, Any]:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if config.get("schema_version") != "slot-pose-config/1":
@@ -120,6 +155,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
             )
     else:
         raise ValueError(f"unsupported legacy_asset.source_mode: {source_mode!r}")
+    _normalize_asset_paths(config_path, assets)
     pose = config["pose"]
     if not isinstance(pose, dict):
         raise ValueError("pose configuration must be an object")

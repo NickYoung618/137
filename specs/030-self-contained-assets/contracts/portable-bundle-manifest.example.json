@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "slot-pose-portable-bundle/1",
+  "bundleId": "slot-pose-030-portable",
+  "algorithm": {
+    "branch": "030-self-contained-assets",
+    "commit": "0000000000000000000000000000000000000000",
+    "bundledModule": "algorithms.end_face.core",
+    "sourceSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "configuration": {
+    "path": "config.json",
+    "sourceConfigSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "portableConfigSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "effectiveConfigSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "archive": {"format": "tar.gz", "reproducibilityVersion": "normalized-tar-gzip/1"},
+  "files": [
+    {"path": "config.json", "role": "runtime_config", "sizeBytes": 1, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"path": "assets/annotation.json", "role": "annotation", "sizeBytes": 1, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"path": "assets/reference.bmp", "role": "reference_image", "sizeBytes": 1, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"path": "README.md", "role": "operator_instructions", "sizeBytes": 1, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+  ]
+}
