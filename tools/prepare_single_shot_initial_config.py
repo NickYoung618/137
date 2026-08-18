@@ -18,6 +18,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
 from algorithms.slot_pose.sidewall_consistency import DEFAULT_SIDEWALL_CONSISTENCY_CONFIG
 from algorithms.slot_pose.physical_outer_circle import (
     DEFAULT_EDGE_FAMILY_SELECTION_CONFIG,
+    EDGE_FAMILY_STRATEGY_V2,
     merged_physical_outer_circle_config,
 )
 from algorithms.slot_pose.groove_resolution import DEFAULT_AMBIGUITY_RESOLUTION_CONFIG
@@ -32,6 +33,8 @@ PROFILE_VERSION = "single-shot-initial-profile/2"
 PROFILE_ID = "single-real-groove-85deg-fail-closed-v2"
 PROFILE_VERSION_V3 = "single-shot-initial-profile/3"
 PROFILE_ID_V3 = "single-real-groove-85deg-global-circle-family-v3"
+PROFILE_VERSION_V4 = "single-shot-initial-profile/4"
+PROFILE_ID_V4 = "single-real-groove-85deg-circle-family-consensus-v4"
 
 
 def _same_number(actual: Any, expected: float) -> bool:
@@ -131,6 +134,30 @@ def build_initial_config_v3(base: dict[str, Any]) -> dict[str, Any]:
     return configured
 
 
+def build_initial_config_v4(base: dict[str, Any]) -> dict[str, Any]:
+    """Materialize the reviewed bounded family-consensus strategy explicitly."""
+    selection = (
+        base.get("detector", {}).get("physical_outer_circle", {})
+        .get("edge_family_selection")
+        if isinstance(base, dict) else None
+    )
+    if isinstance(selection, dict) and selection.get("enabled") is True:
+        physical = merged_physical_outer_circle_config(
+            base["detector"]["physical_outer_circle"]
+        )
+        if physical["edge_family_selection"]["strategy_version"] != (
+            DEFAULT_EDGE_FAMILY_SELECTION_CONFIG["strategy_version"]
+        ):
+            raise ValueError("v4 upgrade requires the reviewed version-1 circle-family strategy")
+        configured = copy.deepcopy(base)
+    else:
+        configured = build_initial_config_v3(base)
+    selection = configured["detector"]["physical_outer_circle"]["edge_family_selection"]
+    selection["strategy_version"] = EDGE_FAMILY_STRATEGY_V2
+    configured["config_id"] = PROFILE_ID_V4
+    return configured
+
+
 def build_profile_report(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
     return {
         "schemaVersion": PROFILE_VERSION,
@@ -190,12 +217,22 @@ def build_profile_report_v3(*, source_config_sha256: str, output_config_sha256: 
     return report
 
 
+def build_profile_report_v4(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
+    report = build_profile_report_v3(
+        source_config_sha256=source_config_sha256,
+        output_config_sha256=output_config_sha256,
+    )
+    report.update({"schemaVersion": PROFILE_VERSION_V4, "profileId": PROFILE_ID_V4})
+    report["circleEdgeFamilySelection"]["strategyVersion"] = EDGE_FAMILY_STRATEGY_V2
+    return report
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-config", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
-    parser.add_argument("--profile-version", choices=("2", "3"), default="3")
+    parser.add_argument("--profile-version", choices=("2", "3", "4"), default="4")
     return parser.parse_args()
 
 
@@ -214,12 +251,19 @@ def main() -> int:
         if output == report_path:
             raise ValueError("config output and profile report must be different paths")
         base = json.loads(args.base_config.read_text(encoding="utf-8"))
-        configured = (
-            build_initial_config(base)
-            if args.profile_version == "2" else build_initial_config_v3(base)
-        )
+        builders = {
+            "2": build_initial_config,
+            "3": build_initial_config_v3,
+            "4": build_initial_config_v4,
+        }
+        configured = builders[args.profile_version](base)
         write_json(output, configured)
-        report_builder = build_profile_report if args.profile_version == "2" else build_profile_report_v3
+        report_builders = {
+            "2": build_profile_report,
+            "3": build_profile_report_v3,
+            "4": build_profile_report_v4,
+        }
+        report_builder = report_builders[args.profile_version]
         report = report_builder(
             source_config_sha256=sha256_file(args.base_config), output_config_sha256=sha256_file(output),
         )

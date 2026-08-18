@@ -166,6 +166,39 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         self.assertTrue(report["circleEdgeFamilySelection"]["originalQualityGatesPreserved"])
         self.assertFalse(report["circleEdgeFamilySelection"]["fixedAngleMaskApplied"])
 
+    def test_v4_enables_family_consensus_without_mutating_v3(self) -> None:
+        from tools.prepare_single_shot_initial_config import (
+            build_initial_config_v3, build_initial_config_v4, build_profile_report_v4,
+        )
+
+        source = base_config()
+        v3 = build_initial_config_v3(source)
+        v4 = build_initial_config_v4(source)
+        self.assertEqual(
+            "deterministic-three-point-global-circle-v1",
+            v3["detector"]["physical_outer_circle"]["edge_family_selection"]["strategy_version"],
+        )
+        self.assertEqual(
+            "deterministic-family-consensus-circle-v2",
+            v4["detector"]["physical_outer_circle"]["edge_family_selection"]["strategy_version"],
+        )
+        self.assertEqual("single-real-groove-85deg-circle-family-consensus-v4", v4["config_id"])
+        reviewed = build_initial_config_v3(source)
+        reviewed["detector"]["reviewed_extension"] = {"enabled": True}
+        upgraded = build_initial_config_v4(reviewed)
+        self.assertEqual({"enabled": True}, upgraded["detector"]["reviewed_extension"])
+        self.assertEqual(
+            "deterministic-three-point-global-circle-v1",
+            reviewed["detector"]["physical_outer_circle"]["edge_family_selection"]["strategy_version"],
+        )
+        report = build_profile_report_v4(
+            source_config_sha256="a" * 64, output_config_sha256="b" * 64,
+        )
+        schema = json.loads(
+            (ROOT / "contracts/single-shot-initial-profile-v4.schema.json").read_text()
+        )
+        jsonschema.validate(report, schema)
+
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]
         examples = (

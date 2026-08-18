@@ -60,6 +60,10 @@ DEFAULT_EDGE_FAMILY_SELECTION_CONFIG: dict[str, Any] = {
     "min_assignment_overlap_ratio": 0.40,
 }
 
+EDGE_FAMILY_STRATEGY_V1 = "deterministic-three-point-global-circle-v1"
+EDGE_FAMILY_STRATEGY_V2 = "deterministic-family-consensus-circle-v2"
+FAMILY_CONSENSUS_MAX_ITERATIONS = 16
+
 
 def merged_edge_family_selection_config(config: dict[str, Any] | None) -> dict[str, Any]:
     supplied = config or {}
@@ -74,8 +78,10 @@ def merged_edge_family_selection_config(config: dict[str, Any] | None) -> dict[s
         raise ValueError(f"{prefix}.schema_version is unsupported")
     if not isinstance(merged["enabled"], bool):
         raise ValueError(f"{prefix}.enabled must be boolean")
-    if not isinstance(merged["strategy_version"], str) or not merged["strategy_version"].strip():
-        raise ValueError(f"{prefix}.strategy_version must be non-empty")
+    if merged["strategy_version"] not in {
+        EDGE_FAMILY_STRATEGY_V1, EDGE_FAMILY_STRATEGY_V2,
+    }:
+        raise ValueError(f"{prefix}.strategy_version is unsupported")
     integer_bounds = {
         "max_peaks_per_ray": (1, 8),
         "min_seed_votes": (1, 72),
@@ -302,6 +308,170 @@ def _assign_family_candidates(
     return points, indices
 
 
+def _assignment_signature(points: np.ndarray, indices: np.ndarray) -> tuple[tuple[int, float, float], ...]:
+    return tuple(
+        (int(ray), round(float(point[0]), 6), round(float(point[1]), 6))
+        for ray, point in zip(indices, points)
+    )
+
+
+def _assignment_change_count(
+    first: tuple[tuple[int, float, float], ...],
+    second: tuple[tuple[int, float, float], ...],
+) -> int:
+    first_by_ray = {item[0]: item[1:] for item in first}
+    second_by_ray = {item[0]: item[1:] for item in second}
+    return sum(first_by_ray.get(ray) != second_by_ray.get(ray) for ray in first_by_ray.keys() | second_by_ray.keys())
+
+
+def _consolidate_family_consensus(
+    family: dict[str, Any],
+    candidate_x: np.ndarray,
+    candidate_y: np.ndarray,
+    *,
+    gate: float,
+    n_angles: int,
+    angular_bin_count: int,
+    minimum_support: int,
+    preliminary_residual_gate: float,
+    trigger_residual_gate: float,
+    config: dict[str, Any],
+    search: tuple[float, float, float],
+    center_limit: float,
+    min_radius_ratio: float,
+    max_radius_ratio: float,
+) -> dict[str, Any]:
+    members = list(family.get("_members") or [family])
+    member_circles = np.asarray([member["circle"] for member in members], dtype=np.float64)
+    initial = tuple(map(float, np.median(member_circles, axis=0)))
+    diagnostic: dict[str, Any] = {
+        "schemaVersion": "physical-circle-family-consensus/1",
+        "status": "invalid",
+        "applied": True,
+        "triggerResidualP95Px": trigger_residual_gate,
+        "originalResidualP95Px": float(family["p95"]),
+        "memberHypothesisCount": int(family.get("memberCount", len(members))),
+        "maxIterations": FAMILY_CONSENSUS_MAX_ITERATIONS,
+        "iterationCount": 0,
+        "converged": False,
+        "assignmentChangeCounts": [],
+        "initialCircle": _circle_dict(initial),
+        "finalCircle": None,
+        "supportRayCount": 0,
+        "angularCoverage": 0.0,
+        "residualMedianPx": None,
+        "residualP95Px": None,
+        "failedChecks": [],
+    }
+    if not all(math.isfinite(value) for value in initial) or not _circle_in_search_envelope(
+        initial, search, max_center_shift_px=center_limit,
+        min_radius_ratio=min_radius_ratio, max_radius_ratio=max_radius_ratio,
+    ):
+        diagnostic["failedChecks"] = ["family_consensus_invalid"]
+        return {**family, "failed": ["family_consensus_invalid"], "consensus": diagnostic}
+
+    circle = initial
+    points, indices = _assign_family_candidates(candidate_x, candidate_y, circle, gate)
+    signature = _assignment_signature(points, indices)
+    converged = False
+    for iteration in range(1, FAMILY_CONSENSUS_MAX_ITERATIONS + 1):
+        diagnostic["iterationCount"] = iteration
+        if len(points) < 3:
+            diagnostic["failedChecks"] = ["family_consensus_insufficient_support"]
+            break
+        fitted = _algebraic_hypothesis_fit(points)
+        if fitted is None or not _circle_in_search_envelope(
+            fitted, search, max_center_shift_px=center_limit,
+            min_radius_ratio=min_radius_ratio, max_radius_ratio=max_radius_ratio,
+        ):
+            diagnostic["failedChecks"] = ["family_consensus_invalid"]
+            break
+        next_points, next_indices = _assign_family_candidates(candidate_x, candidate_y, fitted, gate)
+        next_signature = _assignment_signature(next_points, next_indices)
+        changes = _assignment_change_count(signature, next_signature)
+        diagnostic["assignmentChangeCounts"].append(changes)
+        circle, points, indices, signature = fitted, next_points, next_indices, next_signature
+        if changes == 0:
+            converged = True
+            break
+    if not converged and not diagnostic["failedChecks"]:
+        diagnostic["failedChecks"] = ["family_consensus_not_converged"]
+
+    failed = list(diagnostic["failedChecks"])
+    coverage = 0.0
+    median = math.inf
+    p95 = math.inf
+    if len(points) >= 3 and all(math.isfinite(value) for value in circle):
+        residuals = np.abs(
+            np.hypot(points[:, 0] - circle[0], points[:, 1] - circle[1]) - circle[2]
+        )
+        bins = np.floor(indices * angular_bin_count / n_angles).astype(int)
+        coverage = len(set(bins.tolist())) / angular_bin_count
+        median = float(np.median(residuals))
+        p95 = float(np.percentile(residuals, 95))
+        if len(points) < minimum_support:
+            failed.append("family_support")
+        if coverage < float(config["min_angular_coverage"]):
+            failed.append("family_angular_coverage")
+        if p95 > preliminary_residual_gate:
+            failed.append("family_residual_p95")
+    elif "family_consensus_insufficient_support" not in failed:
+        failed.append("family_consensus_insufficient_support")
+    failed = list(dict.fromkeys(failed))
+    diagnostic.update({
+        "status": "converged" if converged and not failed else "rejected",
+        "converged": converged,
+        "finalCircle": _circle_dict(circle) if all(math.isfinite(value) for value in circle) else None,
+        "supportRayCount": len(points),
+        "angularCoverage": coverage,
+        "residualMedianPx": median if math.isfinite(median) else None,
+        "residualP95Px": p95 if math.isfinite(p95) else None,
+        "failedChecks": failed,
+    })
+    return {
+        **family,
+        "circle": circle,
+        "points": points,
+        "indices": indices,
+        "assignmentByRay": {int(ray): point for ray, point in zip(indices, points)},
+        "support": len(points),
+        "coverage": coverage,
+        "median": median,
+        "p95": p95,
+        "failed": failed,
+        "consensus": diagnostic,
+    }
+
+
+def _preserve_qualified_family(
+    family: dict[str, Any], *, trigger_residual_gate: float,
+) -> dict[str, Any]:
+    """Keep a v1-qualified family byte-for-byte when correction is not needed."""
+    circle = tuple(map(float, family["circle"]))
+    return {
+        **family,
+        "consensus": {
+            "schemaVersion": "physical-circle-family-consensus/1",
+            "status": "not_needed",
+            "applied": False,
+            "triggerResidualP95Px": float(trigger_residual_gate),
+            "originalResidualP95Px": float(family["p95"]),
+            "memberHypothesisCount": int(family.get("memberCount", 1)),
+            "maxIterations": FAMILY_CONSENSUS_MAX_ITERATIONS,
+            "iterationCount": 0,
+            "converged": False,
+            "assignmentChangeCounts": [],
+            "initialCircle": _circle_dict(circle),
+            "finalCircle": _circle_dict(circle),
+            "supportRayCount": int(family["support"]),
+            "angularCoverage": float(family["coverage"]),
+            "residualMedianPx": float(family["median"]),
+            "residualP95Px": float(family["p95"]),
+            "failedChecks": [],
+        },
+    }
+
+
 def select_circle_edge_family(
     ray_candidates: list[dict[str, Any]],
     *,
@@ -313,6 +483,7 @@ def select_circle_edge_family(
     min_radius_ratio: float,
     max_radius_ratio: float,
     angular_bin_count: int = 36,
+    consensus_trigger_residual_p95_px: float = 0.0,
 ) -> tuple[dict[str, Any], np.ndarray, np.ndarray]:
     """Select exactly one globally consistent physical-circle edge family."""
     started = time.perf_counter_ns()
@@ -342,7 +513,8 @@ def select_circle_edge_family(
     if (
         n_angles < 4 or angular_bin_count < 4 or angular_bin_count > n_angles
         or scale <= 0.0 or search[2] <= 0.0
-        or not all(math.isfinite(float(value)) for value in (*search, scale, max_center_shift_px, min_radius_ratio, max_radius_ratio))
+        or not all(math.isfinite(float(value)) for value in (*search, scale, max_center_shift_px, min_radius_ratio, max_radius_ratio, consensus_trigger_residual_p95_px))
+        or consensus_trigger_residual_p95_px < 0.0
     ):
         diagnostics.update({"status": "invalid", "failedChecks": ["invalid_edge_family_evidence"]})
         diagnostics["timingMs"]["total"] = (time.perf_counter_ns() - started) / 1e6
@@ -534,9 +706,34 @@ def select_circle_edge_family(
                 diagnostics["timingMs"]["familySelection"] = (time.perf_counter_ns() - started) / 1e6
                 diagnostics["timingMs"]["total"] = diagnostics["timingMs"]["familySelection"]
                 return diagnostics, empty_points, empty_indices
-            families.append(hypothesis)
+            families.append({**hypothesis, "_members": [hypothesis]})
         else:
             match["memberCount"] += 1
+
+            match["_members"].append(hypothesis)
+
+    if cfg["strategy_version"] == EDGE_FAMILY_STRATEGY_V2:
+        families = [
+            (
+                _preserve_qualified_family(
+                    family,
+                    trigger_residual_gate=consensus_trigger_residual_p95_px,
+                )
+                if family["p95"] <= consensus_trigger_residual_p95_px
+                else _consolidate_family_consensus(
+                    family, candidate_x, candidate_y,
+                    gate=gate, n_angles=n_angles, angular_bin_count=angular_bin_count,
+                    minimum_support=minimum_support,
+                    preliminary_residual_gate=(
+                        float(cfg["max_preliminary_residual_p95_px"]) * scale
+                    ),
+                    trigger_residual_gate=consensus_trigger_residual_p95_px,
+                    config=cfg, search=search, center_limit=center_limit,
+                    min_radius_ratio=min_radius_ratio, max_radius_ratio=max_radius_ratio,
+                )
+            )
+            for family in families
+        ]
 
     families.sort(key=lambda item: (-item["support"], item["p95"], *item["circle"]))
     summaries = []
@@ -545,7 +742,7 @@ def select_circle_edge_family(
         family_id = f"edge-family-{index:03d}"
         status = "qualified" if not family["failed"] else "rejected"
         family["familyId"] = family_id
-        summaries.append({
+        summary = {
             "familyId": family_id,
             "circle": _circle_dict(family["circle"]),
             "supportRayCount": int(family["support"]),
@@ -555,7 +752,10 @@ def select_circle_edge_family(
             "memberHypothesisCount": int(family["memberCount"]),
             "status": status,
             "failedChecks": list(family["failed"]),
-        })
+        }
+        if cfg["strategy_version"] == EDGE_FAMILY_STRATEGY_V2:
+            summary["consensus"] = family["consensus"]
+        summaries.append(summary)
         if status == "qualified":
             qualified.append(family)
     diagnostics.update({
@@ -807,6 +1007,9 @@ def locate_physical_outer_circle(
             min_radius_ratio=float(cfg["min_radius_ratio"]),
             max_radius_ratio=float(cfg["max_radius_ratio"]),
             angular_bin_count=int(cfg["angular_bin_count"]),
+            consensus_trigger_residual_p95_px=(
+                float(cfg["max_residual_p95_px"]) * scale
+            ),
         )
         family["timingMs"]["candidateExtraction"] = extraction_ms
         family["timingMs"]["total"] += extraction_ms

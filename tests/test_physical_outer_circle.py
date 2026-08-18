@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -175,6 +176,160 @@ class PhysicalOuterCircleTests(unittest.TestCase):
         self.assertEqual("selected", again["status"])
         self.assertEqual(decision["families"], again["families"])
         self.assertTrue(np.allclose(points, again_points))
+
+    def test_v2_consolidates_all_group_members_and_is_candidate_order_invariant(self):
+        truth = (200.0, 210.0, 100.0)
+        rays = self._family_rays([truth])
+        config = {
+            "enabled": True,
+            "strategy_version": physical_module.EDGE_FAMILY_STRATEGY_V2,
+            "min_support_ratio": 0.75,
+            "min_angular_coverage": 0.65,
+        }
+        decision, points, indices = physical_module.select_circle_edge_family(
+            rays, search=truth, n_angles=72, config=config, scale=1.0,
+            max_center_shift_px=80.0, min_radius_ratio=0.94, max_radius_ratio=1.10,
+        )
+        self.assertEqual("selected", decision["status"], decision)
+        family = decision["families"][0]
+        consensus = family["consensus"]
+        self.assertEqual("physical-circle-family-consensus/1", consensus["schemaVersion"])
+        self.assertEqual("converged", consensus["status"])
+        self.assertTrue(consensus["converged"])
+        self.assertGreater(consensus["memberHypothesisCount"], 1)
+        self.assertLessEqual(consensus["iterationCount"], consensus["maxIterations"])
+        self.assertEqual(72, len(points))
+        self.assertEqual(list(range(72)), indices.tolist())
+
+        reordered = [
+            {**record, "candidates": list(reversed(record["candidates"]))}
+            for record in reversed(rays)
+        ]
+        again, again_points, again_indices = physical_module.select_circle_edge_family(
+            reordered, search=truth, n_angles=72, config=config, scale=1.0,
+            max_center_shift_px=80.0, min_radius_ratio=0.94, max_radius_ratio=1.10,
+        )
+        self.assertEqual(decision["families"], again["families"])
+        self.assertTrue(np.array_equal(indices, again_indices))
+        self.assertTrue(np.allclose(points, again_points))
+
+    def test_v1_keeps_legacy_family_summary_without_consensus(self):
+        truth = (200.0, 210.0, 100.0)
+        decision, _, _ = physical_module.select_circle_edge_family(
+            self._family_rays([truth]), search=truth, n_angles=72,
+            config={"enabled": True, "strategy_version": physical_module.EDGE_FAMILY_STRATEGY_V1},
+            scale=1.0, max_center_shift_px=80.0,
+            min_radius_ratio=0.94, max_radius_ratio=1.10,
+        )
+        self.assertEqual("selected", decision["status"])
+        self.assertNotIn("consensus", decision["families"][0])
+
+    def test_v2_preserves_v1_assignments_when_existing_residual_gate_passes(self):
+        truth = (200.0, 210.0, 100.0)
+        rays = self._family_rays([truth])
+        common = dict(
+            search=truth, n_angles=72, scale=1.0, max_center_shift_px=80.0,
+            min_radius_ratio=0.94, max_radius_ratio=1.10,
+        )
+        legacy, legacy_points, legacy_indices = physical_module.select_circle_edge_family(
+            rays, config={"enabled": True}, **common,
+        )
+        decision, points, indices = physical_module.select_circle_edge_family(
+            rays,
+            config={
+                "enabled": True,
+                "strategy_version": physical_module.EDGE_FAMILY_STRATEGY_V2,
+            },
+            consensus_trigger_residual_p95_px=5.0,
+            **common,
+        )
+        consensus = decision["families"][0]["consensus"]
+        self.assertEqual("not_needed", consensus["status"])
+        self.assertFalse(consensus["applied"])
+        self.assertEqual(legacy["families"][0]["circle"], decision["families"][0]["circle"])
+        self.assertTrue(np.array_equal(legacy_indices, indices))
+        self.assertTrue(np.array_equal(legacy_points, points))
+
+    def test_v2_corrects_a_biased_adjacent_edge_representative_from_member_consensus(self):
+        truth = (200.0, 210.0, 100.0)
+        angles = np.linspace(0.0, 2.0 * math.pi, 12, endpoint=False)
+        candidate_x = np.column_stack([
+            truth[0] + truth[2] * np.cos(angles),
+            truth[0] + 96.0 * np.cos(angles),
+        ])
+        candidate_y = np.column_stack([
+            truth[1] + truth[2] * np.sin(angles),
+            truth[1] + 96.0 * np.sin(angles),
+        ])
+        biased_points = np.column_stack((candidate_x[:, 1], candidate_y[:, 1]))
+        indices = np.arange(12, dtype=int)
+        family = {
+            "circle": (200.0, 210.0, 96.0),
+            "points": biased_points,
+            "indices": indices,
+            "assignmentByRay": {
+                int(ray): point for ray, point in zip(indices, biased_points)
+            },
+            "support": 12,
+            "coverage": 1.0,
+            "median": 2.0,
+            "p95": 6.0,
+            "failed": [],
+            "memberCount": 3,
+            "_members": [
+                {"circle": (200.0, 210.0, 99.8)},
+                {"circle": truth},
+                {"circle": (200.2, 209.9, 100.1)},
+            ],
+        }
+        result = physical_module._consolidate_family_consensus(
+            family, candidate_x, candidate_y, gate=8.0,
+            n_angles=12, angular_bin_count=12, minimum_support=10,
+            preliminary_residual_gate=8.0, trigger_residual_gate=5.0,
+            config={"min_angular_coverage": 0.8}, search=truth,
+            center_limit=80.0, min_radius_ratio=0.94, max_radius_ratio=1.10,
+        )
+        self.assertEqual("converged", result["consensus"]["status"])
+        self.assertTrue(result["consensus"]["applied"])
+        self.assertEqual(6.0, result["consensus"]["originalResidualP95Px"])
+        self.assertTrue(np.allclose(candidate_x[:, 0], result["points"][:, 0]))
+        self.assertTrue(np.allclose(candidate_y[:, 0], result["points"][:, 1]))
+        self.assertAlmostEqual(100.0, result["circle"][2], places=9)
+
+    def test_v2_nonconvergent_assignments_are_rejected_at_fixed_bound(self):
+        truth = (200.0, 210.0, 100.0)
+        family = {
+            "circle": truth, "points": np.empty((0, 2)), "indices": np.asarray([], dtype=int),
+            "assignmentByRay": {}, "support": 0, "coverage": 0.0,
+            "median": 0.0, "p95": 0.0, "failed": [], "memberCount": 1,
+            "_members": [{"circle": truth}],
+        }
+        first_points = np.asarray([[300.0, 210.0], [200.0, 310.0], [100.0, 210.0]])
+        second_points = np.asarray([[301.0, 210.0], [200.0, 311.0], [99.0, 210.0]])
+        indices = np.asarray([0, 1, 2], dtype=int)
+        assignments = [(first_points, indices)]
+        for iteration in range(physical_module.FAMILY_CONSENSUS_MAX_ITERATIONS):
+            assignments.append((second_points if iteration % 2 == 0 else first_points, indices))
+        with mock.patch.object(
+            physical_module, "_assign_family_candidates", side_effect=assignments,
+        ), mock.patch.object(
+            physical_module, "_algebraic_hypothesis_fit", return_value=truth,
+        ):
+            result = physical_module._consolidate_family_consensus(
+                family, np.zeros((3, 1)), np.zeros((3, 1)), gate=8.0,
+                n_angles=3, angular_bin_count=3, minimum_support=3,
+                preliminary_residual_gate=8.0,
+                trigger_residual_gate=0.0,
+                config={"min_angular_coverage": 0.5}, search=truth,
+                center_limit=80.0, min_radius_ratio=0.94, max_radius_ratio=1.10,
+            )
+        consensus = result["consensus"]
+        self.assertFalse(consensus["converged"])
+        self.assertEqual(
+            physical_module.FAMILY_CONSENSUS_MAX_ITERATIONS,
+            consensus["iterationCount"],
+        )
+        self.assertIn("family_consensus_not_converged", result["failed"])
 
     def test_global_family_selection_ignores_sparse_wrong_family_without_interpolation(self):
         truth = (200.0, 210.0, 100.0)

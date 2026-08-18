@@ -449,7 +449,12 @@
               "properties": {
                 "schema_version": {"const": "physical-circle-edge-family-selection/1"},
                 "enabled": {"type": "boolean", "default": false},
-                "strategy_version": {"type": "string", "minLength": 1},
+                "strategy_version": {
+                  "enum": [
+                    "deterministic-three-point-global-circle-v1",
+                    "deterministic-family-consensus-circle-v2"
+                  ]
+                },
                 "max_peaks_per_ray": {"type": "integer", "minimum": 1, "maximum": 8},
                 "min_gradient": {"type": "number", "exclusiveMinimum": 0},
                 "min_separation_px": {"type": "number", "exclusiveMinimum": 0},

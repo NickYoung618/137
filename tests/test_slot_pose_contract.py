@@ -658,10 +658,15 @@ class SlotPoseContractTests(unittest.TestCase):
             self.assertFalse(selection["enabled"])
             self.assertEqual(8, selection["max_peaks_per_ray"])
             self.assertEqual(0.95, selection["min_background_persistence_ratio"])
+            self.assertEqual(
+                "deterministic-three-point-global-circle-v1",
+                selection["strategy_version"],
+            )
             self.assertIn("edge_family_selection", effective_config_identity(loaded)["detector"]["physical_outer_circle"])
 
             invalid_cases = [
                 {"schema_version": "unknown"},
+                {"strategy_version": "unknown-strategy"},
                 {"enabled": 1},
                 {"max_peaks_per_ray": 0},
                 {"min_gradient": float("nan")},

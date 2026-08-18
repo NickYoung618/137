@@ -48,6 +48,42 @@
           "residualMedianPx": {"type": ["number", "null"], "minimum": 0},
           "residualP95Px": {"type": ["number", "null"], "minimum": 0},
           "memberHypothesisCount": {"type": "integer", "minimum": 1},
+          "consensus": {
+            "type": "object", "additionalProperties": false,
+            "required": [
+              "schemaVersion", "status", "applied", "triggerResidualP95Px",
+              "originalResidualP95Px", "memberHypothesisCount", "maxIterations",
+              "iterationCount", "converged", "assignmentChangeCounts", "initialCircle",
+              "finalCircle", "supportRayCount", "angularCoverage", "residualMedianPx",
+              "residualP95Px", "failedChecks"
+            ],
+            "properties": {
+              "schemaVersion": {"const": "physical-circle-family-consensus/1"},
+              "status": {"enum": ["not_needed", "converged", "rejected", "invalid"]},
+              "applied": {"type": "boolean"},
+              "triggerResidualP95Px": {"type": "number", "minimum": 0},
+              "originalResidualP95Px": {"type": "number", "minimum": 0},
+              "memberHypothesisCount": {"type": "integer", "minimum": 1},
+              "maxIterations": {"const": 16},
+              "iterationCount": {"type": "integer", "minimum": 0, "maximum": 16},
+              "converged": {"type": "boolean"},
+              "assignmentChangeCounts": {
+                "type": "array", "maxItems": 16,
+                "items": {"type": "integer", "minimum": 0}
+              },
+              "initialCircle": {"$ref": "#/$defs/circle"},
+              "finalCircle": {
+                "oneOf": [{"$ref": "#/$defs/circle"}, {"type": "null"}]
+              },
+              "supportRayCount": {"type": "integer", "minimum": 0},
+              "angularCoverage": {"type": "number", "minimum": 0, "maximum": 1},
+              "residualMedianPx": {"type": ["number", "null"], "minimum": 0},
+              "residualP95Px": {"type": ["number", "null"], "minimum": 0},
+              "failedChecks": {
+                "type": "array", "items": {"type": "string"}, "uniqueItems": true
+              }
+            }
+          },
           "status": {"enum": ["qualified", "rejected"]},
           "failedChecks": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
         }
@@ -63,6 +99,17 @@
         "familySelection": {"type": "number", "minimum": 0},
         "robustFit": {"type": "number", "minimum": 0},
         "total": {"type": "number", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "circle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["centerX", "centerY", "radiusPx"],
+      "properties": {
+        "centerX": {"type": "number"},
+        "centerY": {"type": "number"},
+        "radiusPx": {"type": "number", "exclusiveMinimum": 0}
       }
     }
   }
