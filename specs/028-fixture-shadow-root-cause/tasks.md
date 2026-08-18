@@ -79,12 +79,12 @@
 ## Phase 6: Polish and observed regression validation
 
 - [x] T026 Run focused unit/contract tests and all root JSON Schema validation; record counts and hashes
-- [ ] T027 Run the frozen 140-image replay once with reviewed 028 config and generate per-image overlays, transition ledger, stage/classification counts and seven-part grouping
-- [ ] T028 Review every changed 140-image outcome and record complete-visible, complete-near-shadow, mixed/occluded or insufficient-evidence status without using folder class as truth
-- [ ] T029 Verify all invalid/ambiguous pose, correction, direction and PLC fields are null and PLC authority is false
-- [ ] T030 Run five-repeat same-adapter determinism and warm P95 performance checks on representative recovered and rejected frames
-- [ ] T031 Run git diff checks, confirm branch/HEAD/worktree status, confirm no main merge, no PLC/HMI change and no sealed part-006 access
-- [ ] T032 Update specs/028-fixture-shadow-root-cause/quickstart.md and produce the Git-external final observed-development report with explicit 700/new-part limitations
+- [x] T027 Run the frozen 140-image replay once with reviewed 028 config and generate per-image overlays, transition ledger, stage/classification counts and seven-part grouping
+- [x] T028 Review every changed 140-image outcome and record complete-visible, complete-near-shadow, mixed/occluded or insufficient-evidence status without using folder class as truth
+- [x] T029 Verify all invalid/ambiguous pose, correction, direction and PLC fields are null and PLC authority is false
+- [x] T030 Run five-repeat same-adapter determinism and warm P95 performance checks on representative recovered and rejected frames
+- [x] T031 Run git diff checks, confirm branch/HEAD/worktree status, confirm no main merge, no PLC/HMI change and no sealed part-006 access
+- [x] T032 Update specs/028-fixture-shadow-root-cause/quickstart.md and produce the Git-external final observed-development report with explicit 700/new-part limitations
 
 ---
 
