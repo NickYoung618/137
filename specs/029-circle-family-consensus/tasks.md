@@ -51,7 +51,7 @@
 - [x] T017 Run five static repeats and warm reused-adapter performance for recovered and rejected representatives, enforcing exact determinism and P95 no greater than 2.5 seconds
 - [x] T018 Run six-image 026 v1 compatibility comparison and confirm legacy effective identity/output equivalence
 - [x] T019 Update `specs/029-circle-family-consensus/quickstart.md`, mark completed tasks, run convergence analysis and record the final observed-development limitations
-- [ ] T020 Commit and push the reviewed branch only after `git diff --check`, tests, schemas, evidence hashes and clean-worktree verification, then prepare the Mac 700-image diagnostic prompt
+- [x] T020 Commit and push the reviewed branch only after `git diff --check`, tests, schemas, evidence hashes and clean-worktree verification, then prepare the Mac 700-image diagnostic prompt
 
 ## Dependencies & Execution Order
 
