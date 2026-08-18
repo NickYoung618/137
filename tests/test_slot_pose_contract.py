@@ -61,6 +61,53 @@ def minimal_single_groove_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_groove_shadow_source_discrimination_is_default_off_and_strictly_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            omitted = minimal_single_groove_config()
+            omitted_path = root / "omitted.json"
+            omitted_path.write_text(json.dumps(omitted), encoding="utf-8")
+            loaded = load_config(omitted_path)
+            self.assertNotIn("groove_shadow_source_discrimination", loaded["detector"])
+
+            unsupported = minimal_single_groove_config()
+            unsupported["detector"]["groove_shadow_source_discrimination"] = {
+                "enabled": False, "shadow_threshold": 0.5,
+            }
+            unsupported_path = root / "unsupported.json"
+            unsupported_path.write_text(json.dumps(unsupported), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unsupported fields"):
+                load_config(unsupported_path)
+
+            enabled = minimal_single_groove_config()
+            enabled["detector"]["groove_shadow_source_discrimination"] = {"enabled": True}
+            enabled_path = root / "enabled.json"
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "requires ambiguity_resolution"):
+                load_config(enabled_path)
+
+            enabled["detector"]["ambiguity_resolution"] = {"enabled": True}
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "requires sidewall_source_consistency"):
+                load_config(enabled_path)
+
+            enabled["detector"]["sidewall_source_consistency"] = {"enabled": True}
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "requires groove refinement v2"):
+                load_config(enabled_path)
+
+            enabled["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2"
+            }
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            configured = load_config(enabled_path)
+            self.assertTrue(configured["detector"]["groove_shadow_source_discrimination"]["enabled"])
+
+            enabled["detector"]["source_consistency_adjudication"] = {"enabled": True}
+            enabled_path.write_text(json.dumps(enabled), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "forbids source_consistency_adjudication"):
+                load_config(enabled_path)
+
     def test_bundled_core_source_does_not_require_external_source_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

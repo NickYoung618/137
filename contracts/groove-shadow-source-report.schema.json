@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/contracts/groove-shadow-source-report.schema.json",
+  "title": "Groove shadow source offline report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "code", "inputs", "dataUse", "summary", "traces", "independentAcceptance"],
+  "properties": {
+    "schemaVersion": {"const": "groove-shadow-source-report/1"},
+    "generatedAt": {"type": "string"},
+    "code": {"type": "object", "required": ["branch", "commit"], "properties": {"branch": {"type": "string"}, "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "inputs": {"type": "object"},
+    "dataUse": {"const": "observed-diagnostic-not-unseen-acceptance"},
+    "summary": {"type": "object"},
+    "traces": {"type": "array", "items": {"type": "object", "required": ["imageSha256", "terminalStage", "humanSemanticClass", "candidateEvidenceAvailability", "safetyOutputsNull"], "properties": {"imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "terminalStage": {"type": "string"}, "humanSemanticClass": {"enum": ["REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW", "REAL_GROOVE_SHADOW_MIXED_OR_OCCLUDED", "INDETERMINATE", null]}, "candidateEvidenceAvailability": {"enum": ["complete", "partial", "not_evaluated"]}, "safetyOutputsNull": {"type": "boolean"}}}},
+    "independentAcceptance": {"type": "object", "required": ["status", "productionAccuracyClaimAllowed", "productionDefaultEnableAllowed", "plcAuthorizationAllowed"], "properties": {"status": {"enum": ["INDEPENDENT_ACCEPTANCE_BLOCKED", "COMPLETED"]}, "productionAccuracyClaimAllowed": {"const": false}, "productionDefaultEnableAllowed": {"const": false}, "plcAuthorizationAllowed": {"const": false}}}
+  }
+}

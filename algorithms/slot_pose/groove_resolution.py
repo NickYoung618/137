@@ -57,6 +57,15 @@ def resolve_groove_candidates(
             "candidateId": str(candidate["candidateId"]),
             "accepted": refinement.get("status") == "accepted",
             "refinement": refinement,
+            "evidenceSummary": {
+                "physicalRefinementStatus": refinement.get(
+                    "physicalRefinementStatus", refinement.get("status", "not_evaluated")
+                ),
+                "sourceConsistencyStatus": (
+                    (refinement.get("sourceConsistency") or {}).get("status", "not_evaluated")
+                ),
+                "failedChecks": list(refinement.get("failedChecks") or []),
+            },
         }
         attempts.append(attempt)
         if attempt["accepted"]:

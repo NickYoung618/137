@@ -199,6 +199,19 @@ Git安全配置片段见`config/closed-loop-guidance-v3.fragment.json`，完整�
 服务器现有25张5472×3648 A2 JPEG诊断副本和3张同源原始BMP；第4帧有一份同源BMP人工圆弧/开放槽开发参考，
 但25张JPEG尚无逐图同哈希人工truth。图片、LabelMe模板和审阅产物全部留在Git外；完整正常/坏图集仍在Mac外置存储。
 
+### 027真实槽与邻近固定装置阴影来源诊断
+
+`detector.groove_shadow_source_discrimination`严格默认关闭且不拥有任何新数值门限。显式启用时，它只汇总
+既有粗识别、v2物理双壁/外圆肩部端点、原始sidewall source-consistency及ambiguity resolver证据。
+只有唯一物理存活候选且所有竞争候选都有明确失败证据时，才记录
+`REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW`；混合壁/端点、多个存活者、未评估证据、低polar或上游失败
+均保持fail-closed。低`polar_score`不能被局部完整槽证据覆盖。
+
+Mac回放700张已成为`observed-diagnostic-not-unseen-acceptance`，只允许逐图根因诊断，不能循环调全局门限或
+宣称准确率。逐图SHA账本由`tools/trace_groove_shadow_sources.py`生成；候选来源叠加由
+`tools/render_slot_pose_review.py`生成，原图缺失时明确记录`unavailable`。生产默认启用、准确率结论和任何
+PLC授权必须等待物理零件与700组无交集的新manifest一次性冻结验收。
+
 ## 006单人工参考与逐图自动标注
 
 当前只有1张图有人工外圆和真槽标注。它被锁定为`DEVELOPMENT_REFERENCE_ONLY`：只能报告该图本身的

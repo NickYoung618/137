@@ -18,6 +18,7 @@ class GrooveResolutionTests(unittest.TestCase):
         self.assertEqual("a", result["selectedCandidateId"])
         self.assertEqual(2, len(result["attempts"]))
         self.assertEqual(["a"], [item["candidateId"] for item in result["survivors"]])
+        self.assertEqual("accepted", result["attempts"][1]["evidenceSummary"]["physicalRefinementStatus"])
 
     def test_zero_multiple_and_over_limit_fail_closed(self) -> None:
         candidates = [{"candidateId": str(index)} for index in range(3)]

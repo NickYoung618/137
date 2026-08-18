@@ -33,6 +33,11 @@
   },
   "detector": {
     "diagnostic_mode": "legacy_single_notch",
+    "groove_shadow_source_discrimination": {
+      "schema_version": "groove-shadow-source-discrimination/1",
+      "enabled": false,
+      "strategy_version": "physical-sidewall-source-evidence/1"
+    },
     "min_notch_prominence": 12.0,
     "min_polar_score": 3.0,
     "max_rotation_disagreement_deg": 5.0,

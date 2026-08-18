@@ -12,6 +12,28 @@ from tools.render_slot_pose_review import contact_sheet_layout, render_review
 
 
 class SlotPoseReviewTests(unittest.TestCase):
+    def test_source_overlay_records_unavailable_when_raw_image_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = {"datasetId": "missing", "images": [{
+                "imageId": "sample:0001", "relativePath": "missing.bmp",
+                "datasetClass": "normal", "sha256": "0" * 64,
+            }]}
+            result = {
+                "taskId": "missing:sample:0001", "result": {"valid": False},
+                "error": {"code": "GROOVE_RECOGNITION_AMBIGUOUS", "stage": "groove_recognition"},
+                "diagnostics": {"grooveShadowSourceDiscrimination": {
+                    "classification": "INDETERMINATE", "status": "not_evaluated",
+                    "candidateEvidence": [], "failedChecks": ["candidate_source_evidence_not_evaluated"],
+                }},
+            }
+            summary = render_review(
+                manifest, [result], root, root / "review", allow_missing_images=True,
+            )
+            self.assertEqual("unavailable", summary["records"][0]["sourceOverlayStatus"])
+            self.assertEqual({"unavailable": 1}, summary["sourceOverlayStatusCounts"])
+            self.assertFalse((root / "review" / "overlays" / "0001.jpg").exists())
+
     def test_final_result_overrides_pre_quality_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

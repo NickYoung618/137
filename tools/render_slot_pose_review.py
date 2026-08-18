@@ -177,6 +177,7 @@ def build_review_record(manifest_item: dict[str, Any], result: dict[str, Any]) -
         "grooveRecognition": groove_recognition,
         "grooveCandidates": diagnostics.get("grooveCandidates") or [],
         "grooveRefinement": groove_refinement,
+        "grooveShadowSourceDiscrimination": diagnostics.get("grooveShadowSourceDiscrimination"),
         "singleGroovePose": single_groove_pose,
         "yDownTargetDiagnostic": y_down_target,
         "guidance": guidance_record,
@@ -298,11 +299,24 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
             item["candidateId"]: item
             for item in (record.get("grooveRecognition") or {}).get("assessments") or []
         }
+        source_diagnostic = record.get("grooveShadowSourceDiscrimination") or {}
+        source_by_candidate = {
+            str(item.get("candidateId")): item
+            for item in source_diagnostic.get("candidateEvidence") or []
+            if isinstance(item, dict)
+        }
         for candidate in record.get("candidates") or []:
             candidate_id = str(candidate["candidateId"])
             role = role_by_candidate.get(candidate_id)
             assessment = assessments.get(candidate_id)
-            color = ROLE_COLORS.get(role, "#ffe14f" if assessment is None else ("#38d66b" if assessment.get("accepted") else "#ff5d73"))
+            source_item = source_by_candidate.get(candidate_id) or {}
+            source_color = {
+                "REAL_GROOVE_SURVIVOR": "#38d66b",
+                "NON_GROOVE_SOURCE_REJECTED": "#ff5dce",
+                "MIXED_OR_OCCLUDED_EVIDENCE": "#ff5d73",
+                "INDETERMINATE": "#ffe14f",
+            }.get(source_item.get("sourceDisposition"))
+            color = source_color or ROLE_COLORS.get(role, "#ffe14f" if assessment is None else ("#38d66b" if assessment.get("accepted") else "#ff5d73"))
             angle = float(candidate["centerDeg"])
             endpoint = _point(center, radius, angle)
             draw.line((center, endpoint), fill=color, width=width)
@@ -359,13 +373,23 @@ def render_overlay(image_path: Path, record: dict[str, Any], output_path: Path) 
         target_text = "" if measured_y is None else (
             f" y-down={float(measured_y):.2f}deg target={target_diagnostic.get('toleranceStatus')}"
         )
+    source_diagnostic = record.get("grooveShadowSourceDiscrimination") or {}
+    source_text = ""
+    if source_diagnostic:
+        source_text = (
+            f" source={source_diagnostic.get('classification')}"
+            f" status={source_diagnostic.get('status')}"
+            f" failed={'|'.join(source_diagnostic.get('failedChecks') or [])}"
+        )
     draw.text(
         (18, 12),
         f"{record['imageId']}  raw={count} grooves={groove_count}{single_text}{target_text}  error={error}",
         fill="white", font=font,
     )
     draw.text(
-        (18, 56), "cyan=all side points; green/yellow=inliers; red X=rejected; white=line/intersection",
+        (18, 56),
+        "cyan=all side points; green=survivor; magenta=non-groove; red=mixed/rejected; white=line/intersection"
+        + source_text,
         fill="white", font=font,
     )
     image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
@@ -409,7 +433,10 @@ def render_contact_sheet(overlays: list[tuple[str, Path]], output_path: Path) ->
     sheet.save(output_path, quality=88)
 
 
-def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_root: Path, output_dir: Path) -> dict[str, Any]:
+def render_review(
+    manifest: dict[str, Any], results: list[dict[str, Any]], data_root: Path,
+    output_dir: Path, *, allow_missing_images: bool = False,
+) -> dict[str, Any]:
     result_by_task = {str(item.get("taskId")): item for item in results}
     dataset_id = str(manifest.get("datasetId", "dataset"))
     records: list[dict[str, Any]] = []
@@ -424,9 +451,16 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
             raise ValueError(f"missing batch result for {task_id}")
         relative = safe_relative_path(str(item["relativePath"]))
         image_path = data_root.resolve() / relative
+        record = build_review_record(item, result)
+        if not image_path.is_file():
+            if not allow_missing_images:
+                raise ValueError(f"image is unavailable for {relative.as_posix()}")
+            record["sourceOverlayStatus"] = "unavailable"
+            records.append(record)
+            continue
         if sha256_file(image_path) != item["sha256"]:
             raise ValueError(f"image hash mismatch for {relative.as_posix()}")
-        record = build_review_record(item, result)
+        record["sourceOverlayStatus"] = "available"
         records.append(record)
         overlay_path = output_dir / "overlays" / f"{len(records):04d}.jpg"
         render_overlay(image_path, record, overlay_path)
@@ -482,6 +516,9 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
     localization_statuses = Counter(
         (record.get("circleLocalization") or {}).get("status") or "not_available" for record in records
     )
+    source_overlay_statuses = Counter(
+        record.get("sourceOverlayStatus", "unavailable") for record in records
+    )
     summary = {
         "schemaVersion": "slot-pose-review/2" if any(
             key != "not_available" for key in detection_statuses
@@ -505,6 +542,7 @@ def render_review(manifest: dict[str, Any], results: list[dict[str, Any]], data_
         "intermediateGuidanceStatusCounts": dict(sorted(intermediate_guidance_statuses.items())),
         "physicalOuterCircleAcceptedCount": physical_circle_accepted_count,
         "circleLocalizationStatusCounts": dict(sorted(localization_statuses.items())),
+        "sourceOverlayStatusCounts": dict(sorted(source_overlay_statuses.items())),
         "records": records,
     }
     write_json(output_dir / "review.json", summary)
@@ -714,6 +752,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results", required=True, type=Path)
     parser.add_argument("--data-root", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--allow-missing-images", action="store_true")
     return parser.parse_args()
 
 
@@ -721,7 +760,10 @@ def main() -> int:
     args = parse_args()
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
-        summary = render_review(manifest, load_results(args.results), args.data_root, args.output_dir)
+        summary = render_review(
+            manifest, load_results(args.results), args.data_root, args.output_dir,
+            allow_missing_images=args.allow_missing_images,
+        )
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

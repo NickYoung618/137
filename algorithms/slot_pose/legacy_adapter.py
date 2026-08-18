@@ -31,6 +31,10 @@ from algorithms.slot_pose.fixture_shadow import (
 from algorithms.slot_pose.groove_recognition import recognize_grooves
 from algorithms.slot_pose.groove_refinement import refine_groove_opening
 from algorithms.slot_pose.groove_resolution import resolve_groove_candidates
+from algorithms.slot_pose.groove_shadow_discrimination import (
+    build_candidate_source_evidence,
+    classify_groove_shadow_sources,
+)
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
 from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
@@ -600,6 +604,18 @@ class LegacyAEndFaceAdapter:
                 )
             diagnostics["physicalOuterCircle"] = physical_outer
             if physical_outer["status"] != "accepted":
+                shadow_source_config = detector.get(
+                    "groove_shadow_source_discrimination", {"enabled": False}
+                )
+                if mode == "single_real_groove" and shadow_source_config["enabled"]:
+                    diagnostics["grooveShadowSourceDiscrimination"] = (
+                        classify_groove_shadow_sources(
+                            [], enabled=True, upstream_accepted=False,
+                            polar_quality_accepted="polar_score" not in failures,
+                            existing_pose_chain_allowed=False,
+                            terminal_stage="upstream_outer_circle",
+                        )
+                    )
                 code = (
                     "HOUSING_CIRCLE_AMBIGUOUS"
                     if "ambiguous_edge_families" in (physical_outer.get("failedChecks") or [])
@@ -619,6 +635,18 @@ class LegacyAEndFaceAdapter:
                 )
             except LegacyAdapterError as exc:
                 diagnostics.update(exc.diagnostics)
+                shadow_source_config = detector.get(
+                    "groove_shadow_source_discrimination", {"enabled": False}
+                )
+                if mode == "single_real_groove" and shadow_source_config["enabled"]:
+                    diagnostics["grooveShadowSourceDiscrimination"] = (
+                        classify_groove_shadow_sources(
+                            [], enabled=True, upstream_accepted=True,
+                            polar_quality_accepted="polar_score" not in failures,
+                            existing_pose_chain_allowed=False,
+                            terminal_stage="candidate_generation",
+                        )
+                    )
                 exc.diagnostics = diagnostics
                 raise
             minimum_required = (
@@ -791,6 +819,62 @@ class LegacyAEndFaceAdapter:
                     ),
                 )
                 diagnostics["singleGroovePose"] = single_pose
+                shadow_source_config = detector.get(
+                    "groove_shadow_source_discrimination", {"enabled": False}
+                )
+                if shadow_source_config["enabled"]:
+                    source_evidence = build_candidate_source_evidence(
+                        recognition,
+                        single_refinement=diagnostics.get("grooveRefinement"),
+                        resolution=diagnostics.get("grooveResolution"),
+                    )
+                    resolution_status = (diagnostics.get("grooveResolution") or {}).get("status")
+                    if single_pose["status"] == "accepted":
+                        source_terminal_stage = "polar_quality" if "polar_score" in failures else "valid"
+                    elif resolution_status == "multiple_survived":
+                        source_terminal_stage = "groove_ambiguity"
+                    elif resolution_status == "none_survived":
+                        source_terminal_stage = (
+                            "source_consistency"
+                            if any(
+                                item["sourceConsistency"]["status"] == "failed"
+                                for item in source_evidence
+                            )
+                            else "groove_refinement"
+                        )
+                    elif isinstance(diagnostics.get("grooveRefinement"), dict):
+                        source_terminal_stage = (
+                            "source_consistency"
+                            if any(
+                                item["sourceConsistency"]["status"] == "failed"
+                                for item in source_evidence
+                            )
+                            else "groove_refinement"
+                        )
+                    else:
+                        source_terminal_stage = (
+                            "groove_ambiguity"
+                            if recognition.get("acceptedCount", 0) > 1
+                            else "groove_recognition"
+                        )
+                    diagnostics["grooveShadowSourceDiscrimination"] = (
+                        classify_groove_shadow_sources(
+                            source_evidence,
+                            enabled=True,
+                            upstream_accepted=True,
+                            polar_quality_accepted="polar_score" not in failures,
+                            existing_pose_chain_allowed=(
+                                single_pose["status"] == "accepted" and not failures
+                            ),
+                            terminal_stage=source_terminal_stage,
+                            locked_gate_versions={
+                                "recognition": detector["groove_recognition"]["threshold_version"],
+                                "refinement": detector["groove_refinement"]["threshold_version"],
+                                "sourceConsistency": detector["sidewall_source_consistency"]["threshold_version"],
+                                "ambiguity": detector["ambiguity_resolution"]["schema_version"],
+                            },
+                        )
+                    )
                 if single_pose["status"] != "accepted":
                     resolution_status = (diagnostics.get("grooveResolution") or {}).get("status")
                     if resolution_status == "none_survived":

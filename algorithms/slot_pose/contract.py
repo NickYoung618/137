@@ -133,9 +133,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
     }:
         raise ValueError(f"unsupported detector.diagnostic_mode: {mode!r}")
     from algorithms.slot_pose.fixture_shadow import merged_fixture_shadow_config
+    from algorithms.slot_pose.groove_shadow_discrimination import (
+        merged_groove_shadow_source_config,
+    )
     from algorithms.slot_pose.sidewall_consistency import merged_sidewall_consistency_config
 
     fixture_shadow = merged_fixture_shadow_config(detector.get("fixture_shadow_model"))
+    groove_shadow_source = merged_groove_shadow_source_config(
+        detector.get("groove_shadow_source_discrimination")
+    )
     source_consistency = merged_sidewall_consistency_config(
         detector.get("sidewall_source_consistency")
     )
@@ -185,6 +191,11 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError(
                 "detector.local_second_wall_diagnostic can only be enabled in single_real_groove mode"
             )
+        if groove_shadow_source["enabled"]:
+            raise ValueError(
+                "detector.groove_shadow_source_discrimination can only be enabled "
+                "in single_real_groove mode"
+            )
     if mode == "single_real_groove" or "fixture_shadow_model" in detector:
         detector["fixture_shadow_model"] = fixture_shadow
     if mode == "single_real_groove" or "sidewall_source_consistency" in detector:
@@ -195,6 +206,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["source_consistency_adjudication"] = source_consistency_adjudication
     if local_second_wall is not None:
         detector["local_second_wall_diagnostic"] = local_second_wall
+    if "groove_shadow_source_discrimination" in detector:
+        detector["groove_shadow_source_discrimination"] = groove_shadow_source
     if "dark_candidate_robustness" in detector and mode != "single_real_groove":
         from algorithms.slot_pose.angular_profile import merged_dark_candidate_robustness_config
 
@@ -334,6 +347,27 @@ def load_config(config_path: Path) -> dict[str, Any]:
                     raise ValueError(
                         "detector.source_consistency_adjudication requires groove refinement v2"
                     )
+            if groove_shadow_source["enabled"]:
+                if not detector["ambiguity_resolution"]["enabled"]:
+                    raise ValueError(
+                        "detector.groove_shadow_source_discrimination requires ambiguity_resolution"
+                    )
+                if not detector["sidewall_source_consistency"]["enabled"]:
+                    raise ValueError(
+                        "detector.groove_shadow_source_discrimination requires sidewall_source_consistency"
+                    )
+                if (
+                    source_consistency_adjudication is not None
+                    and source_consistency_adjudication["enabled"]
+                ):
+                    raise ValueError(
+                        "detector.groove_shadow_source_discrimination forbids "
+                        "source_consistency_adjudication overrides"
+                    )
+                if detector["groove_refinement"]["threshold_version"] != "groove-sidewall-subpixel-v2":
+                    raise ValueError(
+                        "detector.groove_shadow_source_discrimination requires groove refinement v2"
+                    )
         elif source_consistency_candidate is not None and source_consistency_candidate["enabled"]:
             raise ValueError(
                 "detector.sidewall_source_consistency_candidate requires groove refinement v2"
@@ -341,6 +375,10 @@ def load_config(config_path: Path) -> dict[str, Any]:
         elif source_consistency_adjudication is not None and source_consistency_adjudication["enabled"]:
             raise ValueError(
                 "detector.source_consistency_adjudication requires groove refinement v2"
+            )
+        elif groove_shadow_source["enabled"]:
+            raise ValueError(
+                "detector.groove_shadow_source_discrimination requires groove refinement v2"
             )
     return config
 

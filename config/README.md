@@ -1,5 +1,10 @@
 # 配置约定
 
+`detector.groove_shadow_source_discrimination`是严格默认关闭的版本化来源诊断。
+它不拥有新的数值门限，只汇总既有ambiguity resolver、v2双壁精修和原始
+sidewall source-consistency结果；启用时三者必须同时启用。新物理零件独立
+验收前不得进入生产profile，且绝不绕过低`polar_score`或授权PLC输出。
+
 ## 槽姿态引导配置
 
 - `legacy_asset.source_mode=bundled_module`是可合并默认：源码只从本仓库

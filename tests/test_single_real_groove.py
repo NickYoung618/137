@@ -137,6 +137,7 @@ class SingleGroovePoseGeometryTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for relative in (
             "algorithms/slot_pose/single_groove_pose.py",
+            "algorithms/slot_pose/groove_shadow_discrimination.py",
             "algorithms/slot_pose/legacy_adapter.py",
             "algorithms/slot_pose/main.py",
         ):
@@ -784,6 +785,100 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual("resolved", payload["diagnostics"]["grooveResolution"]["status"])
         self.assertEqual(2, len(payload["diagnostics"]["grooveResolution"]["attempts"]))
         self.assertEqual(1, len(payload["diagnostics"]["grooveCandidates"]))
+
+    def test_v3_shadow_source_diagnostic_reuses_unique_physical_survivor(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["ambiguity_resolution"] = {"enabled": True}
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["groove_shadow_source_discrimination"] = {"enabled": True}
+        path = self.root / "single-v3-shadow-source.json"
+        write_json(path, config)
+        calls = []
+
+        def fake_refinement(_gray, _center, _radius, candidate, *_args, **_kwargs):
+            calls.append(candidate["candidateId"])
+            accepted = len(calls) == 1
+            return {
+                "schemaVersion": "slot-groove-subpixel-opening/2",
+                "status": "accepted" if accepted else "failed",
+                "coarseCandidateId": candidate["candidateId"],
+                "openingEndpointProfileDeg": (
+                    [candidate["startDeg"], candidate["endDeg"]] if accepted else None
+                ),
+                "openingMidpointProfileDeg": candidate["centerDeg"] if accepted else None,
+                "startSide": {} if accepted else None,
+                "endSide": {} if accepted else None,
+                "outerCircleIntersections": [{}, {}] if accepted else None,
+                "failedChecks": [] if accepted else ["endSide_consensus_not_found"],
+            }
+
+        def fake_source(refinement, _config):
+            return {
+                "status": "accepted" if refinement["status"] == "accepted" else "not_evaluated",
+                "failedChecks": [], "metrics": {},
+            }
+
+        with (
+            patch("algorithms.slot_pose.legacy_adapter.refine_groove_opening", side_effect=fake_refinement),
+            patch("algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency", side_effect=fake_source),
+        ):
+            payload = run(self.images / "two-real-one-shadow.png", path, "single:v3:shadow-source")
+        self.assertTrue(payload["result"]["valid"], payload)
+        diagnostic = payload["diagnostics"]["grooveShadowSourceDiscrimination"]
+        self.assertEqual("REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW", diagnostic["classification"])
+        self.assertTrue(diagnostic["poseChainAllowed"])
+        self.assertEqual(2, diagnostic["candidateCount"])
+        self.assertIsNone(payload["result"]["plcCommand"])
+
+    def test_v3_shadow_source_mixed_wall_evidence_stays_fail_closed(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["ambiguity_resolution"] = {"enabled": True}
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["groove_shadow_source_discrimination"] = {"enabled": True}
+        path = self.root / "single-v3-shadow-source-mixed.json"
+        write_json(path, config)
+
+        def accepted_refinement(_gray, _center, _radius, candidate, *_args, **_kwargs):
+            return {
+                "schemaVersion": "slot-groove-subpixel-opening/2", "status": "accepted",
+                "coarseCandidateId": candidate["candidateId"],
+                "openingEndpointProfileDeg": [candidate["startDeg"], candidate["endDeg"]],
+                "openingMidpointProfileDeg": candidate["centerDeg"],
+                "startSide": {}, "endSide": {}, "outerCircleIntersections": [{}, {}],
+                "failedChecks": [],
+            }
+
+        with (
+            patch("algorithms.slot_pose.legacy_adapter.refine_groove_opening", side_effect=accepted_refinement),
+            patch(
+                "algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency",
+                return_value={
+                    "status": "rejected", "failedChecks": ["normalized_profile_dissimilar"],
+                    "metrics": {"normalizedProfileMae": 0.4},
+                },
+            ),
+        ):
+            payload = run(self.images / "two-real-one-shadow.png", path, "single:v3:shadow-mixed")
+        self.assertFalse(payload["result"]["valid"])
+        self.assertEqual("GROOVE_SOURCE_INCONSISTENT", payload["error"]["code"])
+        diagnostic = payload["diagnostics"]["grooveShadowSourceDiscrimination"]
+        self.assertEqual("REAL_GROOVE_SHADOW_MIXED_OR_OCCLUDED", diagnostic["classification"])
+        self.assertFalse(diagnostic["poseChainAllowed"])
+        for field in (
+            "currentAngleDeg", "correctionRawDeg", "correctionDeg",
+            "imageFrameCorrectionDeg", "rotationDirection", "mechanicalCorrectionDeg", "plcCommand",
+        ):
+            self.assertIsNone(payload["result"][field], field)
 
     def test_v2_refinement_quality_failure_is_explicit_and_never_uses_coarse_angle(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

@@ -354,6 +354,16 @@
             "max_candidates": {"type": "integer", "minimum": 2, "maximum": 3, "default": 3}
           }
         },
+        "groove_shadow_source_discrimination": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "enabled", "strategy_version"],
+          "properties": {
+            "schema_version": {"const": "groove-shadow-source-discrimination/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "strategy_version": {"const": "physical-sidewall-source-evidence/1"}
+          }
+        },
         "physical_outer_circle": {
           "type": "object",
           "additionalProperties": false,

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/contracts/groove-shadow-source-diagnostic.schema.json",
+  "title": "Groove shadow source diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "strategyVersion", "enabled", "status", "classification", "terminalStage", "poseChainAllowed", "selectedCandidateId", "candidateCount", "candidateEvidence", "passedChecks", "failedChecks", "lockedGateVersions"],
+  "properties": {
+    "schemaVersion": {"const": "groove-shadow-source-diagnostic/1"},
+    "strategyVersion": {"const": "physical-sidewall-source-evidence/1"},
+    "enabled": {"type": "boolean"},
+    "status": {"enum": ["disabled", "accepted", "rejected", "not_evaluated"]},
+    "classification": {"enum": ["REAL_GROOVE_COMPLETE_NEAR_FIXTURE_SHADOW", "REAL_GROOVE_SHADOW_MIXED_OR_OCCLUDED", "INDETERMINATE", null]},
+    "terminalStage": {"enum": ["upstream_outer_circle", "candidate_generation", "groove_recognition", "groove_ambiguity", "polar_quality", "groove_refinement", "source_consistency", "valid"]},
+    "poseChainAllowed": {"type": "boolean"},
+    "selectedCandidateId": {"type": ["string", "null"]},
+    "candidateCount": {"type": "integer", "minimum": 0},
+    "candidateEvidence": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/candidateEvidence"}},
+    "passedChecks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "failedChecks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "lockedGateVersions": {"type": "object", "additionalProperties": {"type": "string"}}
+  },
+  "$defs": {
+    "evaluation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "failedChecks"],
+      "properties": {
+        "status": {"enum": ["accepted", "failed", "not_evaluated"]},
+        "failedChecks": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "metrics": {
+      "type": ["object", "null"], "maxProperties": 32,
+      "additionalProperties": {"type": ["number", "string", "boolean", "null"]}
+    },
+    "candidateEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidateId", "coarseRecognition", "coarseMetrics", "physicalRefinement", "sidewallEvidence", "sourceConsistency", "sourceMetrics", "mixedOrOccludedEvidence", "sourceDisposition", "failedChecks"],
+      "properties": {
+        "candidateId": {"type": "string", "minLength": 1},
+        "coarseRecognition": {"$ref": "#/$defs/evaluation"},
+        "coarseMetrics": {"$ref": "#/$defs/metrics"},
+        "physicalRefinement": {"$ref": "#/$defs/evaluation"},
+        "sidewallEvidence": {"$ref": "#/$defs/metrics"},
+        "sourceConsistency": {"$ref": "#/$defs/evaluation"},
+        "sourceMetrics": {"$ref": "#/$defs/metrics"},
+        "mixedOrOccludedEvidence": {"type": "boolean"},
+        "sourceDisposition": {"enum": ["REAL_GROOVE_SURVIVOR", "NON_GROOVE_SOURCE_REJECTED", "MIXED_OR_OCCLUDED_EVIDENCE", "INDETERMINATE"]},
+        "failedChecks": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    }
+  }
+}
