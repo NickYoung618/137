@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
 import math
+import time
 from typing import Any, Callable
 
 import numpy as np
@@ -34,6 +36,86 @@ DEFAULT_SECTOR_ROBUSTNESS_CONFIG: dict[str, Any] = {
     "max_refit_center_delta_px": 3.0,
     "max_refit_radius_delta_px": 3.0,
 }
+
+DEFAULT_EDGE_FAMILY_SELECTION_CONFIG: dict[str, Any] = {
+    "schema_version": "physical-circle-edge-family-selection/1",
+    "enabled": False,
+    "strategy_version": "deterministic-three-point-global-circle-v1",
+    "max_peaks_per_ray": 8,
+    "min_gradient": 4.0,
+    "min_separation_px": 3.0,
+    "min_background_persistence_ratio": 0.95,
+    "min_seed_votes": 3,
+    "max_seed_count": 16384,
+    "max_hypotheses": 128,
+    "max_families": 8,
+    "refinement_iterations": 1,
+    "assignment_residual_px": 8.0,
+    "min_support_ratio": 0.65,
+    "min_angular_coverage": 0.65,
+    "max_preliminary_residual_p95_px": 8.0,
+    "dedup_center_px": 16.0,
+    "dedup_radius_px": 16.0,
+    "min_support_overlap_ratio": 0.80,
+    "min_assignment_overlap_ratio": 0.40,
+}
+
+
+def merged_edge_family_selection_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    supplied = config or {}
+    prefix = "detector.physical_outer_circle.edge_family_selection"
+    if not isinstance(supplied, dict):
+        raise ValueError(f"{prefix} must be an object")
+    unknown = sorted(set(supplied) - set(DEFAULT_EDGE_FAMILY_SELECTION_CONFIG))
+    if unknown:
+        raise ValueError(f"{prefix} has unknown fields: {unknown}")
+    merged = {**DEFAULT_EDGE_FAMILY_SELECTION_CONFIG, **supplied}
+    if merged["schema_version"] != "physical-circle-edge-family-selection/1":
+        raise ValueError(f"{prefix}.schema_version is unsupported")
+    if not isinstance(merged["enabled"], bool):
+        raise ValueError(f"{prefix}.enabled must be boolean")
+    if not isinstance(merged["strategy_version"], str) or not merged["strategy_version"].strip():
+        raise ValueError(f"{prefix}.strategy_version must be non-empty")
+    integer_bounds = {
+        "max_peaks_per_ray": (1, 8),
+        "min_seed_votes": (1, 72),
+        "max_seed_count": (8, 65536),
+        "max_hypotheses": (1, 1024),
+        "max_families": (1, 16),
+        "refinement_iterations": (1, 4),
+    }
+    for key, (minimum, maximum) in integer_bounds.items():
+        value = merged[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+            raise ValueError(f"{prefix}.{key} must be an integer in [{minimum},{maximum}]")
+    if merged["max_hypotheses"] > merged["max_seed_count"]:
+        raise ValueError(f"{prefix}.max_hypotheses cannot exceed max_seed_count")
+    if merged["max_families"] > merged["max_hypotheses"]:
+        raise ValueError(f"{prefix}.max_families cannot exceed max_hypotheses")
+    positive = (
+        "min_gradient", "min_separation_px", "assignment_residual_px",
+        "max_preliminary_residual_p95_px", "dedup_center_px", "dedup_radius_px",
+    )
+    for key in positive:
+        value = merged[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ValueError(f"{prefix}.{key} must be a finite number")
+        merged[key] = float(value)
+        if merged[key] <= 0.0:
+            raise ValueError(f"{prefix}.{key} must be positive")
+    ratios = (
+        "min_background_persistence_ratio", "min_support_ratio",
+        "min_angular_coverage", "min_support_overlap_ratio",
+        "min_assignment_overlap_ratio",
+    )
+    for key in ratios:
+        value = merged[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ValueError(f"{prefix}.{key} must be a finite number")
+        merged[key] = float(value)
+        if not 0.0 <= merged[key] <= 1.0 or key in {"min_support_ratio", "min_angular_coverage"} and merged[key] == 0.0:
+            raise ValueError(f"{prefix}.{key} must be in the supported ratio range")
+    return merged
 
 
 def merged_sector_robustness_config(
@@ -96,7 +178,10 @@ def merged_physical_outer_circle_config(config: dict[str, Any] | None) -> dict[s
     supplied = config or {}
     if not isinstance(supplied, dict):
         raise ValueError("detector.physical_outer_circle must be an object")
-    unknown = sorted(set(supplied) - set(DEFAULT_PHYSICAL_OUTER_CIRCLE_CONFIG) - {"sector_robustness"})
+    unknown = sorted(
+        set(supplied) - set(DEFAULT_PHYSICAL_OUTER_CIRCLE_CONFIG)
+        - {"sector_robustness", "edge_family_selection"}
+    )
     if unknown:
         raise ValueError(f"detector.physical_outer_circle has unknown fields: {unknown}")
     merged = {**DEFAULT_PHYSICAL_OUTER_CIRCLE_CONFIG, **supplied}
@@ -121,11 +206,377 @@ def merged_physical_outer_circle_config(config: dict[str, Any] | None) -> dict[s
         supplied.get("sector_robustness"),
         n_angles=int(merged["n_angles"]),
     )
+    merged["edge_family_selection"] = merged_edge_family_selection_config(
+        supplied.get("edge_family_selection")
+    )
     return merged
 
 
 def _circle_dict(circle: tuple[float, float, float]) -> dict[str, float]:
     return {"centerX": float(circle[0]), "centerY": float(circle[1]), "radiusPx": float(circle[2])}
+
+
+def _circle_from_three(points: tuple[tuple[float, float], ...]) -> tuple[float, float, float] | None:
+    (x1, y1), (x2, y2), (x3, y3) = points
+    determinant = 2.0 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))
+    if abs(determinant) < 1e-6:
+        return None
+    q1 = x1 * x1 + y1 * y1
+    q2 = x2 * x2 + y2 * y2
+    q3 = x3 * x3 + y3 * y3
+    cx = (q1 * (y2 - y3) + q2 * (y3 - y1) + q3 * (y1 - y2)) / determinant
+    cy = (q1 * (x3 - x2) + q2 * (x1 - x3) + q3 * (x2 - x1)) / determinant
+    radius = math.hypot(x1 - cx, y1 - cy)
+    circle = (float(cx), float(cy), float(radius))
+    if radius <= 0.0 or not all(math.isfinite(value) for value in circle):
+        return None
+    return circle
+
+
+def _algebraic_hypothesis_fit(points: np.ndarray) -> tuple[float, float, float] | None:
+    if len(points) < 3 or points.ndim != 2 or points.shape[1] != 2 or not np.isfinite(points).all():
+        return None
+    x = points[:, 0]
+    y = points[:, 1]
+    matrix = np.column_stack((2.0 * x, 2.0 * y, np.ones(len(points))))
+    try:
+        cx, cy, constant = np.linalg.lstsq(matrix, x * x + y * y, rcond=None)[0]
+    except np.linalg.LinAlgError:
+        return None
+    radius_sq = float(constant + cx * cx + cy * cy)
+    if radius_sq <= 0.0:
+        return None
+    circle = (float(cx), float(cy), math.sqrt(radius_sq))
+    return circle if all(math.isfinite(value) for value in circle) else None
+
+
+def _circle_in_search_envelope(
+    circle: tuple[float, float, float], search: tuple[float, float, float],
+    *, max_center_shift_px: float, min_radius_ratio: float, max_radius_ratio: float,
+) -> bool:
+    return bool(
+        math.hypot(circle[0] - search[0], circle[1] - search[1]) <= max_center_shift_px
+        and min_radius_ratio <= circle[2] / search[2] <= max_radius_ratio
+    )
+
+
+def _normalized_family_rays(ray_candidates: list[dict[str, Any]], n_angles: int) -> dict[int, list[dict[str, float]]]:
+    normalized: dict[int, list[dict[str, float]]] = {}
+    for record in ray_candidates:
+        index = record.get("angleIndex")
+        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < n_angles:
+            raise ValueError("edge-family angleIndex is invalid")
+        if index in normalized:
+            raise ValueError("edge-family evidence contains a duplicate angleIndex")
+        candidates: list[dict[str, float]] = []
+        for candidate in record.get("candidates", []):
+            values = {
+                key: float(candidate[key])
+                for key in ("x", "y", "radiusPx", "strength", "backgroundPersistenceRatio")
+            }
+            if not all(math.isfinite(value) for value in values.values()) or values["radiusPx"] <= 0.0:
+                raise ValueError("edge-family candidate evidence must be finite and positive")
+            if candidate.get("polarity") != "bright_to_dark":
+                raise ValueError("edge-family candidate polarity must be bright_to_dark")
+            candidates.append(values)
+        normalized[index] = sorted(
+            candidates,
+            key=lambda item: (item["radiusPx"], item["x"], item["y"], -item["strength"]),
+        )
+    return normalized
+
+
+def _assign_family_candidates(
+    candidate_x: np.ndarray, candidate_y: np.ndarray,
+    circle: tuple[float, float, float], gate_px: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    residuals = np.abs(
+        np.hypot(candidate_x - circle[0], candidate_y - circle[1]) - circle[2]
+    )
+    residuals = np.where(np.isfinite(residuals), residuals, np.inf)
+    choices = np.argmin(residuals, axis=1)
+    rows = np.arange(candidate_x.shape[0])
+    best = residuals[rows, choices]
+    indices = np.flatnonzero(best <= gate_px)
+    points = np.column_stack((candidate_x[indices, choices[indices]], candidate_y[indices, choices[indices]]))
+    return points, indices
+
+
+def select_circle_edge_family(
+    ray_candidates: list[dict[str, Any]],
+    *,
+    search: tuple[float, float, float],
+    n_angles: int,
+    config: dict[str, Any] | None,
+    scale: float,
+    max_center_shift_px: float,
+    min_radius_ratio: float,
+    max_radius_ratio: float,
+    angular_bin_count: int = 36,
+) -> tuple[dict[str, Any], np.ndarray, np.ndarray]:
+    """Select exactly one globally consistent physical-circle edge family."""
+    started = time.perf_counter_ns()
+    cfg = merged_edge_family_selection_config(config)
+    empty_points = np.empty((0, 2), dtype=float)
+    empty_indices = np.asarray([], dtype=int)
+    diagnostics: dict[str, Any] = {
+        "schemaVersion": "physical-circle-edge-family-selection/1",
+        "enabled": bool(cfg["enabled"]),
+        "strategyVersion": str(cfg["strategy_version"]),
+        "status": "disabled" if not cfg["enabled"] else "no_family",
+        "rayCount": int(n_angles),
+        "candidateCount": 0,
+        "missingRayCount": int(n_angles),
+        "seedCount": 0,
+        "hypothesisCount": 0,
+        "familyCount": 0,
+        "qualifiedFamilyCount": 0,
+        "families": [],
+        "selectedFamilyId": None,
+        "failedChecks": [],
+        "timingMs": {"candidateExtraction": 0.0, "familySelection": 0.0, "robustFit": 0.0, "total": 0.0},
+    }
+    if not cfg["enabled"]:
+        diagnostics["timingMs"]["total"] = (time.perf_counter_ns() - started) / 1e6
+        return diagnostics, empty_points, empty_indices
+    if (
+        n_angles < 4 or angular_bin_count < 4 or angular_bin_count > n_angles
+        or scale <= 0.0 or search[2] <= 0.0
+        or not all(math.isfinite(float(value)) for value in (*search, scale, max_center_shift_px, min_radius_ratio, max_radius_ratio))
+    ):
+        diagnostics.update({"status": "invalid", "failedChecks": ["invalid_edge_family_evidence"]})
+        diagnostics["timingMs"]["total"] = (time.perf_counter_ns() - started) / 1e6
+        return diagnostics, empty_points, empty_indices
+    try:
+        rays = _normalized_family_rays(ray_candidates, n_angles)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        diagnostics.update({"status": "invalid", "failedChecks": ["invalid_edge_family_evidence"]})
+        diagnostics["timingMs"]["total"] = (time.perf_counter_ns() - started) / 1e6
+        return diagnostics, empty_points, empty_indices
+    diagnostics["candidateCount"] = sum(len(items) for items in rays.values())
+    diagnostics["missingRayCount"] = n_angles - sum(bool(items) for items in rays.values())
+    if diagnostics["candidateCount"] == 0:
+        diagnostics["failedChecks"] = ["no_qualified_edge_family"]
+        diagnostics["timingMs"]["total"] = (time.perf_counter_ns() - started) / 1e6
+        return diagnostics, empty_points, empty_indices
+
+    candidate_width = max(1, max((len(items) for items in rays.values()), default=0))
+    candidate_x = np.full((n_angles, candidate_width), np.nan, dtype=np.float64)
+    candidate_y = np.full((n_angles, candidate_width), np.nan, dtype=np.float64)
+    for ray_index, items in rays.items():
+        for candidate_index, item in enumerate(items):
+            candidate_x[ray_index, candidate_index] = item["x"]
+            candidate_y[ray_index, candidate_index] = item["y"]
+
+    gate = float(cfg["assignment_residual_px"]) * scale
+    center_limit = float(max_center_shift_px) * scale
+    # One rotation-equivariant, well-conditioned triplet per start is enough to
+    # generate the bounded global hypotheses.  Keeping a second overlapping
+    # triplet only duplicated the same families and consumed the single-shot
+    # latency budget without adding independent physical evidence.
+    patterns = ((n_angles // 3, 2 * n_angles // 3),)
+    coarse_quantizer = max(
+        1.0,
+        min(float(cfg["dedup_center_px"]), float(cfg["dedup_radius_px"])) * scale,
+    )
+    fine_quantizer = max(1.0, float(cfg["min_separation_px"]) * scale)
+    seed_buckets: dict[
+        tuple[int, int, int], dict[tuple[int, int, int], dict[str, Any]]
+    ] = {}
+    for start in range(n_angles):
+        for second_offset, third_offset in patterns:
+            anchor_indices = (start, (start + second_offset) % n_angles, (start + third_offset) % n_angles)
+            anchor_candidates = [rays.get(index, []) for index in anchor_indices]
+            if any(not items for items in anchor_candidates):
+                continue
+            for combination in itertools.product(*anchor_candidates):
+                diagnostics["seedCount"] += 1
+                if diagnostics["seedCount"] > int(cfg["max_seed_count"]):
+                    diagnostics.update({"status": "overflow", "failedChecks": ["family_search_overflow"]})
+                    diagnostics["timingMs"]["familySelection"] = (time.perf_counter_ns() - started) / 1e6
+                    diagnostics["timingMs"]["total"] = diagnostics["timingMs"]["familySelection"]
+                    return diagnostics, empty_points, empty_indices
+                circle = _circle_from_three(tuple((item["x"], item["y"]) for item in combination))
+                if circle is None or not _circle_in_search_envelope(
+                    circle, search, max_center_shift_px=center_limit,
+                    min_radius_ratio=min_radius_ratio, max_radius_ratio=max_radius_ratio,
+                ):
+                    continue
+                coarse_cell = tuple(int(round(value / coarse_quantizer)) for value in circle)
+                fine_cell = tuple(int(round(value / fine_quantizer)) for value in circle)
+                bucket = seed_buckets.setdefault(coarse_cell, {})
+                entry = bucket.get(fine_cell)
+                if entry is None:
+                    bucket[fine_cell] = {"circle": circle, "count": 1}
+                else:
+                    entry["count"] += 1
+                    entry["circle"] = min(entry["circle"], circle)
+
+    # A coarse parameter cell normally represents one noisy family.  Retaining
+    # its two strongest fine modes preserves evidence for two nearby physical
+    # circles (which must remain ambiguous) without refining every noisy seed.
+    seed_entries: list[dict[str, Any]] = []
+    for coarse_cell in sorted(seed_buckets):
+        entries = sorted(
+            (
+                item for item in seed_buckets[coarse_cell].values()
+                if int(item["count"]) >= int(cfg["min_seed_votes"])
+            ),
+            key=lambda item: (-int(item["count"]), *item["circle"]),
+        )
+        if not entries:
+            continue
+        seed_entries.append(entries[0])
+        if len(entries) > 1 and 2 * int(entries[1]["count"]) >= int(entries[0]["count"]):
+            seed_entries.append(entries[1])
+
+    hypotheses: list[dict[str, Any]] = []
+    hypothesis_by_assignment: dict[tuple[tuple[int, float, float], ...], dict[str, Any]] = {}
+    minimum_support = max(3, int(math.ceil(float(cfg["min_support_ratio"]) * n_angles)))
+    for seed_entry in sorted(seed_entries, key=lambda item: item["circle"]):
+        seed = seed_entry["circle"]
+        seed_member_count = int(seed_entry["count"])
+        circle = seed
+        points = empty_points
+        indices = empty_indices
+        for _ in range(int(cfg["refinement_iterations"])):
+            points, indices = _assign_family_candidates(candidate_x, candidate_y, circle, gate)
+            if len(points) < 3:
+                break
+            fitted = _algebraic_hypothesis_fit(points)
+            if fitted is None or not _circle_in_search_envelope(
+                fitted, search, max_center_shift_px=center_limit,
+                min_radius_ratio=min_radius_ratio, max_radius_ratio=max_radius_ratio,
+            ):
+                points = empty_points
+                indices = empty_indices
+                break
+            circle = fitted
+        if len(points) < 3:
+            continue
+        points, indices = _assign_family_candidates(candidate_x, candidate_y, circle, gate)
+        if len(points) < 3:
+            continue
+        residuals = np.abs(np.hypot(points[:, 0] - circle[0], points[:, 1] - circle[1]) - circle[2])
+        bins = np.floor(indices * angular_bin_count / n_angles).astype(int)
+        coverage = len(set(bins.tolist())) / angular_bin_count
+        p95 = float(np.percentile(residuals, 95))
+        failed = []
+        if len(points) < minimum_support: failed.append("family_support")
+        if coverage < float(cfg["min_angular_coverage"]): failed.append("family_angular_coverage")
+        if p95 > float(cfg["max_preliminary_residual_p95_px"]) * scale:
+            failed.append("family_residual_p95")
+        if "family_support" in failed:
+            continue
+        assignment_signature = tuple(
+            (int(ray), round(float(point[0]), 6), round(float(point[1]), 6))
+            for ray, point in zip(indices, points)
+        )
+        existing = hypothesis_by_assignment.get(assignment_signature)
+        if existing is not None:
+            existing["memberCount"] += seed_member_count
+            continue
+        hypothesis = {
+            "circle": circle, "points": points, "indices": indices,
+            "assignmentByRay": {int(ray): point for ray, point in zip(indices, points)},
+            "support": len(points), "coverage": coverage,
+            "median": float(np.median(residuals)), "p95": p95,
+            "failed": failed, "memberCount": seed_member_count,
+        }
+        hypotheses.append(hypothesis)
+        hypothesis_by_assignment[assignment_signature] = hypothesis
+        if len(hypotheses) > int(cfg["max_hypotheses"]):
+            diagnostics.update({"status": "overflow", "failedChecks": ["family_search_overflow"]})
+            diagnostics["hypothesisCount"] = len(hypotheses)
+            diagnostics["timingMs"]["familySelection"] = (time.perf_counter_ns() - started) / 1e6
+            diagnostics["timingMs"]["total"] = diagnostics["timingMs"]["familySelection"]
+            return diagnostics, empty_points, empty_indices
+    diagnostics["hypothesisCount"] = len(hypotheses)
+
+    families: list[dict[str, Any]] = []
+    for hypothesis in sorted(
+        hypotheses,
+        key=lambda item: (-item["support"], item["p95"], *item["circle"]),
+    ):
+        match = None
+        current_ids = set(hypothesis["indices"].tolist())
+        for family in families:
+            family_ids = set(family["indices"].tolist())
+            common_ids = current_ids & family_ids
+            overlap = len(common_ids) / max(1, min(len(current_ids), len(family_ids)))
+            hypothesis_by_ray = hypothesis["assignmentByRay"]
+            family_by_ray = family["assignmentByRay"]
+            same_assignment_ratio = (
+                sum(
+                    float(np.hypot(*(hypothesis_by_ray[ray] - family_by_ray[ray])))
+                    < 0.5 * float(cfg["min_separation_px"]) * scale
+                    for ray in common_ids
+                ) / len(common_ids)
+                if common_ids else 0.0
+            )
+            center_delta = math.hypot(
+                hypothesis["circle"][0] - family["circle"][0],
+                hypothesis["circle"][1] - family["circle"][1],
+            )
+            radius_delta = abs(hypothesis["circle"][2] - family["circle"][2])
+            if (
+                center_delta <= float(cfg["dedup_center_px"]) * scale
+                and radius_delta <= float(cfg["dedup_radius_px"]) * scale
+                and overlap >= float(cfg["min_support_overlap_ratio"])
+                and same_assignment_ratio >= float(cfg["min_assignment_overlap_ratio"])
+            ):
+                match = family
+                break
+        if match is None:
+            if len(families) >= int(cfg["max_families"]):
+                diagnostics.update({"status": "overflow", "failedChecks": ["family_search_overflow"]})
+                diagnostics["familyCount"] = len(families)
+                diagnostics["timingMs"]["familySelection"] = (time.perf_counter_ns() - started) / 1e6
+                diagnostics["timingMs"]["total"] = diagnostics["timingMs"]["familySelection"]
+                return diagnostics, empty_points, empty_indices
+            families.append(hypothesis)
+        else:
+            match["memberCount"] += 1
+
+    families.sort(key=lambda item: (-item["support"], item["p95"], *item["circle"]))
+    summaries = []
+    qualified: list[dict[str, Any]] = []
+    for index, family in enumerate(families, start=1):
+        family_id = f"edge-family-{index:03d}"
+        status = "qualified" if not family["failed"] else "rejected"
+        family["familyId"] = family_id
+        summaries.append({
+            "familyId": family_id,
+            "circle": _circle_dict(family["circle"]),
+            "supportRayCount": int(family["support"]),
+            "angularCoverage": float(family["coverage"]),
+            "residualMedianPx": float(family["median"]),
+            "residualP95Px": float(family["p95"]),
+            "memberHypothesisCount": int(family["memberCount"]),
+            "status": status,
+            "failedChecks": list(family["failed"]),
+        })
+        if status == "qualified":
+            qualified.append(family)
+    diagnostics.update({
+        "familyCount": len(families),
+        "qualifiedFamilyCount": len(qualified),
+        "families": summaries,
+    })
+    if len(qualified) == 1:
+        selected = qualified[0]
+        diagnostics.update({"status": "selected", "selectedFamilyId": selected["familyId"]})
+        result_points = selected["points"]
+        result_indices = selected["indices"]
+    elif len(qualified) > 1:
+        diagnostics.update({"status": "ambiguous", "failedChecks": ["ambiguous_edge_families"]})
+        result_points, result_indices = empty_points, empty_indices
+    else:
+        diagnostics.update({"status": "no_family", "failedChecks": ["no_qualified_edge_family"]})
+        result_points, result_indices = empty_points, empty_indices
+    elapsed = (time.perf_counter_ns() - started) / 1e6
+    diagnostics["timingMs"].update({"familySelection": elapsed, "total": elapsed})
+    return diagnostics, result_points, result_indices
 
 
 def _circular_sector_runs(flags: list[bool]) -> list[list[int]]:
@@ -261,6 +712,7 @@ def locate_physical_outer_circle(
     *,
     source_sha256: str,
     pixel_scale: float = 1.0,
+    outer_boundary_edge_candidates: Callable[..., list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Run gyj edge extraction/fitting and apply stricter slot-specific quality gates."""
     cfg = merged_physical_outer_circle_config(config)
@@ -283,6 +735,17 @@ def locate_physical_outer_circle(
         "residualThresholdPx": float(cfg["max_residual_p95_px"]) * scale,
         "residualMarginPx": None,
         "sectorEvidence": None,
+        "edgeFamilySelection": {
+            "schemaVersion": "physical-circle-edge-family-selection/1",
+            "enabled": bool(cfg["edge_family_selection"]["enabled"]),
+            "strategyVersion": str(cfg["edge_family_selection"]["strategy_version"]),
+            "status": "disabled" if not cfg["edge_family_selection"]["enabled"] else "invalid",
+            "rayCount": int(cfg["n_angles"]), "candidateCount": 0,
+            "missingRayCount": int(cfg["n_angles"]), "seedCount": 0,
+            "hypothesisCount": 0, "familyCount": 0, "qualifiedFamilyCount": 0,
+            "families": [], "selectedFamilyId": None, "failedChecks": [],
+            "timingMs": {"candidateExtraction": 0.0, "familySelection": 0.0, "robustFit": 0.0, "total": 0.0},
+        },
         "robustRefit": {
             "schemaVersion": "physical-circle-sector-refit/1",
             "enabled": bool(cfg["sector_robustness"]["enabled"]),
@@ -303,24 +766,82 @@ def locate_physical_outer_circle(
         diagnostics["failedChecks"].append("invalid_alignment_prior")
         return diagnostics
 
-    points: list[tuple[float, float]] = []
-    point_angle_indices: list[int] = []
     n_angles = int(cfg["n_angles"])
-    for index, angle in enumerate(np.linspace(0.0, 2.0 * math.pi, n_angles, endpoint=False)):
-        point = outer_boundary_edge_point(gray, (search[0], search[1]), float(angle), search[2])
-        if point is None or len(point) != 2 or not all(math.isfinite(float(value)) for value in point):
-            continue
-        points.append((float(point[0]), float(point[1])))
-        point_angle_indices.append(index)
+    family_cfg = cfg["edge_family_selection"]
+    if family_cfg["enabled"]:
+        if outer_boundary_edge_candidates is None:
+            diagnostics["edgeFamilySelection"].update({
+                "status": "invalid", "failedChecks": ["edge_family_primitive_unavailable"],
+            })
+            diagnostics["failedChecks"].append("edge_family_primitive_unavailable")
+            return diagnostics
+        extraction_started = time.perf_counter_ns()
+        ray_records: list[dict[str, Any]] = []
+        try:
+            for index, angle in enumerate(np.linspace(0.0, 2.0 * math.pi, n_angles, endpoint=False)):
+                candidates = outer_boundary_edge_candidates(
+                    gray, (search[0], search[1]), float(angle), search[2],
+                    min_gradient=float(family_cfg["min_gradient"]),
+                    separation_px=float(family_cfg["min_separation_px"]) * scale,
+                    max_peaks=int(family_cfg["max_peaks_per_ray"]),
+                    min_background_persistence_ratio=float(family_cfg["min_background_persistence_ratio"]),
+                )
+                ray_records.append({
+                    "angleIndex": index, "angleRad": float(angle),
+                    "candidates": candidates,
+                })
+        except (TypeError, ValueError, FloatingPointError, OverflowError):
+            elapsed = (time.perf_counter_ns() - extraction_started) / 1e6
+            diagnostics["edgeFamilySelection"].update({
+                "status": "invalid", "failedChecks": ["invalid_edge_family_evidence"],
+            })
+            diagnostics["edgeFamilySelection"]["timingMs"].update({
+                "candidateExtraction": elapsed, "total": elapsed,
+            })
+            diagnostics["failedChecks"].append("invalid_edge_family_evidence")
+            return diagnostics
+        extraction_ms = (time.perf_counter_ns() - extraction_started) / 1e6
+        family, selected_points, selected_indices = select_circle_edge_family(
+            ray_records, search=search, n_angles=n_angles, config=family_cfg, scale=scale,
+            max_center_shift_px=float(cfg["max_center_shift_px"]),
+            min_radius_ratio=float(cfg["min_radius_ratio"]),
+            max_radius_ratio=float(cfg["max_radius_ratio"]),
+            angular_bin_count=int(cfg["angular_bin_count"]),
+        )
+        family["timingMs"]["candidateExtraction"] = extraction_ms
+        family["timingMs"]["total"] += extraction_ms
+        diagnostics["edgeFamilySelection"] = family
+        if family["status"] != "selected":
+            diagnostics["failedChecks"].extend(family["failedChecks"])
+            return diagnostics
+        points = [(float(point[0]), float(point[1])) for point in selected_points]
+        point_angle_indices = selected_indices.tolist()
+        diagnostics["sourceAlgorithm"] = (
+            "slot_pose.outer_boundary_edge_candidates+global-circle-family+gyj.robust_fit_circle"
+        )
+    else:
+        points = []
+        point_angle_indices = []
+        for index, angle in enumerate(np.linspace(0.0, 2.0 * math.pi, n_angles, endpoint=False)):
+            point = outer_boundary_edge_point(gray, (search[0], search[1]), float(angle), search[2])
+            if point is None or len(point) != 2 or not all(math.isfinite(float(value)) for value in point):
+                continue
+            points.append((float(point[0]), float(point[1])))
+            point_angle_indices.append(index)
     diagnostics["edgePointCount"] = len(points)
     if len(points) < max(int(cfg["min_edge_point_count"]), int(cfg["angular_bin_count"])):
         diagnostics["failedChecks"].append("insufficient_edge_points")
         return diagnostics
 
+    fit_started = time.perf_counter_ns()
     fit_x, fit_y, fit_radius = map(
         float,
         robust_fit_circle(points, (search[0], search[1], search[2])),
     )
+    if family_cfg["enabled"]:
+        fit_ms = (time.perf_counter_ns() - fit_started) / 1e6
+        diagnostics["edgeFamilySelection"]["timingMs"]["robustFit"] = fit_ms
+        diagnostics["edgeFamilySelection"]["timingMs"]["total"] += fit_ms
     if not all(math.isfinite(value) for value in (fit_x, fit_y, fit_radius)) or fit_radius <= 0.0:
         diagnostics["failedChecks"].append("invalid_circle_fit")
         return diagnostics

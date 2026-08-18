@@ -252,6 +252,13 @@ def load_config(config_path: Path) -> dict[str, Any]:
             detector.get("physical_outer_circle")
         )
         if (
+            detector["physical_outer_circle"]["edge_family_selection"]["enabled"]
+            and source_mode != "bundled_module"
+        ):
+            raise ValueError(
+                "detector.physical_outer_circle.edge_family_selection requires bundled_module"
+            )
+        if (
             mode != "single_real_groove"
             and detector["physical_outer_circle"]["sector_robustness"]["enabled"]
         ):

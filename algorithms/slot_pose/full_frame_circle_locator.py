@@ -326,6 +326,7 @@ def locate_full_frame_circle(
     *,
     final_physical_config: dict[str, Any] | None,
     source_sha256: str,
+    outer_boundary_edge_candidates: Callable[..., list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     cfg = merged_full_frame_circle_locator_config(config)
     started = time.perf_counter_ns()
@@ -386,6 +387,7 @@ def locate_full_frame_circle(
             sparse_cfg,
             source_sha256=source_sha256,
             pixel_scale=float(proposal["referenceScale"]),
+            outer_boundary_edge_candidates=outer_boundary_edge_candidates,
         )
         accepted = physical["status"] == "accepted"
         components = None
@@ -406,6 +408,7 @@ def locate_full_frame_circle(
             "residualThresholdPx": physical.get("residualThresholdPx"),
             "residualMarginPx": physical.get("residualMarginPx"),
             "sectorEvidence": physical.get("sectorEvidence"),
+            "edgeFamilySelection": physical.get("edgeFamilySelection"),
             "robustRefit": physical.get("robustRefit"),
             "centerShiftPx": physical.get("centerShiftPx"),
             "scoreComponents": components,
@@ -445,7 +448,15 @@ def locate_full_frame_circle(
         cluster["clusterId"] = f"circle-cluster-{index:03d}"
     diagnostics["clusters"] = clusters
     if not clusters:
-        diagnostics["failedChecks"] = ["no_sparse_physical_candidate"]
+        family_ambiguous = any(
+            "ambiguous_edge_families" in (item.get("failedChecks") or [])
+            for item in candidates
+        )
+        diagnostics["status"] = "ambiguous" if family_ambiguous else "not_found"
+        diagnostics["failedChecks"] = (
+            ["sparse_edge_family_ambiguous"]
+            if family_ambiguous else ["no_sparse_physical_candidate"]
+        )
         diagnostics["timingMs"]["selection"] = (time.perf_counter_ns() - selection_started) / 1e6
         diagnostics["timingMs"]["finalRefinement"] = 0.0
         diagnostics["timingMs"]["totalLocalization"] = (time.perf_counter_ns() - started) / 1e6
@@ -487,11 +498,16 @@ def locate_full_frame_circle(
         final_physical_config,
         source_sha256=source_sha256,
         pixel_scale=final_scale,
+        outer_boundary_edge_candidates=outer_boundary_edge_candidates,
     )
     diagnostics["timingMs"]["finalRefinement"] = (time.perf_counter_ns() - final_started) / 1e6
     diagnostics["finalPhysicalCircleDiagnostics"] = final
     if final["status"] != "accepted":
-        diagnostics["status"] = "refinement_failed"
+        diagnostics["status"] = (
+            "ambiguous"
+            if "ambiguous_edge_families" in (final.get("failedChecks") or [])
+            else "refinement_failed"
+        )
         diagnostics["failedChecks"] = ["final_physical_circle"] + list(final.get("failedChecks") or [])
     else:
         diagnostics["status"] = "accepted"

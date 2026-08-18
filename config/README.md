@@ -23,6 +23,11 @@
 - `detector.full_frame_circle_locator`默认关闭，且首版只允许在`single_real_groove`下与显式ROI互斥启用。
   它用低分辨率Otsu/连通域产生有限提议，再以180条锁定gyj射线筛选并只让唯一winner进入既有720射线
   物理外圆质量门；连通域边框本身绝不是测量圆。无候选、候选溢出或最佳/次佳差距不足均在槽阶段前失败。
+- `detector.physical_outer_circle.edge_family_selection`默认关闭。单拍v3显式开启后，每条射线只采样一次并保留
+  有界的亮到暗候选，再以跨角度的完整圆几何预选全局边族；恰好一个族合格才交给原`robust_fit_circle`和原有
+  点数、内点率、覆盖、残差、中心漂移及半径比质量门。0个族、多个同心或非同心族、非有限证据和容量溢出
+  均在槽链前fail-closed；不得用31°/328°等固定角mask、候选编号、峰强度、目标85°或样本身份打破歧义。
+  边族预选先执行，`sector_robustness`仅在唯一族完成原拟合后按既有顺序处理局部残差，不能掩盖多族歧义。
 - `pose.target_semantics_confirmed`表示当前显式模式的图像目标实体是否已确认；A2单槽配置可依据
   2026-08-15业务决定设为true，legacy/paired/multi-role不得借此自动确认。它与datum、图纸映射、
   输出用途及零位/正方向相互独立，任何机械门未确认都无正式角。
@@ -55,11 +60,12 @@
   精确地仅失败`edge_contrast_asymmetry`、其余原检查全部通过且独立端点结构差不超过版本化门限时，
   才输出`ACCEPTED_OVERRIDE`并继续图像坐标引导。该裁决始终`developmentOnly=true`、
   `authoritative=false`、`plcAllowed=false`，不得进入生产默认配置。
-- 025单拍初版不新建一套门限。使用`tools/prepare_single_shot_initial_config.py`从Git外
+- 单拍初版不新建一套槽门限。使用`tools/prepare_single_shot_initial_config.py`从Git外
   `single_real_groove`基础配置物化时，工具会强制仓内bundled core、单槽v3、85°±5°、
   原020全套同源性门值不变、022裁决版本不变、单拍输入和PLC未确认。它另写
-  `single-shot-initial-profile/2`报告以便审计；配置和报告都必须放在Git工作树外。
-  v2仅开启已有的有界`ambiguity_resolution`：最多3个粗候选逐个经过同一亚像素双壁、
+  默认生成`single-shot-initial-profile/3`报告并显式开启经审查的全局圆边族选择；配置和报告都必须放在
+  Git工作树外。`--profile-version 2`只为复现旧v2，行为保持不变。v2/v3都仅开启已有的有界
+  `ambiguity_resolution`：最多3个粗候选逐个经过同一亚像素双壁、
   外圆交点和同源性门，恰好1个完整通过才解除歧义。它不按分数、编号或固定角度选槽。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；
   `groove-sidewall-subpixel-v2`在严格`max_line_residual_p95_px=2.0`前提下，对槽口圆角/纹理点

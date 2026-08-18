@@ -135,6 +135,37 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         self.assertTrue(report["ambiguityResolution"]["enabled"])
         self.assertEqual(3, report["ambiguityResolution"]["maxCandidates"])
 
+    def test_v3_explicitly_enables_global_circle_family_and_preserves_v2(self) -> None:
+        from tools.prepare_single_shot_initial_config import (
+            build_initial_config, build_initial_config_v3, build_profile_report_v3,
+        )
+
+        source = base_config()
+        v2 = build_initial_config(source)
+        self.assertNotIn("physical_outer_circle", v2["detector"])
+        v3 = build_initial_config_v3(source)
+        physical = v3["detector"]["physical_outer_circle"]
+        self.assertEqual("single-real-groove-85deg-global-circle-family-v3", v3["config_id"])
+        self.assertTrue(physical["edge_family_selection"]["enabled"])
+        self.assertEqual(5.0, physical["max_residual_p95_px"])
+        self.assertEqual(0.75, physical["min_inlier_ratio"])
+        self.assertFalse(v3["pose"]["production_plc_mapping_confirmed"])
+        self.assertEqual(
+            DEFAULT_SIDEWALL_CONSISTENCY_CONFIG["max_contrast_normalized_difference"],
+            v3["detector"]["sidewall_source_consistency"]["max_contrast_normalized_difference"],
+        )
+        report = build_profile_report_v3(
+            source_config_sha256="a" * 64, output_config_sha256="b" * 64,
+        )
+        schema = json.loads(
+            (ROOT / "contracts/single-shot-initial-profile-v3.schema.json").read_text()
+        )
+        jsonschema.validate(report, schema)
+        self.assertEqual("single-shot-initial-profile/3", report["schemaVersion"])
+        self.assertTrue(report["circleEdgeFamilySelection"]["uniqueFamilyRequired"])
+        self.assertTrue(report["circleEdgeFamilySelection"]["originalQualityGatesPreserved"])
+        self.assertFalse(report["circleEdgeFamilySelection"]["fixedAngleMaskApplied"])
+
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]
         examples = (

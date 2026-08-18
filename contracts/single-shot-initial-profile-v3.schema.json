@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "single-shot-initial-profile-v3.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "profileId", "sourceConfigSha256", "materializedConfigSha256",
+    "detectorMode", "target", "sourceConsistency", "ambiguityResolution",
+    "circleEdgeFamilySelection", "policies"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "single-shot-initial-profile/3"},
+    "profileId": {"const": "single-real-groove-85deg-global-circle-family-v3"},
+    "sourceConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "materializedConfigSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "detectorMode": {"const": "single_real_groove"},
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["angleConventionId", "targetAngleDeg", "toleranceDeg", "acceptedMinDeg", "acceptedMaxDeg"],
+      "properties": {
+        "angleConventionId": {"const": "image-y-down-clockwise-signed/1"},
+        "targetAngleDeg": {"const": 85.0}, "toleranceDeg": {"const": 5.0},
+        "acceptedMinDeg": {"const": 80.0}, "acceptedMaxDeg": {"const": 90.0}
+      }
+    },
+    "sourceConsistency": {
+      "type": "object", "additionalProperties": false,
+      "required": ["originalThresholdVersion", "originalContrastThreshold", "originalEvidencePreserved", "adjudicationVersion"],
+      "properties": {
+        "originalThresholdVersion": {"const": "sidewall-source-consistency-v1"},
+        "originalContrastThreshold": {"const": 0.12},
+        "originalEvidencePreserved": {"const": true},
+        "adjudicationVersion": {"const": "endpoint-structure-runtime-adjudication-v1"}
+      }
+    },
+    "ambiguityResolution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "enabled", "maxCandidates", "selectionEvidence"],
+      "properties": {
+        "schemaVersion": {"const": "groove-ambiguity-resolution/1"},
+        "enabled": {"const": true}, "maxCandidates": {"const": 3},
+        "selectionEvidence": {"const": "existing_subpixel_sidewall_and_outer_circle_gates"}
+      }
+    },
+    "circleEdgeFamilySelection": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "schemaVersion", "strategyVersion", "enabled", "boundedCandidateCount",
+        "uniqueFamilyRequired", "originalQualityGatesPreserved", "fixedAngleMaskApplied"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "physical-circle-edge-family-selection/1"},
+        "strategyVersion": {"const": "deterministic-three-point-global-circle-v1"},
+        "enabled": {"const": true}, "boundedCandidateCount": {"const": true},
+        "uniqueFamilyRequired": {"const": true},
+        "originalQualityGatesPreserved": {"const": true},
+        "fixedAngleMaskApplied": {"const": false}
+      }
+    },
+    "policies": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "singleCaptureRequired", "pairedCaptureRequired", "occlusionFailsClosed",
+        "mixedFixtureEdgeFailsClosed", "imageGuidanceAllowed", "plcAllowed",
+        "manualTruthAppliedAtRuntime", "developmentOnly"
+      ],
+      "properties": {
+        "singleCaptureRequired": {"const": true}, "pairedCaptureRequired": {"const": false},
+        "occlusionFailsClosed": {"const": true}, "mixedFixtureEdgeFailsClosed": {"const": true},
+        "imageGuidanceAllowed": {"const": true}, "plcAllowed": {"const": false},
+        "manualTruthAppliedAtRuntime": {"const": false}, "developmentOnly": {"const": true}
+      }
+    }
+  }
+}

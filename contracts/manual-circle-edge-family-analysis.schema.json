@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "manual-circle-edge-family-analysis.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "developmentOnly", "runtimeInputAllowed", "status",
+    "inputs", "labelme", "manualCircle", "leaveOneOut", "projection", "perRay"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "manual-circle-edge-family-analysis/1"},
+    "developmentOnly": {"const": true},
+    "runtimeInputAllowed": {"const": false},
+    "status": {"enum": ["verified", "rejected"]},
+    "inputs": {
+      "type": "object", "additionalProperties": false,
+      "required": ["annotationSha256", "imageSha256", "algorithmSha256", "coreSha256", "width", "height"],
+      "properties": {
+        "annotationSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "imageSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "algorithmSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "coreSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "labelme": {
+      "type": "object", "additionalProperties": false,
+      "required": ["label", "shapeType", "pointCount", "valid"],
+      "properties": {
+        "label": {"const": "HUMAN_outer_circle_visible_arc"},
+        "shapeType": {"const": "linestrip"},
+        "pointCount": {"const": 88},
+        "valid": {"type": "boolean"}
+      }
+    },
+    "manualCircle": {"$ref": "#/$defs/circleEvidence"},
+    "leaveOneOut": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fitCount", "maxCenterShiftPx", "maxCenterEquivalentAngleDeg", "maxRadiusShiftPx", "maxRadiusShiftRatio"],
+      "properties": {
+        "fitCount": {"type": "integer", "minimum": 0},
+        "maxCenterShiftPx": {"type": "number", "minimum": 0},
+        "maxCenterEquivalentAngleDeg": {"type": "number", "minimum": 0},
+        "maxRadiusShiftPx": {"type": "number", "minimum": 0},
+        "maxRadiusShiftRatio": {"type": "number", "minimum": 0}
+      }
+    },
+    "projection": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "rayCount", "truthGatePx", "truthPeakPresentCount", "truthPeakPresentRatio",
+        "legacySelectedTruthCount", "legacySelectedTruthRatio", "missingSectors", "switchSectors",
+        "legacySelectedErrorPx"
+      ],
+      "properties": {
+        "rayCount": {"type": "integer", "minimum": 36},
+        "truthGatePx": {"type": "number", "exclusiveMinimum": 0},
+        "truthPeakPresentCount": {"type": "integer", "minimum": 0},
+        "truthPeakPresentRatio": {"type": "number", "minimum": 0, "maximum": 1},
+        "legacySelectedTruthCount": {"type": "integer", "minimum": 0},
+        "legacySelectedTruthRatio": {"type": "number", "minimum": 0, "maximum": 1},
+        "missingSectors": {"type": "array", "items": {"$ref": "#/$defs/sector"}},
+        "switchSectors": {"type": "array", "items": {"$ref": "#/$defs/sector"}},
+        "legacySelectedErrorPx": {"$ref": "#/$defs/residual"}
+      }
+    },
+    "perRay": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["angleDeg", "truthRadiusPx", "gradientPeaks", "legacySelectedRadiusPx", "legacySelectedErrorPx"],
+        "properties": {
+          "angleDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+          "truthRadiusPx": {"type": "number", "exclusiveMinimum": 0},
+          "gradientPeaks": {"type": "array", "maxItems": 8, "items": {"type": "object"}},
+          "legacySelectedRadiusPx": {"type": ["number", "null"]},
+          "legacySelectedErrorPx": {"type": ["number", "null"], "minimum": 0}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "circleEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["centerX", "centerY", "radiusPx", "arcCoverageDeg", "residualPx"],
+      "properties": {
+        "centerX": {"type": "number"}, "centerY": {"type": "number"},
+        "radiusPx": {"type": "number", "exclusiveMinimum": 0},
+        "arcCoverageDeg": {"type": "number", "minimum": 0, "maximum": 360},
+        "residualPx": {"$ref": "#/$defs/residual"}
+      }
+    },
+    "residual": {
+      "type": "object", "additionalProperties": false,
+      "required": ["median", "p95", "max"],
+      "properties": {
+        "median": {"type": "number", "minimum": 0},
+        "p95": {"type": "number", "minimum": 0},
+        "max": {"type": "number", "minimum": 0}
+      }
+    },
+    "sector": {
+      "type": "object", "additionalProperties": false,
+      "required": ["startDeg", "endDeg", "wrapsBoundary", "sampleCount"],
+      "properties": {
+        "startDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "endDeg": {"type": "number", "minimum": 0, "exclusiveMaximum": 360},
+        "wrapsBoundary": {"type": "boolean"},
+        "sampleCount": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

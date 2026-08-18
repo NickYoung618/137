@@ -5,6 +5,7 @@ import json
 import math
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 
@@ -85,6 +86,19 @@ class LegacyAdapterTests(unittest.TestCase):
             with self.assertRaises(LegacyAdapterError) as caught:
                 LegacyAEndFaceAdapter(bad)
             self.assertEqual("ASSET_MISMATCH", caught.exception.code)
+
+    def test_edge_family_strategy_preserves_locked_core_and_requires_bundled_source(self) -> None:
+        adapter = object.__new__(LegacyAEndFaceAdapter)
+        adapter.module = SimpleNamespace(**{name: (lambda *args, **kwargs: None) for name in REQUIRED_FUNCTIONS})
+        adapter.source_mode = "external_file"
+        adapter.config = {"detector": {"physical_outer_circle": {"edge_family_selection": {"enabled": False}}}}
+        adapter._verify_inventory()
+
+        adapter.config["detector"]["physical_outer_circle"]["edge_family_selection"]["enabled"] = True
+        with self.assertRaisesRegex(LegacyAdapterError, "bundled_module_required"):
+            adapter._verify_inventory()
+        adapter.source_mode = "bundled_module"
+        adapter._verify_inventory()
 
     def test_normalized_face_search_roi_masks_only_alignment_input(self) -> None:
         image = np.arange(80, dtype=np.uint8).reshape(8, 10)

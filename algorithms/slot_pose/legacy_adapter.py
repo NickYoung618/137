@@ -15,6 +15,9 @@ from typing import Any
 import numpy as np
 
 from algorithms.slot_pose.angular_profile import assess_pairs, circular_delta_deg, extract_dark_candidates
+from algorithms.slot_pose.circle_edge_candidates import (
+    load_detection_gray_fast, outer_boundary_edge_candidates,
+)
 from algorithms.slot_pose.contract import (
     BUNDLED_LEGACY_MODULE,
     sha256_file,
@@ -199,6 +202,12 @@ class LegacyAEndFaceAdapter:
 
     def _verify_inventory(self) -> None:
         missing = [name for name in REQUIRED_FUNCTIONS if not callable(getattr(self.module, name, None))]
+        family_enabled = bool(
+            self.config.get("detector", {}).get("physical_outer_circle", {})
+            .get("edge_family_selection", {}).get("enabled", False)
+        )
+        if family_enabled and self.source_mode != "bundled_module":
+            missing.append("bundled_module_required_for_edge_family_selection")
         if missing:
             raise LegacyAdapterError("ASSET_MISMATCH", "function_inventory", f"missing functions: {missing}")
 
@@ -320,11 +329,18 @@ class LegacyAEndFaceAdapter:
 
     def estimate(self, image_path: Path) -> dict[str, Any]:
         started = time.perf_counter()
+        detector = self.config["detector"]
+        family_enabled = bool(
+            detector.get("physical_outer_circle", {})
+            .get("edge_family_selection", {}).get("enabled", False)
+        )
         try:
-            target_gray = self.module.load_detection_gray(image_path)
+            target_gray = (
+                load_detection_gray_fast(image_path)
+                if family_enabled else self.module.load_detection_gray(image_path)
+            )
         except Exception as exc:
             raise LegacyAdapterError("INPUT_INVALID", "image_loading", str(exc)) from exc
-        detector = self.config["detector"]
         mode = str(detector.get("diagnostic_mode", "legacy_single_notch"))
         face_search_roi = detector.get("face_search_roi_normalized")
         locator_config = detector.get("full_frame_circle_locator") or {}
@@ -353,6 +369,7 @@ class LegacyAEndFaceAdapter:
                 locator_config,
                 final_physical_config=detector.get("physical_outer_circle"),
                 source_sha256=self.expected_hashes[self.paths.source],
+                outer_boundary_edge_candidates=(outer_boundary_edge_candidates if family_enabled else None),
             )
             if circle_localization["status"] != "accepted":
                 if circle_localization["status"] in {"ambiguous", "overflow"}:
@@ -579,11 +596,17 @@ class LegacyAEndFaceAdapter:
                     detector.get("physical_outer_circle"),
                     source_sha256=self.expected_hashes[self.paths.source],
                     pixel_scale=scale,
+                    outer_boundary_edge_candidates=(outer_boundary_edge_candidates if family_enabled else None),
                 )
             diagnostics["physicalOuterCircle"] = physical_outer
             if physical_outer["status"] != "accepted":
+                code = (
+                    "HOUSING_CIRCLE_AMBIGUOUS"
+                    if "ambiguous_edge_families" in (physical_outer.get("failedChecks") or [])
+                    else "PHYSICAL_OUTER_CIRCLE_FAILED"
+                )
                 raise LegacyAdapterError(
-                    "PHYSICAL_OUTER_CIRCLE_FAILED", "physical_outer_circle",
+                    code, "physical_outer_circle",
                     f"physical outer circle failed: {physical_outer['failedChecks']}", diagnostics,
                 )
             physical = physical_outer["physicalCircle"]

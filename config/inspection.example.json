@@ -60,7 +60,12 @@
       "max_residual_p95_px": 5.0,
       "max_center_shift_px": 80.0,
       "min_radius_ratio": 0.94,
-      "max_radius_ratio": 1.1
+      "max_radius_ratio": 1.1,
+      "edge_family_selection": {
+        "schema_version": "physical-circle-edge-family-selection/1",
+        "enabled": false,
+        "strategy_version": "deterministic-three-point-global-circle-v1"
+      }
     },
     "full_frame_circle_locator": {
       "schema_version": "full-frame-circle-locator/1",

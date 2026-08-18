@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from algorithms.end_face import core
+from algorithms.slot_pose import circle_edge_candidates
 
 
 def _finite(value: Any, label: str) -> float:
@@ -32,46 +32,7 @@ def _finite(value: Any, label: str) -> float:
     return result
 
 
-def enumerate_radial_edges(
-    radii: np.ndarray,
-    values: np.ndarray,
-    *,
-    min_gradient: float = 8.0,
-    separation_px: float = 3.0,
-    max_peaks: int = 8,
-) -> list[dict[str, Any]]:
-    """Return separated radial gradient peaks in descending strength order."""
-    rr = np.asarray(radii, dtype=float)
-    vv = np.asarray(values, dtype=float)
-    if rr.ndim != 1 or vv.ndim != 1 or rr.size != vv.size or rr.size < 2:
-        raise ValueError("radial evidence must be equal-length one-dimensional arrays")
-    if not np.isfinite(rr).all() or not np.isfinite(vv).all():
-        raise ValueError("radial evidence must be finite")
-    if min_gradient <= 0.0 or separation_px <= 0.0 or max_peaks <= 0:
-        raise ValueError("peak controls must be positive")
-    derivative = np.diff(vv)
-    strengths = np.abs(derivative)
-    candidates = [
-        index for index, strength in enumerate(strengths)
-        if strength >= min_gradient
-        and (index == 0 or strength >= strengths[index - 1])
-        and (index == len(strengths) - 1 or strength >= strengths[index + 1])
-    ]
-    selected: list[dict[str, Any]] = []
-    for index in sorted(candidates, key=lambda item: (-strengths[item], item)):
-        radius = float((rr[index] + rr[index + 1]) / 2.0)
-        if any(abs(radius - item["radiusPx"]) < separation_px for item in selected):
-            continue
-        delta = float(derivative[index])
-        selected.append({
-            "radiusPx": radius,
-            "gradient": delta,
-            "strength": abs(delta),
-            "polarity": "bright_to_dark" if delta < 0.0 else "dark_to_bright",
-        })
-        if len(selected) >= max_peaks:
-            break
-    return selected
+enumerate_radial_edges = circle_edge_candidates.enumerate_radial_edge_candidates
 
 
 def cluster_selected_offsets(

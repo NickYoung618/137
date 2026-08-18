@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from algorithms.slot_pose.contract import load_config
+from algorithms.slot_pose.legacy_adapter import LegacyAdapterError
 from algorithms.slot_pose.main import run
 from algorithms.slot_pose.groove_refinement import DEFAULT_GROOVE_REFINEMENT_CONFIG
 from algorithms.slot_pose.single_groove_pose import (
@@ -721,6 +722,38 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
                 self.assertEqual("NOT_AVAILABLE", payload["result"]["guidanceStatus"])
                 self.assertIsNone(payload["result"]["imageFrameCorrectionDeg"])
                 self.assertEqual(error_code, payload["error"]["code"])
+
+    def test_v3_circle_family_failures_never_release_pose_or_plc_fields(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        path = self.root / "single-v3-circle-family-failure.json"
+        write_json(path, config)
+        cases = (
+            ("PHYSICAL_OUTER_CIRCLE_FAILED", ["no_qualified_edge_family"]),
+            ("HOUSING_CIRCLE_AMBIGUOUS", ["ambiguous_edge_families"]),
+            ("HOUSING_CIRCLE_AMBIGUOUS", ["family_search_overflow"]),
+        )
+        for code, failed_checks in cases:
+            error = LegacyAdapterError(
+                code, "physical_outer_circle", "synthetic circle-family failure",
+                {"physicalOuterCircle": {"status": "failed", "failedChecks": failed_checks}},
+            )
+            with self.subTest(code=code, failed_checks=failed_checks), patch(
+                "algorithms.slot_pose.legacy_adapter.LegacyAEndFaceAdapter.estimate",
+                side_effect=error,
+            ):
+                payload = run(
+                    self.images / "one-real-two-shadows.png", path,
+                    f"single:v3:circle-family:{failed_checks[0]}",
+                )
+            self.assertFalse(payload["result"]["valid"])
+            self.assertEqual(code, payload["error"]["code"])
+            for field in (
+                "currentAngleDeg", "correctionRawDeg", "correctionDeg",
+                "imageFrameCorrectionDeg", "rotationDirection", "withinTolerance",
+                "mechanicalCorrectionDeg", "plcCommand",
+            ):
+                self.assertIsNone(payload["result"][field], field)
 
     def test_v3_optional_ambiguity_resolution_requires_unique_physical_refinement(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

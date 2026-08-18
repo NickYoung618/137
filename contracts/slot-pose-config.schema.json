@@ -385,6 +385,40 @@
                 "max_refit_center_delta_px": {"type": "number", "exclusiveMinimum": 0},
                 "max_refit_radius_delta_px": {"type": "number", "exclusiveMinimum": 0}
               }
+            },
+            "edge_family_selection": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "schema_version", "enabled", "strategy_version", "max_peaks_per_ray",
+                "min_gradient", "min_separation_px", "min_background_persistence_ratio", "min_seed_votes",
+                "max_seed_count", "max_hypotheses", "max_families", "refinement_iterations",
+                "assignment_residual_px", "min_support_ratio", "min_angular_coverage",
+                "max_preliminary_residual_p95_px", "dedup_center_px", "dedup_radius_px",
+                "min_support_overlap_ratio", "min_assignment_overlap_ratio"
+              ],
+              "properties": {
+                "schema_version": {"const": "physical-circle-edge-family-selection/1"},
+                "enabled": {"type": "boolean", "default": false},
+                "strategy_version": {"type": "string", "minLength": 1},
+                "max_peaks_per_ray": {"type": "integer", "minimum": 1, "maximum": 8},
+                "min_gradient": {"type": "number", "exclusiveMinimum": 0},
+                "min_separation_px": {"type": "number", "exclusiveMinimum": 0},
+                "min_background_persistence_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+                "min_seed_votes": {"type": "integer", "minimum": 1, "maximum": 72},
+                "max_seed_count": {"type": "integer", "minimum": 8, "maximum": 65536},
+                "max_hypotheses": {"type": "integer", "minimum": 1, "maximum": 1024},
+                "max_families": {"type": "integer", "minimum": 1, "maximum": 16},
+                "refinement_iterations": {"type": "integer", "minimum": 1, "maximum": 4},
+                "assignment_residual_px": {"type": "number", "exclusiveMinimum": 0},
+                "min_support_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "min_angular_coverage": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "max_preliminary_residual_p95_px": {"type": "number", "exclusiveMinimum": 0},
+                "dedup_center_px": {"type": "number", "exclusiveMinimum": 0},
+                "dedup_radius_px": {"type": "number", "exclusiveMinimum": 0},
+                "min_support_overlap_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+                "min_assignment_overlap_ratio": {"type": "number", "minimum": 0, "maximum": 1}
+              }
             }
           }
         },

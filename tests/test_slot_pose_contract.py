@@ -552,6 +552,52 @@ class SlotPoseContractTests(unittest.TestCase):
             self.assertFalse(identity["detector"]["dark_candidate_robustness"]["enabled"])
             self.assertNotIn("/read-only", json.dumps(identity))
 
+    def test_circle_edge_family_selection_defaults_off_and_is_strictly_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            config = minimal_single_groove_config()
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            selection = loaded["detector"]["physical_outer_circle"]["edge_family_selection"]
+            self.assertEqual("physical-circle-edge-family-selection/1", selection["schema_version"])
+            self.assertFalse(selection["enabled"])
+            self.assertEqual(8, selection["max_peaks_per_ray"])
+            self.assertEqual(0.95, selection["min_background_persistence_ratio"])
+            self.assertIn("edge_family_selection", effective_config_identity(loaded)["detector"]["physical_outer_circle"])
+
+            invalid_cases = [
+                {"schema_version": "unknown"},
+                {"enabled": 1},
+                {"max_peaks_per_ray": 0},
+                {"min_gradient": float("nan")},
+                {"min_separation_px": 0.0},
+                {"min_background_persistence_ratio": 1.1},
+                {"min_seed_votes": 0},
+                {"max_seed_count": 2},
+                {"max_hypotheses": 0},
+                {"max_families": 0},
+                {"refinement_iterations": 0},
+                {"assignment_residual_px": -1.0},
+                {"min_support_ratio": 1.1},
+                {"min_angular_coverage": 0.0},
+                {"max_preliminary_residual_p95_px": 0.0},
+                {"dedup_center_px": 0.0},
+                {"dedup_radius_px": 0.0},
+                {"min_support_overlap_ratio": -0.1},
+                {"min_assignment_overlap_ratio": 1.1},
+                {"unexpected": True},
+            ]
+            for extension in invalid_cases:
+                config = minimal_single_groove_config()
+                config["detector"]["physical_outer_circle"] = {
+                    "edge_family_selection": extension,
+                }
+                path.write_text(json.dumps(config), encoding="utf-8")
+                with self.subTest(extension=extension), self.assertRaisesRegex(
+                    ValueError, "edge_family_selection",
+                ):
+                    load_config(path)
+
     def test_robustness_extensions_reject_invalid_or_unsafe_combinations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

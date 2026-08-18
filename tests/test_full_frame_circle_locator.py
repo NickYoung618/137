@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from unittest import mock
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -146,6 +147,40 @@ class FullFrameSelectionTests(unittest.TestCase):
         self.assertIn("residualMarginPx", sparse)
         self.assertEqual(36, result["finalPhysicalCircleDiagnostics"]["sectorEvidence"]["binCount"])
 
+    def test_edge_family_candidate_callback_is_forwarded_to_sparse_and_final_once_per_ray(self) -> None:
+        candidate_calls: list[float] = []
+        legacy_calls: list[float] = []
+
+        def legacy_edge(gray, center, angle, radius):
+            legacy_calls.append(angle)
+            return _radial_edge(gray, center, angle, radius)
+
+        def candidates(gray, center, angle, radius, **_controls):
+            candidate_calls.append(angle)
+            x, y = _radial_edge(gray, center, angle, radius)
+            return [{
+                "x": x, "y": y, "radiusPx": float(radius), "strength": 20.0,
+                "polarity": "bright_to_dark", "backgroundPersistenceRatio": 1.0,
+            }]
+
+        family = {"enabled": True, "min_support_ratio": 0.70, "min_angular_coverage": 0.65}
+        result = locate_full_frame_circle(
+            _disk_image([(190, 190, 72)]), (200.0, 190.0, 70.0),
+            legacy_edge, _fit_circle, self._config(sparse_n_angles=72),
+            final_physical_config={
+                "n_angles": 144, "min_edge_point_count": 36, "angular_bin_count": 18,
+                "edge_family_selection": family,
+            },
+            source_sha256="8" * 64,
+            outer_boundary_edge_candidates=candidates,
+        )
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual([], legacy_calls)
+        self.assertEqual(72 + 144, len(candidate_calls))
+        self.assertEqual(
+            "selected", result["finalPhysicalCircleDiagnostics"]["edgeFamilySelection"]["status"],
+        )
+
     def test_none_overflow_and_equal_double_fail_closed(self) -> None:
         no_circle = locate_full_frame_circle(
             np.full((384, 512), 20.0), (200.0, 190.0, 70.0), _radial_edge, _fit_circle,
@@ -169,6 +204,69 @@ class FullFrameSelectionTests(unittest.TestCase):
         self.assertEqual("ambiguous", ambiguous["status"], ambiguous)
         self.assertIsNone(ambiguous["selectedCandidateId"])
         self.assertIsNotNone(ambiguous["secondCandidateId"])
+
+    def test_sparse_edge_family_ambiguity_is_not_collapsed_to_not_found(self) -> None:
+        proposal = {
+            "proposalId": "proposal-001", "status": "eligible",
+            "centerX": 200.0, "centerY": 190.0, "radiusPx": 70.0,
+        }
+        physical = {
+            "status": "failed", "failedChecks": ["ambiguous_edge_families"],
+            "edgeFamilySelection": {"status": "ambiguous"},
+        }
+        with (
+            mock.patch(
+                "algorithms.slot_pose.full_frame_circle_locator.extract_component_proposals",
+                return_value=[proposal],
+            ),
+            mock.patch(
+                "algorithms.slot_pose.full_frame_circle_locator.locate_physical_outer_circle",
+                return_value=physical,
+            ),
+        ):
+            result = locate_full_frame_circle(
+                np.zeros((64, 64)), (200.0, 190.0, 70.0), _radial_edge, _fit_circle,
+                self._config(sparse_n_angles=72), final_physical_config={},
+                source_sha256="4" * 64,
+            )
+        self.assertEqual("ambiguous", result["status"], result)
+        self.assertEqual(["sparse_edge_family_ambiguous"], result["failedChecks"])
+        self.assertIsNone(result["selectedCandidateId"])
+
+    def test_final_edge_family_ambiguity_is_not_collapsed_to_refinement_failure(self) -> None:
+        proposal = {
+            "proposalId": "proposal-001", "status": "eligible",
+            "centerX": 200.0, "centerY": 190.0, "radiusPx": 70.0,
+        }
+        sparse = {
+            "status": "accepted",
+            "physicalCircle": {"centerX": 200.0, "centerY": 190.0, "radiusPx": 70.0},
+            "edgePointCount": 72, "inlierCount": 72, "inlierRatio": 1.0,
+            "angularCoverage": 1.0, "residualP95Px": 0.5,
+            "failedChecks": [],
+        }
+        final = {
+            "status": "failed", "failedChecks": ["ambiguous_edge_families"],
+            "edgeFamilySelection": {"status": "ambiguous"},
+        }
+        with (
+            mock.patch(
+                "algorithms.slot_pose.full_frame_circle_locator.extract_component_proposals",
+                return_value=[proposal],
+            ),
+            mock.patch(
+                "algorithms.slot_pose.full_frame_circle_locator.locate_physical_outer_circle",
+                side_effect=[sparse, final],
+            ),
+        ):
+            result = locate_full_frame_circle(
+                np.zeros((64, 64)), (200.0, 190.0, 70.0), _radial_edge, _fit_circle,
+                self._config(sparse_n_angles=72), final_physical_config={},
+                source_sha256="5" * 64,
+            )
+        self.assertEqual("ambiguous", result["status"], result)
+        self.assertIn("ambiguous_edge_families", result["failedChecks"])
+        self.assertIsNone(result["finalPhysicalCircle"])
 
 
 if __name__ == "__main__":

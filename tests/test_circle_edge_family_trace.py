@@ -6,6 +6,7 @@ import unittest
 import jsonschema
 import numpy as np
 
+from algorithms.slot_pose import circle_edge_candidates
 from tools.trace_circle_edge_families import (
     cluster_selected_offsets,
     enumerate_radial_edges,
@@ -14,6 +15,9 @@ from tools.trace_circle_edge_families import (
 
 
 class CircleEdgeFamilyTraceTests(unittest.TestCase):
+    def test_production_and_diagnostic_peak_enumeration_share_one_implementation(self):
+        self.assertIs(enumerate_radial_edges, circle_edge_candidates.enumerate_radial_edge_candidates)
+
     def test_enumerates_multiple_concentric_bright_to_dark_edges(self):
         radii = np.arange(90.0, 131.0)
         values = np.full(radii.shape, 220.0)
@@ -30,6 +34,32 @@ class CircleEdgeFamilyTraceTests(unittest.TestCase):
         values = np.where(radii < 37.0, 180.0, 15.0)
         peaks = enumerate_radial_edges(radii, values, min_gradient=30.0)
         self.assertEqual([item["radiusPx"] for item in peaks], [36.5])
+
+    def test_bright_to_dark_candidates_are_bounded_subpixel_and_require_dark_tail(self):
+        radii = np.arange(80.0, 141.0)
+        values = np.full(radii.shape, 210.0)
+        values[radii >= 95.0] = 20.0
+        values[radii >= 105.0] = 200.0
+        values[radii >= 122.0] = 10.0
+        peaks = circle_edge_candidates.enumerate_radial_edge_candidates(
+            radii, values, min_gradient=10.0, separation_px=3.0, max_peaks=1,
+            polarity="bright_to_dark", min_background_persistence_ratio=0.95,
+        )
+        self.assertEqual(1, len(peaks))
+        self.assertAlmostEqual(121.5, peaks[0]["radiusPx"])
+        self.assertEqual("bright_to_dark", peaks[0]["polarity"])
+        self.assertGreaterEqual(peaks[0]["backgroundPersistenceRatio"], 0.95)
+
+    def test_candidate_controls_and_nonfinite_values_fail_before_sampling(self):
+        radii = np.arange(3.0)
+        values = np.arange(3.0)
+        invalid = (
+            {"min_gradient": 0.0}, {"separation_px": 0.0}, {"max_peaks": 0},
+            {"polarity": "sideways"}, {"min_background_persistence_ratio": 1.1},
+        )
+        for options in invalid:
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                circle_edge_candidates.enumerate_radial_edge_candidates(radii, values, **options)
 
     def test_selected_offsets_cluster_cross_edge_switches(self):
         records = [
@@ -59,6 +89,28 @@ class CircleEdgeFamilyTraceTests(unittest.TestCase):
         self.assertEqual(len(sectors), 1)
         self.assertTrue(sectors[0]["wrapsBoundary"])
         self.assertEqual(sectors[0]["sampleAnglesDeg"], [350.0, 0.0, 10.0])
+
+    def test_31_and_328_degree_rotations_have_no_special_mask_or_order_rule(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "algorithms/slot_pose/physical_outer_circle.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("31.0", source)
+        self.assertNotIn("328.0", source)
+        for rotation in (31.0, 328.0):
+            records = [
+                {
+                    "angleDeg": (angle + rotation) % 360.0,
+                    "familyId": "edge-family-002" if angle in {350.0, 0.0, 10.0} else "edge-family-001",
+                }
+                for angle in (0.0, 10.0, 20.0, 340.0, 350.0)
+            ]
+            reordered = list(reversed(records))
+            first = summarize_switch_sectors(records, primary_family_id="edge-family-001")
+            second = summarize_switch_sectors(reordered, primary_family_id="edge-family-001")
+            self.assertEqual(first, second)
+            self.assertEqual(1, len(first))
+            self.assertEqual(3, first[0]["sampleCount"])
 
     def test_nonfinite_input_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "finite"):
