@@ -79,8 +79,9 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
 - 单拍初版不新建一套槽门限。使用`tools/prepare_single_shot_initial_config.py`从Git外
   `single_real_groove`基础配置物化时，工具会强制仓内bundled core、单槽v3、85°±5°、
   原020全套同源性门值不变、022裁决版本不变、单拍输入和PLC未确认。它另写
-  默认保持v5兼容；`--profile-version 6`才生成`single-shot-initial-profile/6`报告并显式开启032裁决。
-  配置和报告都必须放在Git工作树外。`--profile-version 2`至`5`用于复现旧行为且不得原地改写。
+  默认保持v5兼容；`--profile-version 6`生成`single-shot-initial-profile/6`并显式开启032裁决；
+  `--profile-version 7`才启用可见边界归属裁决。配置和报告都必须放在Git工作树外。
+  `--profile-version 2`至`6`用于复现旧行为且不得原地改写。
   各版本仅使用已有的有界
   `ambiguity_resolution`：最多3个粗候选逐个经过同一亚像素双壁、
   外圆交点和同源性门，恰好1个完整通过才解除歧义。它不按分数、编号或固定角度选槽。
@@ -95,6 +96,11 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
   阈值。`source-consistency-adjudication/3`只在两条径向壁、5轨弯曲槽底、图像检测出的两个固定件及归一化
   槽壁形状/剖面检查全部通过时，允许绝对对比度和梯度强弱差异；任何结构、轮廓、覆盖、端点或固定件排除
   失败都继续fail-closed。旧v1/v2配置行为不变，新策略仍为development-only且不授权PLC。
+- `source-consistency-adjudication/4`不改任何上述门值。它修正“未做径向恢复却被要求提供恢复版证明”的
+  前后矛盾，并把“角度靠近固定件”和“固定件真正切断槽壁/槽底”分开。只有两侧槽壁、外圆端点、归一化
+  剖面和径向覆盖保持同源，且完整U形槽或有界的中心槽底轨迹能证明可见边界归属时，才允许把整体亮暗差
+  解释为照明差异。仅上方固定件重叠、槽底中心缺失、轮廓不一致或固定件来源未排除时仍然fail-closed。
+  该策略仍为development-only，不读取文件名、固定角度、人工标签或A2审阅结果，也不授权PLC。
 - 020的`fixture_shadow_model`与`sidewall_source_consistency`默认关闭，且只允许
   `single_real_groove`模式启用。前者把约31度/328度当作可漂移的相机/夹具nuisance prior，禁止做
   ignore mask或候选硬删除；逐候选局部灰度、梯度剖面和成对完整性必须进入诊断。后者要求真实槽两侧壁

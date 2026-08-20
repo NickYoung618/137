@@ -11,7 +11,7 @@
     "failedChecks", "imagePoseReleaseAllowed"
   ],
   "properties": {
-    "schemaVersion": {"enum": ["source-consistency-adjudication/1", "source-consistency-adjudication/2", "source-consistency-adjudication/3"]},
+    "schemaVersion": {"enum": ["source-consistency-adjudication/1", "source-consistency-adjudication/2", "source-consistency-adjudication/3", "source-consistency-adjudication/4"]},
     "thresholdVersion": {"type": "string", "minLength": 1},
     "strategyVersion": {"type": "string", "minLength": 1},
     "enabled": {"const": true},
@@ -55,7 +55,10 @@
     "failedChecks": {
       "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}
     },
-    "imagePoseReleaseAllowed": {"type": "boolean"}
+    "imagePoseReleaseAllowed": {"type": "boolean"},
+    "sourceSeparationBasis": {
+      "enum": ["complete_u_contour", "recovery_verified", "visible_boundary_ownership", null]
+    }
   },
   "allOf": [
     {
@@ -76,6 +79,14 @@
         "required": ["strategyVersion"],
         "not": {"required": ["thresholdVersion"]},
         "properties": {"strategyVersion": {"const": "locked-shape-profile-fixture-gates-v3"}}
+      }
+    },
+    {
+      "if": {"properties": {"schemaVersion": {"const": "source-consistency-adjudication/4"}}},
+      "then": {
+        "required": ["strategyVersion", "sourceSeparationBasis"],
+        "not": {"required": ["thresholdVersion"]},
+        "properties": {"strategyVersion": {"const": "locked-visible-boundary-ownership-v4"}}
       }
     },
     {

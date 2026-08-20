@@ -271,6 +271,14 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
             "development_only": True,
         }
 
+    def enabled_v4_config(self) -> dict:
+        return {
+            "schema_version": "source-consistency-adjudication/4",
+            "enabled": True,
+            "strategy_version": "locked-visible-boundary-ownership-v4",
+            "development_only": True,
+        }
+
     def radial_fixture_source_excluded(self) -> dict:
         return {
             "schemaVersion": "fixture-groove-source-exclusion/2",
@@ -351,6 +359,56 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
             fixture_source_evidence=self.fixture_source_excluded(),
         )
         self.assertEqual("ACCEPTED_OVERRIDE", legacy_contrast_only["decision"])
+
+    def test_v3_fixture_proof_follows_actual_recovery_path(self) -> None:
+        source = source_evidence(
+            endpoint=0.07,
+            failed=["edge_contrast_asymmetry", "edge_gradient_asymmetry"],
+        )
+        result = adjudicate_source_consistency(
+            source, self.enabled_v3_config(),
+            fixture_source_evidence=self.fixture_source_excluded(),
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", result["decision"], result)
+
+    def test_v4_allows_endpoint_scalar_only_with_recovery_or_boundary_ownership(self) -> None:
+        source = source_evidence(
+            endpoint=0.178,
+            failed=[
+                "edge_contrast_asymmetry", "edge_gradient_asymmetry",
+                "endpoint_structure_inconsistent",
+            ],
+        )
+        recovered = adjudicate_source_consistency(
+            source, self.enabled_v4_config(),
+            fixture_source_evidence=self.radial_fixture_source_excluded(),
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", recovered["decision"], recovered)
+        self.assertEqual("recovery_verified", recovered["sourceSeparationBasis"])
+
+        complete_u = adjudicate_source_consistency(
+            source, self.enabled_v4_config(),
+            fixture_source_evidence=self.fixture_source_excluded(),
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", complete_u["decision"], complete_u)
+        self.assertEqual("complete_u_contour", complete_u["sourceSeparationBasis"])
+
+        boundary = {
+            "schemaVersion": "fixture-groove-source-exclusion/3",
+            "status": "verified", "fixtureBodiesVerified": True,
+            "twoSidewallsComplete": True, "uContourComplete": False,
+            "fixtureSourceExcluded": True,
+            "visibleBoundaryOwnershipVerified": True,
+            "centralFloorTrackPresent": True,
+            "candidateSelectionUsedFixedAngle": False,
+            "manualTruthAppliedAtRuntime": False,
+        }
+        contrast_only = adjudicate_source_consistency(
+            source_evidence(endpoint=0.04), self.enabled_v4_config(),
+            fixture_source_evidence=boundary,
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", contrast_only["decision"], contrast_only)
+        self.assertEqual("visible_boundary_ownership", contrast_only["sourceSeparationBasis"])
 
 
 if __name__ == "__main__":

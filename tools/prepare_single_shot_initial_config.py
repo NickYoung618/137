@@ -29,6 +29,7 @@ from algorithms.slot_pose.groove_refinement import (
 from algorithms.slot_pose.source_consistency_adjudication import (
     DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG,
     SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG,
+    SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG,
 )
 from algorithms.slot_pose.polar_quality_adjudication import (
     DEFAULT_POLAR_QUALITY_ADJUDICATION_CONFIG,
@@ -52,6 +53,8 @@ PROFILE_VERSION_V5 = "single-shot-initial-profile/5"
 PROFILE_ID_V5 = "single-real-groove-85deg-sidewall-family-dedup-v5"
 PROFILE_VERSION_V6 = "single-shot-initial-profile/6"
 PROFILE_ID_V6 = "single-real-groove-85deg-polar-quality-adjudication-v6"
+PROFILE_VERSION_V7 = "single-shot-initial-profile/7"
+PROFILE_ID_V7 = "single-real-groove-85deg-visible-boundary-source-v7"
 
 
 def _same_number(actual: Any, expected: float) -> bool:
@@ -224,6 +227,17 @@ def build_initial_config_v6(base: dict[str, Any]) -> dict[str, Any]:
     return configured
 
 
+def build_initial_config_v7(base: dict[str, Any]) -> dict[str, Any]:
+    """Use visible-boundary source evidence without changing locked thresholds."""
+    configured = build_initial_config_v6(base)
+    configured["detector"]["source_consistency_adjudication"] = {
+        **SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG,
+        "enabled": True,
+    }
+    configured["config_id"] = PROFILE_ID_V7
+    return configured
+
+
 def build_profile_report(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
     return {
         "schemaVersion": PROFILE_VERSION,
@@ -337,12 +351,34 @@ def build_profile_report_v6(*, source_config_sha256: str, output_config_sha256: 
     return report
 
 
+def build_profile_report_v7(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
+    report = build_profile_report_v6(
+        source_config_sha256=source_config_sha256,
+        output_config_sha256=output_config_sha256,
+    )
+    report.update({"schemaVersion": PROFILE_VERSION_V7, "profileId": PROFILE_ID_V7})
+    report["wallSourceFamilySelection"]["adjudicationSchemaVersion"] = (
+        SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG["schema_version"]
+    )
+    report["visibleBoundarySourceAdjudication"] = {
+        "schemaVersion": SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG["schema_version"],
+        "strategyVersion": SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG["strategy_version"],
+        "enabled": True,
+        "lockedThresholdsPreserved": True,
+        "angularProximityAloneInsufficient": True,
+        "actualRecoveryPathRequired": True,
+        "manualTruthAppliedAtRuntime": False,
+        "plcAllowed": False,
+    }
+    return report
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-config", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
-    parser.add_argument("--profile-version", choices=("2", "3", "4", "5", "6"), default="5")
+    parser.add_argument("--profile-version", choices=("2", "3", "4", "5", "6", "7"), default="5")
     return parser.parse_args()
 
 
@@ -367,6 +403,7 @@ def main() -> int:
             "4": build_initial_config_v4,
             "5": build_initial_config_v5,
             "6": build_initial_config_v6,
+            "7": build_initial_config_v7,
         }
         configured = builders[args.profile_version](base)
         write_json(output, configured)
@@ -376,6 +413,7 @@ def main() -> int:
             "4": build_profile_report_v4,
             "5": build_profile_report_v5,
             "6": build_profile_report_v6,
+            "7": build_profile_report_v7,
         }
         report_builder = report_builders[args.profile_version]
         report = report_builder(

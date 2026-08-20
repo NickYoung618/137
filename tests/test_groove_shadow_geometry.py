@@ -149,6 +149,54 @@ class GrooveShadowGeometryTests(unittest.TestCase):
         self.assertEqual("rejected", incomplete["status"])
         self.assertIn("multiple_fixture_overlap", incomplete["failedChecks"])
 
+    def test_partial_floor_near_both_bodies_uses_visible_boundary_ownership(self) -> None:
+        refinement = {
+            "status": "accepted", "startSide": {}, "endSide": {},
+            "outerCircleIntersections": [{"x": 1, "y": 2}, {"x": 3, "y": 4}],
+        }
+        floor = {
+            "schemaVersion": "groove-floor-evidence/1", "status": "rejected",
+            "acceptedTrackCount": 3,
+            "tracks": [
+                {"offsetFraction": -0.65, "status": "accepted", "failedChecks": []},
+                {"offsetFraction": -0.30, "status": "accepted", "failedChecks": []},
+                {"offsetFraction": 0.0, "status": "accepted", "failedChecks": []},
+                {"offsetFraction": 0.30, "status": "failed", "failedChecks": ["floor_edge_not_unique"]},
+                {"offsetFraction": 0.65, "status": "failed", "failedChecks": ["floor_edge_not_unique"]},
+            ],
+            "failedChecks": ["floor_track_support_incomplete"],
+        }
+        source = {
+            "status": "rejected",
+            "checks": [
+                {"checkId": check_id, "passed": passed}
+                for check_id, passed in (
+                    ("edge_contrast_asymmetry", False),
+                    ("edge_gradient_asymmetry", True),
+                    ("normalized_profile_dissimilar", True),
+                    ("normalized_profile_uncorrelated", True),
+                    ("radial_coverage_inconsistent", True),
+                    ("endpoint_structure_inconsistent", True),
+                )
+            ],
+        }
+        result = build_fixture_source_exclusion(
+            candidate("between", 350.0, 25.0), self.verified_fixture(), refinement,
+            groove_floor_evidence=floor, source_consistency_evidence=source,
+        )
+        self.assertEqual("fixture-groove-source-exclusion/3", result["schemaVersion"])
+        self.assertEqual("verified", result["status"], result)
+        self.assertTrue(result["visibleBoundaryOwnershipVerified"])
+        self.assertTrue(result["centralFloorTrackPresent"])
+        self.assertFalse(result["uContourComplete"])
+
+        upper = build_fixture_source_exclusion(
+            candidate("upper", 315.0, 6.0), self.verified_fixture(), refinement,
+            groove_floor_evidence=floor, source_consistency_evidence=source,
+        )
+        self.assertEqual("rejected", upper["status"])
+        self.assertFalse(upper.get("visibleBoundaryOwnershipVerified", False))
+
     def test_curved_five_track_floor_is_accepted_but_straight_shadow_edge_is_not(self) -> None:
         yy, xx = np.mgrid[:260, :260]
         center = (130.0, 130.0)

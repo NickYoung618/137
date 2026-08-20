@@ -232,6 +232,7 @@ def assess_candidate_fixture_overlap(
 def build_fixture_source_exclusion(
     candidate: dict[str, Any], fixture_evidence: dict[str, Any],
     refinement: dict[str, Any], *, groove_floor_evidence: dict[str, Any] | None = None,
+    source_consistency_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build fail-closed source evidence consumed by recovery gates.
 
@@ -272,6 +273,41 @@ def build_fixture_source_exclusion(
         )
     )
     overlap_role = overlap.get("overlapRole")
+    source_checks = {
+        item.get("checkId"): item.get("passed")
+        for item in (
+            source_consistency_evidence.get("checks", [])
+            if isinstance(source_consistency_evidence, dict) else []
+        )
+        if isinstance(item, dict)
+    }
+    tracks = floor.get("tracks") if isinstance(floor.get("tracks"), list) else []
+    central_floor_track = any(
+        isinstance(item, dict)
+        and abs(float(item.get("offsetFraction", math.inf))) <= 1e-12
+        and item.get("status") == "accepted"
+        for item in tracks
+    )
+    bounded_partial_floor = bool(
+        floor.get("status") == "rejected"
+        and floor.get("acceptedTrackCount", 0) >= 3
+        and central_floor_track
+        and len(tracks) == 5
+        and all(isinstance(item, dict) for item in tracks)
+        and all(
+            item.get("status") == "accepted"
+            or set(item.get("failedChecks", [])) == {"floor_edge_not_unique"}
+            for item in tracks if isinstance(item, dict)
+        )
+    )
+    visible_boundary_ownership = bool(
+        walls_complete and bounded_partial_floor
+        and overlap_role in {"lower_fixture", "multiple_fixture_bodies"}
+        and all(source_checks.get(check_id) is True for check_id in (
+            "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
+            "radial_coverage_inconsistent", "endpoint_structure_inconsistent",
+        ))
+    )
     # The lower body cannot occlude the groove in this fixture geometry.  A
     # candidate coincident with it is therefore a fixture-source candidate.
     # The upper body can overlap a real groove, so a separately proven curved
@@ -282,19 +318,23 @@ def build_fixture_source_exclusion(
             overlap_role in {"none", "upper_fixture"}
             or (radial_recovery and overlap_role in {"lower_fixture", "multiple_fixture_bodies"})
         )
-    )
+    ) or bool(bodies_verified and visible_boundary_ownership)
     failures: list[str] = []
     if not bodies_verified:
         failures.append("fixture_bodies_not_verified")
     if not walls_complete:
         failures.append("two_sidewalls_not_complete")
-    if not floor_complete:
+    if not floor_complete and not visible_boundary_ownership:
         failures.append("groove_floor_not_complete")
-    if overlap_role == "lower_fixture" and not (radial_recovery and u_complete):
+    if overlap_role == "lower_fixture" and not (
+        (radial_recovery and u_complete) or visible_boundary_ownership
+    ):
         failures.append("lower_fixture_false_candidate")
     elif overlap_role == "upper_fixture" and not u_complete:
         failures.append("upper_fixture_shadow_overlap")
-    elif overlap_role == "multiple_fixture_bodies" and not (radial_recovery and u_complete):
+    elif overlap_role == "multiple_fixture_bodies" and not (
+        (radial_recovery and u_complete) or visible_boundary_ownership
+    ):
         failures.append("multiple_fixture_overlap")
     result = {
         "schemaVersion": "fixture-groove-source-exclusion/1",
@@ -306,9 +346,17 @@ def build_fixture_source_exclusion(
         "uContourComplete": u_complete,
         "fixtureSourceExcluded": excluded,
         "candidateSelectionUsedFixedAngle": False,
+        "manualTruthAppliedAtRuntime": False,
         "failedChecks": failures,
     }
-    if radial_recovery:
+    if visible_boundary_ownership:
+        result.update({
+            "schemaVersion": "fixture-groove-source-exclusion/3",
+            "visibleBoundaryOwnershipVerified": True,
+            "centralFloorTrackPresent": True,
+            "partialFloorTrackCount": int(floor.get("acceptedTrackCount", 0)),
+        })
+    elif radial_recovery:
         result.update({
             "schemaVersion": "fixture-groove-source-exclusion/2",
             "radialSidewallsVerified": True,

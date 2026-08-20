@@ -860,6 +860,7 @@ class LegacyAEndFaceAdapter:
                                 candidate, self.module.bilinear_sample,
                                 pixel_scale=scale,
                             ),
+                            source_consistency_evidence=source_consistency,
                         )
                         if isinstance(fixture_body_evidence, dict) else None
                     )
@@ -883,6 +884,8 @@ class LegacyAEndFaceAdapter:
                                     "uContourComplete", "fixtureSourceExcluded",
                                     "candidateSelectionUsedFixedAngle",
                                     "radialSidewallsVerified", "radialRecoveryApplied",
+                                    "twoSidewallsComplete", "visibleBoundaryOwnershipVerified",
+                                    "centralFloorTrackPresent", "manualTruthAppliedAtRuntime",
                                 )
                                 if key in fixture_source_exclusion
                             }

@@ -3,7 +3,8 @@
 ## Preconditions
 
 - Work on `codex/032-polar-quality-adjudication`, based on the frozen 031 implementation.
-- Runtime result metadata uses algorithm version `0.20.0`; 031 remains `0.19.0`.
+- The frozen 032 replay used algorithm version `0.20.0`; the additive visible-boundary
+  source fix uses `0.21.0`. 031 remains `0.19.0`.
 - Preserve `min_polar_score=3.0` and every other recognition/refinement/source/fixture/circle threshold.
 - Keep all A2 images and review artifacts outside Git and identified by SHA-256.
 - Do not access sealed part-006, modify PLC/HMI or merge main.
@@ -137,3 +138,57 @@ Two pre-freeze batch attempts were intentionally terminated before producing
 accepted evidence: one exposed stale algorithm-version metadata and the second
 had loaded runtime code before the final malformed-evidence fail-closed patch.
 Their directories are explicitly prefixed `aborted-`; neither may be counted.
+
+## 2026-08-20 Visible-Boundary Source Convergence
+
+- The user visually confirmed `bad:0161`, `normal:0001` and `normal:0243` as
+  complete and unoccluded. Read-only traces showed accepted circle, recognition
+  and two-wall geometry; their terminal source rejection came from photometric
+  asymmetry, a recovery-proof schema mismatch, or angular fixture proximity
+  without visible interruption.
+- Algorithm `0.21.0` adds default-off
+  `source-consistency-adjudication/4` with strategy
+  `locked-visible-boundary-ownership-v4` and profile v7. No recognition,
+  refinement, source, ambiguity, polar, fixture or circle threshold changed.
+- The v3 compatibility defect now follows the actual recovery evidence schema,
+  not the number of failed photometric scalar checks. V4 additionally records
+  `sourceSeparationBasis` as `complete_u_contour`, `recovery_verified` or
+  `visible_boundary_ownership`. Fixture-source evidence `/3` records two visible
+  walls, a present center floor track and bounded partial-track support; angular
+  proximity alone is insufficient.
+- Focused source/fixture/profile/config tests: 74/74 passed. Full available
+  tests: 608/608 passed. Root Draft 2020-12 schema structure checks: 63/63
+  passed. `git diff --check` passed.
+- Git-external evidence root:
+  `/home/ubuntu/slot-pose-private-data/A2-700-observed-033-diagnostic-20260820`.
+  V7 config SHA-256 is
+  `74baa2062db6724d333e6d529717036a6c61add28019fc5f0a9329c51b386e85`;
+  final 700-result SHA-256 is
+  `b83865001cd04a6ea36d938de6b1d3ad9cf8e0e8873b6791556a62c3c4dbfe3b`.
+- The frozen observed replay contains 700/700 results and 0 image-SHA
+  mismatches: 618 valid and 82 invalid. Relative to frozen 032, transitions are
+  526 valid-to-valid, 92 invalid-to-valid, 82 invalid-to-invalid and zero
+  valid-to-invalid. The 92 releases use 76 complete-U-contour proofs, one
+  recovery proof and 15 visible-boundary-ownership proofs.
+- Confirmed targets `bad:0161`, `normal:0001`, `normal:0243` are valid. The
+  visually confirmed truly occluded control `bad:0001` remains invalid. The 41
+  images in the previously reviewed upper-small-circle occlusion index align
+  by source filename to this replay and remain 41/41 invalid (40 refinement,
+  one source consistency).
+- All 82 invalid results retain null angle, correction, direction, mechanical
+  and PLC fields with PLC non-authoritative. Across all 700 results, non-null
+  PLC commands and authoritative PLC results are both zero.
+- Five same-adapter repeats of the released `bad:0161` and denied `bad:0001`
+  have identical decision, geometry and safety outputs. Dedicated uncontented
+  warm algorithm P95 is 1130.740 ms for the released case and 1076.165 ms for
+  the denied case. The four-way replay elapsed timings are intentionally not a
+  performance gate because the workers shared CPU.
+- A first monolithic run and an early chunked run produced no accepted final
+  evidence; the latter is retained under `aborted-code-changed-after-start`
+  because a diagnostic-consistency correction occurred after it began. Only
+  the subsequent frozen 35-chunk replay was concatenated into `final-results.jsonl`.
+- This remains observed A2 diagnostic evidence. Only three newly human-confirmed
+  complete cases and the prior 41-image occlusion index have semantic authority;
+  the other runtime classes are not human truth. Physically separate new-part
+  acceptance remains pending, so no production-accuracy, readiness or PLC claim
+  is allowed.

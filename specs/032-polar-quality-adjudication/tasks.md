@@ -149,3 +149,18 @@
 - The polar threshold remains 3.0; no recognition, refinement, source, ambiguity, fixture or outer-circle threshold may be relaxed.
 - No filename, capture index, fixed-angle whitelist, directory class, human label or CODEX review enters runtime logic.
 - Do not read sealed part-006, modify PLC/HMI or merge main.
+
+## Phase 7: Convergence
+
+**Purpose**: Correct observed false source/fixture rejections that contradict the
+image-derived source proof required by FR-007, without relaxing any locked
+threshold or weakening mixed/occluded fail-closed behavior.
+
+- [X] T033 Add failing source-adjudication tests proving that verified no-overlap fixture evidence remains usable when no radial wall recovery occurred, and that recovery-only `/2` fields are required only when recovery actually occurred, per FR-007 and US1/AC1 (contradicts)
+- [X] T034 Add failing fixture-geometry tests distinguishing angular proximity from actual visible boundary interruption, including a non-occluding lower fixture behind a complete U-contour and a truly occluding upper fixture, per FR-007 and US2/AC2 (partial)
+- [X] T035 Add failing source-consistency tests proving that bounded illumination asymmetry cannot by itself override highly matching normalized wall profiles plus complete two-wall, endpoint and floor geometry, while malformed, mixed and geometrically inconsistent sources remain rejected, per FR-007, FR-008 and FR-010 (partial)
+- [X] T036 Fix the v3 fixture-proof compatibility decision in `algorithms/slot_pose/source_consistency_adjudication.py` so proof requirements follow the actual recovery path rather than the number of failed photometric scalars, per FR-007 (contradicts)
+- [X] T037 Add versioned image/geometric fixture-boundary ownership evidence in `algorithms/slot_pose/groove_shadow_geometry.py` and integrate it in `algorithms/slot_pose/legacy_adapter.py`, so angular proximity alone cannot claim occlusion and actual wall/floor interruption remains fail-closed, per FR-007, FR-008 and FR-009 (partial)
+- [X] T038 Add a versioned source-consistency adjudication path that uses existing normalized wall-shape and complete U-contour evidence to separate illumination asymmetry from a different physical source without changing any locked threshold, per FR-007, FR-008 and FR-010 (partial)
+- [X] T039 Run focused and full tests, root-schema validation, static repeatability and the observed A2-700 regression; verify the confirmed complete-visible cases `bad:0161`, `normal:0001` and `normal:0243` advance safely while visually mixed/occluded controls remain invalid with all safety fields null, per FR-014, FR-016 and SC-003 (partial)
+- [X] T040 Record diagnostic fields, before/after failure counts, hashes, performance, observed-data limitation and the still-pending physically separate new-part gate in `specs/032-polar-quality-adjudication/quickstart.md`, per FR-012, FR-017 and FR-018 (partial)

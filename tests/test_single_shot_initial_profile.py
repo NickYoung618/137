@@ -268,6 +268,39 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         )
         jsonschema.Draft202012Validator(schema).validate(report)
 
+    def test_v7_enables_visible_boundary_source_adjudication_without_threshold_changes(self) -> None:
+        from tools.prepare_single_shot_initial_config import (
+            build_initial_config_v6, build_initial_config_v7, build_profile_report_v7,
+        )
+
+        v6 = build_initial_config_v6(base_config())
+        v7 = build_initial_config_v7(v6)
+        self.assertEqual(
+            "source-consistency-adjudication/3",
+            v6["detector"]["source_consistency_adjudication"]["schema_version"],
+        )
+        self.assertEqual(
+            "source-consistency-adjudication/4",
+            v7["detector"]["source_consistency_adjudication"]["schema_version"],
+        )
+        self.assertEqual(
+            {key: value for key, value in DEFAULT_SIDEWALL_CONSISTENCY_CONFIG.items()
+             if key != "enabled"},
+            {key: value for key, value in
+             v7["detector"]["sidewall_source_consistency"].items()
+             if key != "enabled"},
+        )
+        self.assertTrue(v7["detector"]["sidewall_source_consistency"]["enabled"])
+        report = build_profile_report_v7(
+            source_config_sha256="a" * 64, output_config_sha256="b" * 64,
+        )
+        schema = json.loads(
+            (ROOT / "contracts/single-shot-initial-profile-v7.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        jsonschema.Draft202012Validator(schema).validate(report)
+
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]
         examples = (
