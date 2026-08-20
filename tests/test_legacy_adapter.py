@@ -17,10 +17,12 @@ from algorithms.slot_pose.legacy_adapter import (
     LegacyAEndFaceAdapter,
     LegacyAdapterError,
     REQUIRED_FUNCTIONS,
+    apply_polar_quality_adjudication,
     apply_normalized_face_search_roi,
     recovery_fixture_exclusion_verified,
     wall_family_recovery_used,
 )
+from tests.test_polar_quality_adjudication import complete_evidence
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +74,36 @@ class LegacyAdapterTests(unittest.TestCase):
             self.assertFalse(recovery_fixture_exclusion_verified({
                 **base, "schemaVersion": "fixture-groove-source-exclusion/2", **mutation,
             }))
+
+    def test_polar_quality_effective_failures_do_not_mutate_original_quality(self) -> None:
+        diagnostics = complete_evidence()
+        original_quality = copy.deepcopy(diagnostics["quality"])
+        original_failures = diagnostics["quality"]["failedChecks"]
+        config = {
+            "schema_version": "polar-quality-adjudication/1",
+            "enabled": True,
+            "strategy_version": "locked-physical-groove-proof-v1",
+            "development_only": True,
+        }
+        effective = apply_polar_quality_adjudication(
+            diagnostics, original_failures, config,
+        )
+        self.assertEqual([], effective)
+        self.assertEqual(original_quality, diagnostics["quality"])
+        self.assertIs(original_failures, diagnostics["quality"]["failedChecks"])
+        self.assertEqual(
+            "ACCEPTED_OVERRIDE", diagnostics["polarQualityAdjudication"]["decision"],
+        )
+
+        denied = complete_evidence()
+        denied["grooveRefinement"]["fixtureSourceExclusion"]["fixtureSourceExcluded"] = False
+        denied_original = denied["quality"]["failedChecks"]
+        denied_effective = apply_polar_quality_adjudication(
+            denied, denied_original, config,
+        )
+        self.assertEqual(["polar_score"], denied_effective)
+        self.assertEqual(["polar_score"], denied_original)
+        self.assertEqual("REJECTED", denied["polarQualityAdjudication"]["decision"])
 
     def test_bundled_core_loads_without_gyj_source_tree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

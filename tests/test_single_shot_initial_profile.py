@@ -234,6 +234,40 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         )
         jsonschema.Draft202012Validator(schema).validate(report)
 
+    def test_v6_enables_only_versioned_polar_quality_adjudication_without_mutating_v5(self) -> None:
+        from tools.prepare_single_shot_initial_config import (
+            build_initial_config_v5, build_initial_config_v6, build_profile_report_v6,
+        )
+
+        source = base_config()
+        v5 = build_initial_config_v5(source)
+        v6 = build_initial_config_v6(v5)
+        self.assertNotIn("polar_quality_adjudication", v5["detector"])
+        decision = v6["detector"]["polar_quality_adjudication"]
+        self.assertTrue(decision["enabled"])
+        self.assertEqual("polar-quality-adjudication/1", decision["schema_version"])
+        self.assertEqual(
+            DEFAULT_SIDEWALL_CONSISTENCY_CONFIG["max_contrast_normalized_difference"],
+            v6["detector"]["sidewall_source_consistency"]["max_contrast_normalized_difference"],
+        )
+        self.assertEqual(3.0, v6["detector"].get("min_polar_score", 3.0))
+        self.assertFalse(v6["pose"]["production_plc_mapping_confirmed"])
+        self.assertTrue(v6["detector"]["fixture_shadow_model"]["enabled"])
+        self.assertTrue(v6["detector"]["groove_shadow_source_discrimination"]["enabled"])
+        report = build_profile_report_v6(
+            source_config_sha256="a" * 64, output_config_sha256="b" * 64,
+        )
+        self.assertEqual("single-shot-initial-profile/6", report["schemaVersion"])
+        self.assertTrue(report["polarQualityAdjudication"]["solePolarFailureOnly"])
+        self.assertTrue(report["polarQualityAdjudication"]["originalPolarThresholdPreserved"])
+        self.assertFalse(report["polarQualityAdjudication"]["plcAllowed"])
+        schema = json.loads(
+            (ROOT / "contracts/single-shot-initial-profile-v6.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        jsonschema.Draft202012Validator(schema).validate(report)
+
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]
         examples = (

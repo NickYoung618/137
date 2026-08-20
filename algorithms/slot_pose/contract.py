@@ -16,7 +16,7 @@ from tools.dataset_common import inspect_image
 SCHEMA_VERSION = "slot-pose-result/2"
 SCHEMA_VERSION_V3 = "slot-pose-result/3"
 ALGORITHM_NAME = "legacy-a-end-face-slot-pose-adapter"
-ALGORITHM_VERSION = "0.19.0"
+ALGORITHM_VERSION = "0.20.0"
 BUNDLED_LEGACY_MODULE = "algorithms.end_face.core"
 PORTABLE_ASSET_PATH_MODE = "config_relative_v1"
 ERROR_CODES = {
@@ -199,6 +199,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
         source_consistency_adjudication = merged_source_consistency_adjudication_config(
             detector.get("source_consistency_adjudication")
         )
+    polar_quality_adjudication = None
+    if "polar_quality_adjudication" in detector:
+        from algorithms.slot_pose.polar_quality_adjudication import (
+            merged_polar_quality_adjudication_config,
+        )
+
+        polar_quality_adjudication = merged_polar_quality_adjudication_config(
+            detector.get("polar_quality_adjudication")
+        )
     recognition_recovery = None
     if "groove_recognition_recovery" in detector:
         from algorithms.slot_pose.groove_recognition import (
@@ -232,6 +241,10 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError(
                 "detector.source_consistency_adjudication can only be enabled in single_real_groove mode"
             )
+        if polar_quality_adjudication is not None and polar_quality_adjudication["enabled"]:
+            raise ValueError(
+                "detector.polar_quality_adjudication can only be enabled in single_real_groove mode"
+            )
         if recognition_recovery is not None and recognition_recovery["enabled"]:
             raise ValueError(
                 "detector.groove_recognition_recovery can only be enabled in single_real_groove mode"
@@ -253,6 +266,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
         detector["sidewall_source_consistency_candidate"] = source_consistency_candidate
     if source_consistency_adjudication is not None:
         detector["source_consistency_adjudication"] = source_consistency_adjudication
+    if polar_quality_adjudication is not None:
+        detector["polar_quality_adjudication"] = polar_quality_adjudication
     if recognition_recovery is not None:
         detector["groove_recognition_recovery"] = recognition_recovery
     if local_second_wall is not None:
@@ -449,6 +464,39 @@ def load_config(config_path: Path) -> dict[str, Any]:
             raise ValueError(
                 "detector.groove_shadow_source_discrimination requires groove refinement v2"
             )
+        if polar_quality_adjudication is not None and polar_quality_adjudication["enabled"]:
+            if detector["single_groove_pose"]["schema_version"] != "single-real-groove-pose-config/3":
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires single groove pose v3"
+                )
+            if detector["groove_refinement"]["threshold_version"] != "groove-sidewall-subpixel-v2":
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires groove refinement v2"
+                )
+            if not detector["physical_outer_circle"]["edge_family_selection"]["enabled"]:
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires physical outer-circle edge family selection"
+                )
+            if not detector["ambiguity_resolution"]["enabled"]:
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires ambiguity_resolution"
+                )
+            if not detector["fixture_shadow_model"]["enabled"]:
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires fixture_shadow_model"
+                )
+            if not detector["sidewall_source_consistency"]["enabled"]:
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires sidewall_source_consistency"
+                )
+            if not groove_shadow_source["enabled"]:
+                raise ValueError(
+                    "detector.polar_quality_adjudication requires groove_shadow_source_discrimination"
+                )
+            if bool(pose.get("production_plc_mapping_confirmed", False)):
+                raise ValueError(
+                    "detector.polar_quality_adjudication forbids production PLC mapping"
+                )
     return config
 
 

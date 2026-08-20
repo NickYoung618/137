@@ -43,6 +43,32 @@ def record(image_id: str, angles: list[float], *, error: str = "ROLE_ASSIGNMENT_
 
 
 class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
+    def test_polar_quality_adjudication_keeps_original_and_effective_counts_separate(self) -> None:
+        released = record("released", [175.0], error="NONE")
+        released["result"]["valid"] = True
+        released["polarQualityAdjudication"] = {
+            "decision": "ACCEPTED_OVERRIDE",
+            "originalFailedChecks": ["polar_score"],
+            "effectiveFailedChecks": [],
+            "failedChecks": [],
+            "imagePoseReleaseAllowed": True,
+        }
+        denied = record("denied", [175.0], error="QUALITY_REJECTED")
+        denied["polarQualityAdjudication"] = {
+            "decision": "REJECTED",
+            "originalFailedChecks": ["polar_score"],
+            "effectiveFailedChecks": ["polar_score"],
+            "failedChecks": ["fixture_source_exclusion_verified"],
+            "imagePoseReleaseAllowed": False,
+        }
+        run = build_summary([("v6", {"records": [released, denied]})], 5.0)["runs"][0]
+        summary = run["polarQualityAdjudication"]
+        self.assertEqual({"ACCEPTED_OVERRIDE": 1, "REJECTED": 1}, summary["decisionCounts"])
+        self.assertEqual({"polar_score": 2}, summary["originalFailureCounts"])
+        self.assertEqual({"polar_score": 1}, summary["effectiveFailureCounts"])
+        self.assertEqual({"fixture_source_exclusion_verified": 1}, summary["proofFailureCounts"])
+        self.assertEqual(1, summary["imagePoseReleaseAllowedCount"])
+
     def test_wraparound_candidates_form_one_stable_cluster(self) -> None:
         records = [record("a", [359.0, 90.0]), record("b", [1.0, 91.0]), record("c", [0.0])]
         clusters = candidate_clusters(records, 5.0)

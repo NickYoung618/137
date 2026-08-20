@@ -7,7 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from algorithms.slot_pose.contract import load_config
-from algorithms.slot_pose.legacy_adapter import LegacyAdapterError
+from algorithms.slot_pose.legacy_adapter import (
+    LegacyAdapterError,
+    apply_polar_quality_adjudication,
+)
 from algorithms.slot_pose.main import run
 from algorithms.slot_pose.groove_refinement import DEFAULT_GROOVE_REFINEMENT_CONFIG
 from algorithms.slot_pose.single_groove_pose import (
@@ -19,6 +22,7 @@ from algorithms.slot_pose.single_groove_pose import (
 from tools.dataset_common import sha256_file, write_json
 from tools.generate_synthetic_multi_notches import build_dataset
 from tools.generate_synthetic_paired_notches import make_paired_face
+from tests.test_polar_quality_adjudication import complete_evidence
 
 try:
     import jsonschema
@@ -239,6 +243,46 @@ class SingleGrooveYDownV2Tests(unittest.TestCase):
 
 
 class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
+    def test_polar_adjudication_adapter_denies_every_unsafe_physical_state(self) -> None:
+        config = {
+            "schema_version": "polar-quality-adjudication/1",
+            "enabled": True,
+            "strategy_version": "locked-physical-groove-proof-v1",
+            "development_only": True,
+        }
+        mutations = {
+            "ambiguous_candidate": lambda d: d["grooveRecognition"].update(
+                acceptedCount=2,
+                acceptedCandidateIds=["candidate-005", "candidate-006"],
+            ),
+            "nonfinite_endpoint": lambda d: d["grooveRefinement"].update(
+                outerCircleIntersections=[{"x": float("nan"), "y": 1.0}, {"x": 2.0, "y": 3.0}],
+            ),
+            "incomplete_floor": lambda d: d["grooveRefinement"]["fixtureSourceExclusion"][
+                "grooveFloorEvidence"
+            ].update(status="rejected", acceptedTrackCount=4),
+            "mixed_source": lambda d: d["grooveRefinement"]["sourceConsistency"].update(
+                status="rejected", failedChecks=["normalized_profile_dissimilar"],
+            ),
+            "fixture_occlusion": lambda d: d["grooveRefinement"]["fixtureSourceExclusion"].update(
+                status="rejected", fixtureSourceExcluded=False, uContourComplete=False,
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                diagnostics = complete_evidence()
+                original = diagnostics["quality"]["failedChecks"]
+                mutate(diagnostics)
+                effective = apply_polar_quality_adjudication(
+                    diagnostics, original, config,
+                )
+                self.assertEqual(["polar_score"], effective)
+                self.assertEqual(["polar_score"], original)
+                self.assertEqual("REJECTED", diagnostics["polarQualityAdjudication"]["decision"])
+                self.assertFalse(
+                    diagnostics["polarQualityAdjudication"]["imagePoseReleaseAllowed"]
+                )
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.temporary = tempfile.TemporaryDirectory()
@@ -879,6 +923,7 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
             "imageFrameCorrectionDeg", "rotationDirection", "mechanicalCorrectionDeg", "plcCommand",
         ):
             self.assertIsNone(payload["result"][field], field)
+        self.assertFalse(payload["result"]["plcExecutionAuthoritative"])
 
     def test_provisional_candidate_with_zero_physical_survivors_fails_at_refinement(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))

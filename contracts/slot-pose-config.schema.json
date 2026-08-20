@@ -243,6 +243,17 @@
             }
           ]
         },
+        "polar_quality_adjudication": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "enabled", "strategy_version", "development_only"],
+          "properties": {
+            "schema_version": {"const": "polar-quality-adjudication/1"},
+            "enabled": {"type": "boolean", "default": false},
+            "strategy_version": {"const": "locked-physical-groove-proof-v1"},
+            "development_only": {"const": true}
+          }
+        },
         "groove_recognition_recovery": {
           "type": "object", "additionalProperties": false,
           "required": ["schema_version", "enabled", "strategy_version"],

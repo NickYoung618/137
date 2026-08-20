@@ -62,6 +62,81 @@ def minimal_single_groove_config() -> dict:
 
 
 class SlotPoseContractTests(unittest.TestCase):
+    def test_polar_quality_adjudication_is_default_off_strict_and_dependency_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            omitted = minimal_single_groove_config()
+            omitted_path = root / "omitted.json"
+            omitted_path.write_text(json.dumps(omitted), encoding="utf-8")
+            self.assertNotIn(
+                "polar_quality_adjudication", load_config(omitted_path)["detector"],
+            )
+
+            wrong_mode = minimal_config()
+            wrong_mode["detector"]["polar_quality_adjudication"] = {"enabled": True}
+            wrong_path = root / "wrong-mode.json"
+            wrong_path.write_text(json.dumps(wrong_mode), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "single_real_groove"):
+                load_config(wrong_path)
+
+            valid = minimal_single_groove_config()
+            valid["legacy_asset"].update({
+                "source_mode": "bundled_module",
+                "bundled_module": "algorithms.end_face.core",
+                "upstream_source_sha256": "1" * 64,
+            })
+            valid["legacy_asset"].pop("source_path")
+            valid["detector"].update({
+                "physical_outer_circle": {"edge_family_selection": {"enabled": True}},
+                "fixture_shadow_model": {"enabled": True},
+                "sidewall_source_consistency": {"enabled": True},
+                "groove_refinement": {"threshold_version": "groove-sidewall-subpixel-v2"},
+                "ambiguity_resolution": {"enabled": True},
+                "groove_shadow_source_discrimination": {
+                    "schema_version": "groove-shadow-source-discrimination/2",
+                    "enabled": True,
+                    "strategy_version": "fixture-role-u-contour-source-evidence/2",
+                },
+                "polar_quality_adjudication": {"enabled": True},
+            })
+            valid_path = root / "valid.json"
+            valid_path.write_text(json.dumps(valid), encoding="utf-8")
+            configured = load_config(valid_path)
+            decision = configured["detector"]["polar_quality_adjudication"]
+            self.assertEqual("polar-quality-adjudication/1", decision["schema_version"])
+            self.assertTrue(decision["enabled"])
+            self.assertTrue(decision["development_only"])
+            self.assertIn("polar_quality_adjudication", effective_config_identity(configured)["detector"])
+
+            for field, value, message in (
+                ("unexpected", True, "unknown fields"),
+                ("development_only", False, "development_only"),
+                ("strategy_version", "unknown", "strategy_version"),
+            ):
+                invalid = json.loads(json.dumps(valid))
+                invalid["detector"]["polar_quality_adjudication"][field] = value
+                path = root / f"invalid-{field}.json"
+                path.write_text(json.dumps(invalid), encoding="utf-8")
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, message):
+                    load_config(path)
+
+            dependencies = (
+                ("physical_outer_circle", "edge family selection"),
+                ("fixture_shadow_model", "fixture_shadow_model"),
+                ("sidewall_source_consistency", "sidewall_source_consistency"),
+                ("groove_shadow_source_discrimination", "groove_shadow_source_discrimination"),
+            )
+            for field, message in dependencies:
+                invalid = json.loads(json.dumps(valid))
+                if field == "physical_outer_circle":
+                    invalid["detector"][field]["edge_family_selection"]["enabled"] = False
+                else:
+                    invalid["detector"][field]["enabled"] = False
+                path = root / f"missing-{field}.json"
+                path.write_text(json.dumps(invalid), encoding="utf-8")
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, message):
+                    load_config(path)
+
     def test_config_relative_assets_resolve_from_config_not_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as elsewhere:
             root = Path(temporary)

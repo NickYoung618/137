@@ -42,6 +42,7 @@ from algorithms.slot_pose.groove_shadow_discrimination import (
     classify_groove_shadow_sources,
 )
 from algorithms.slot_pose.physical_outer_circle import locate_physical_outer_circle
+from algorithms.slot_pose.polar_quality_adjudication import adjudicate_polar_quality
 from algorithms.slot_pose.role_assignment import assign_roles
 from algorithms.slot_pose.single_groove_pose import build_single_groove_pose
 from algorithms.slot_pose.sidewall_consistency import assess_sidewall_source_consistency
@@ -103,6 +104,26 @@ def recovery_fixture_exclusion_verified(evidence: dict[str, Any] | None) -> bool
         and evidence.get("fixtureSourceExcluded") is True
         and evidence.get("candidateSelectionUsedFixedAngle") is False
     )
+
+
+def apply_polar_quality_adjudication(
+    diagnostics: dict[str, Any],
+    original_failures: list[str],
+    config: dict[str, Any] | None,
+) -> list[str]:
+    """Attach an independent decision and return a new effective failure list."""
+    evidence = {
+        key: diagnostics.get(key)
+        for key in (
+            "quality", "physicalOuterCircle", "grooveRecognition",
+            "grooveRefinement", "singleGroovePose",
+        )
+    }
+    decision = adjudicate_polar_quality(evidence, config)
+    if decision is None:
+        return list(original_failures)
+    diagnostics["polarQualityAdjudication"] = decision
+    return list(decision["effectiveFailedChecks"])
 
 
 @dataclass(frozen=True)
@@ -1005,6 +1026,11 @@ class LegacyAEndFaceAdapter:
                     ),
                 )
                 diagnostics["singleGroovePose"] = single_pose
+                effective_failures = apply_polar_quality_adjudication(
+                    diagnostics,
+                    failures,
+                    detector.get("polar_quality_adjudication"),
+                )
                 shadow_source_config = detector.get(
                     "groove_shadow_source_discrimination", {"enabled": False}
                 )
@@ -1016,7 +1042,9 @@ class LegacyAEndFaceAdapter:
                     )
                     resolution_status = (diagnostics.get("grooveResolution") or {}).get("status")
                     if single_pose["status"] == "accepted":
-                        source_terminal_stage = "polar_quality" if "polar_score" in failures else "valid"
+                        source_terminal_stage = (
+                            "polar_quality" if "polar_score" in effective_failures else "valid"
+                        )
                     elif resolution_status == "multiple_survived":
                         source_terminal_stage = "groove_ambiguity"
                     elif resolution_status == "none_survived":
@@ -1048,9 +1076,9 @@ class LegacyAEndFaceAdapter:
                             source_evidence,
                             enabled=True,
                             upstream_accepted=True,
-                            polar_quality_accepted="polar_score" not in failures,
+                            polar_quality_accepted="polar_score" not in effective_failures,
                             existing_pose_chain_allowed=(
-                                single_pose["status"] == "accepted" and not failures
+                                single_pose["status"] == "accepted" and not effective_failures
                             ),
                             terminal_stage=source_terminal_stage,
                             locked_gate_versions={
@@ -1167,9 +1195,11 @@ class LegacyAEndFaceAdapter:
                 f"polar/notch disagreement {agreement_deg:.3f}deg exceeds threshold",
                 diagnostics,
             )
-        if failures:
+        final_failures = effective_failures if mode == "single_real_groove" else failures
+        if final_failures:
             raise LegacyAdapterError(
-                "QUALITY_REJECTED", "quality_gate", f"failed quality checks: {', '.join(failures)}", diagnostics,
+                "QUALITY_REJECTED", "quality_gate",
+                f"failed quality checks: {', '.join(final_failures)}", diagnostics,
             )
 
         if mode == "paired_notches_centerline":

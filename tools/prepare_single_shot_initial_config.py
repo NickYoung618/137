@@ -30,6 +30,14 @@ from algorithms.slot_pose.source_consistency_adjudication import (
     DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG,
     SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG,
 )
+from algorithms.slot_pose.polar_quality_adjudication import (
+    DEFAULT_POLAR_QUALITY_ADJUDICATION_CONFIG,
+)
+from algorithms.slot_pose.fixture_shadow import merged_fixture_shadow_config
+from algorithms.slot_pose.groove_shadow_discrimination import (
+    CONFIG_SCHEMA_VERSION_V2,
+    STRATEGY_VERSION_V2,
+)
 from tools.dataset_common import sha256_file, write_json
 from tools.prepare_source_consistency_adjudication_config import build_experimental_config
 
@@ -42,6 +50,8 @@ PROFILE_VERSION_V4 = "single-shot-initial-profile/4"
 PROFILE_ID_V4 = "single-real-groove-85deg-circle-family-consensus-v4"
 PROFILE_VERSION_V5 = "single-shot-initial-profile/5"
 PROFILE_ID_V5 = "single-real-groove-85deg-sidewall-family-dedup-v5"
+PROFILE_VERSION_V6 = "single-shot-initial-profile/6"
+PROFILE_ID_V6 = "single-real-groove-85deg-polar-quality-adjudication-v6"
 
 
 def _same_number(actual: Any, expected: float) -> bool:
@@ -194,6 +204,26 @@ def build_initial_config_v5(base: dict[str, Any]) -> dict[str, Any]:
     return configured
 
 
+def build_initial_config_v6(base: dict[str, Any]) -> dict[str, Any]:
+    """Enable the sole-polar physical-proof decision without changing thresholds."""
+    configured = build_initial_config_v5(base)
+    detector = configured["detector"]
+    fixture = merged_fixture_shadow_config(detector.get("fixture_shadow_model"))
+    fixture["enabled"] = True
+    detector["fixture_shadow_model"] = fixture
+    detector["groove_shadow_source_discrimination"] = {
+        "schema_version": CONFIG_SCHEMA_VERSION_V2,
+        "enabled": True,
+        "strategy_version": STRATEGY_VERSION_V2,
+    }
+    detector["polar_quality_adjudication"] = {
+        **DEFAULT_POLAR_QUALITY_ADJUDICATION_CONFIG,
+        "enabled": True,
+    }
+    configured["config_id"] = PROFILE_ID_V6
+    return configured
+
+
 def build_profile_report(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
     return {
         "schemaVersion": PROFILE_VERSION,
@@ -287,12 +317,32 @@ def build_profile_report_v5(*, source_config_sha256: str, output_config_sha256: 
     return report
 
 
+def build_profile_report_v6(*, source_config_sha256: str, output_config_sha256: str) -> dict[str, Any]:
+    report = build_profile_report_v5(
+        source_config_sha256=source_config_sha256,
+        output_config_sha256=output_config_sha256,
+    )
+    report.update({"schemaVersion": PROFILE_VERSION_V6, "profileId": PROFILE_ID_V6})
+    report["polarQualityAdjudication"] = {
+        "schemaVersion": DEFAULT_POLAR_QUALITY_ADJUDICATION_CONFIG["schema_version"],
+        "strategyVersion": DEFAULT_POLAR_QUALITY_ADJUDICATION_CONFIG["strategy_version"],
+        "enabled": True,
+        "solePolarFailureOnly": True,
+        "originalPolarThresholdPreserved": True,
+        "completePhysicalGrooveProofRequired": True,
+        "fixtureSourceExclusionRequired": True,
+        "manualTruthAppliedAtRuntime": False,
+        "plcAllowed": False,
+    }
+    return report
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-config", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
-    parser.add_argument("--profile-version", choices=("2", "3", "4", "5"), default="5")
+    parser.add_argument("--profile-version", choices=("2", "3", "4", "5", "6"), default="5")
     return parser.parse_args()
 
 
@@ -316,6 +366,7 @@ def main() -> int:
             "3": build_initial_config_v3,
             "4": build_initial_config_v4,
             "5": build_initial_config_v5,
+            "6": build_initial_config_v6,
         }
         configured = builders[args.profile_version](base)
         write_json(output, configured)
@@ -324,6 +375,7 @@ def main() -> int:
             "3": build_profile_report_v3,
             "4": build_profile_report_v4,
             "5": build_profile_report_v5,
+            "6": build_profile_report_v6,
         }
         report_builder = report_builders[args.profile_version]
         report = report_builder(

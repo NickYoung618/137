@@ -304,6 +304,22 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
         for item in localizations
         if isinstance((item.get("timingMs") or {}).get("totalLocalization"), (int, float))
     ]
+    polar_adjudications = [
+        item for record in records
+        if isinstance((item := record.get("polarQualityAdjudication")), dict)
+    ]
+    polar_decisions = Counter(
+        str(item.get("decision") or "not_available") for item in polar_adjudications
+    )
+    polar_original_failures = Counter(
+        check for item in polar_adjudications for check in item.get("originalFailedChecks") or []
+    )
+    polar_effective_failures = Counter(
+        check for item in polar_adjudications for check in item.get("effectiveFailedChecks") or []
+    )
+    polar_proof_failures = Counter(
+        check for item in polar_adjudications for check in item.get("failedChecks") or []
+    )
     return {
         "label": label,
         "imageCount": total,
@@ -313,6 +329,16 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
             "count": physical_circle_count, "rate": physical_circle_count / total if total else 0.0,
         },
         "physicalOuterCircleFailureCounts": dict(sorted(physical_circle_failures.items())),
+        "polarQualityAdjudication": {
+            "evaluatedCount": len(polar_adjudications),
+            "decisionCounts": dict(sorted(polar_decisions.items())),
+            "originalFailureCounts": dict(sorted(polar_original_failures.items())),
+            "effectiveFailureCounts": dict(sorted(polar_effective_failures.items())),
+            "proofFailureCounts": dict(sorted(polar_proof_failures.items())),
+            "imagePoseReleaseAllowedCount": sum(
+                item.get("imagePoseReleaseAllowed") is True for item in polar_adjudications
+            ),
+        },
         "circleLocalizationStatusCounts": dict(sorted(localization_status_counts.items())),
         "componentProposalCountDistribution": dict(sorted(Counter(proposal_counts).items())),
         "eligibleComponentProposalCountDistribution": dict(sorted(Counter(eligible_proposal_counts).items())),

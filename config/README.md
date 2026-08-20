@@ -3,7 +3,8 @@
 `detector.groove_shadow_source_discrimination`是严格默认关闭的版本化来源诊断。
 它不拥有新的数值门限，只汇总既有ambiguity resolver、v2双壁精修和原始
 sidewall source-consistency结果；启用时三者必须同时启用。新物理零件独立
-验收前不得进入生产profile，且绝不绕过低`polar_score`或授权PLC输出。
+验收前不得进入生产profile。原始低`polar_score`必须始终保留；032仅允许在
+完整物理槽证据独立成立时形成单独的开发裁决，且绝不授权PLC输出。
 
 ## 槽姿态引导配置
 
@@ -68,11 +69,19 @@ sidewall source-consistency结果；启用时三者必须同时启用。新物�
   精确地仅失败`edge_contrast_asymmetry`、其余原检查全部通过且独立端点结构差不超过版本化门限时，
   才输出`ACCEPTED_OVERRIDE`并继续图像坐标引导。该裁决始终`developmentOnly=true`、
   `authoritative=false`、`plcAllowed=false`，不得进入生产默认配置。
+- `detector.polar_quality_adjudication`是默认不存在/关闭的032开发裁决，只允许在
+  `single_real_groove`中显式开启。它不修改`min_polar_score=3.0`、原始分数或
+  `quality.failedChecks`，且只能处理原失败精确等于`["polar_score"]`的情况。放行还必须同时证明：
+  唯一合格外圆边族、唯一识别槽、已接受的v2双壁精修、两条实际观测侧壁、两个有限外圆端点、
+  5/5弯曲槽底、有效同源性以及完整固定件来源排除。任一证据缺失、非有限、歧义、混合/遮挡或
+  存在第二失败项时仍fail-closed。姿态只来自精修槽交点，不读取文件名、样本编号、固定角、人工审阅
+  或观察集成员身份；裁决固定为`developmentOnly=true`、`plcAllowed=false`。
 - 单拍初版不新建一套槽门限。使用`tools/prepare_single_shot_initial_config.py`从Git外
   `single_real_groove`基础配置物化时，工具会强制仓内bundled core、单槽v3、85°±5°、
   原020全套同源性门值不变、022裁决版本不变、单拍输入和PLC未确认。它另写
-  默认生成`single-shot-initial-profile/3`报告并显式开启经审查的全局圆边族选择；配置和报告都必须放在
-  Git工作树外。`--profile-version 2`只为复现旧v2，行为保持不变。v2/v3都仅开启已有的有界
+  默认保持v5兼容；`--profile-version 6`才生成`single-shot-initial-profile/6`报告并显式开启032裁决。
+  配置和报告都必须放在Git工作树外。`--profile-version 2`至`5`用于复现旧行为且不得原地改写。
+  各版本仅使用已有的有界
   `ambiguity_resolution`：最多3个粗候选逐个经过同一亚像素双壁、
   外圆交点和同源性门，恰好1个完整通过才解除歧义。它不按分数、编号或固定角度选槽。
 - `groove_refinement.threshold_version=groove-sidewall-subpixel-v1`保留历史全点TLS行为；

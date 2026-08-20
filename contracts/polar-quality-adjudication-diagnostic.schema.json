@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polar-quality-adjudication-diagnostic.schema.json",
+  "title": "Physical-groove polar quality adjudication diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "strategyVersion", "enabled", "developmentOnly",
+    "authoritative", "productionDefaultAllowed", "plcAllowed",
+    "manualTruthAppliedAtRuntime", "fixedAngleApplied", "decision",
+    "originalPolarScore", "originalPolarThreshold", "originalFailedChecks",
+    "effectiveFailedChecks", "checks", "failedChecks", "imagePoseReleaseAllowed"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "polar-quality-adjudication/1"},
+    "strategyVersion": {"const": "locked-physical-groove-proof-v1"},
+    "enabled": {"const": true},
+    "developmentOnly": {"const": true},
+    "authoritative": {"const": false},
+    "productionDefaultAllowed": {"const": false},
+    "plcAllowed": {"const": false},
+    "manualTruthAppliedAtRuntime": {"const": false},
+    "fixedAngleApplied": {"const": false},
+    "decision": {
+      "enum": ["NOT_NEEDED", "ACCEPTED_OVERRIDE", "REJECTED", "NOT_EVALUATED"]
+    },
+    "originalPolarScore": {"type": ["number", "null"]},
+    "originalPolarThreshold": {"type": ["number", "null"]},
+    "originalFailedChecks": {
+      "type": "array", "uniqueItems": true, "items": {"type": "string"}
+    },
+    "effectiveFailedChecks": {
+      "type": "array", "uniqueItems": true, "items": {"type": "string"}
+    },
+    "checks": {
+      "type": "array",
+      "maxItems": 11,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["checkId", "passed"],
+        "properties": {
+          "checkId": {"type": "string", "minLength": 1},
+          "passed": {"type": "boolean"}
+        }
+      }
+    },
+    "failedChecks": {
+      "type": "array", "uniqueItems": true, "items": {"type": "string"}
+    },
+    "imagePoseReleaseAllowed": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "ACCEPTED_OVERRIDE"}}},
+      "then": {
+        "properties": {
+          "originalFailedChecks": {"const": ["polar_score"]},
+          "effectiveFailedChecks": {"maxItems": 0},
+          "failedChecks": {"maxItems": 0},
+          "imagePoseReleaseAllowed": {"const": true}
+        }
+      },
+      "else": {"properties": {"imagePoseReleaseAllowed": {"const": false}}}
+    }
+  ]
+}
