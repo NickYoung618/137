@@ -45,6 +45,8 @@
 - [X] T013 [P] [US3] Add diagnostic aggregation tests for ownership decisions in `tests/test_slot_pose_diagnostic_summary.py`
 - [X] T014 [US3] Materialize portable profile v8 and audit report in `tools/prepare_single_shot_initial_config.py`
 - [X] T015 [US3] Add ownership counters without private truth or paths in `tools/summarize_slot_pose_diagnostics.py`
+- [X] T020 [US3] Add profile compatibility coverage proving v8 disables only the superseded local-second-wall diagnostic in `tests/test_single_shot_initial_profile.py`
+- [X] T021 [US3] Disable and audit the superseded diagnostic only in portable profile v8 in `tools/prepare_single_shot_initial_config.py` and `contracts/single-shot-initial-profile-v8.schema.json`
 
 ## Phase 6: Validation and evidence
 

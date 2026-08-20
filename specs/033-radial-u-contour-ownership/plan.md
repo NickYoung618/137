@@ -91,7 +91,8 @@ tests/
 5. Emit `fixture-groove-source-exclusion/4` with both wall alignments, the derived envelope, ordered checks, original coarse overlap and `radialUContourOwnershipVerified`; otherwise retain prior schema behavior.
 6. Add `source-consistency-adjudication/5`. It preserves every version-4 complete-U/visible-boundary decision, and its new schema `/4` radial-ownership route may accept only photometric-only failures. All old versions keep their exact behavior.
 7. Materialize portable profile v8 and its audit schema without mutating v7.
-8. Run synthetic full-rotation and fixture-edge counterexamples before focused, full, schema, 82-review regression, 700 observed replay, repeatability and warm performance checks. Treat observed results only as regression, never unseen accuracy.
+8. In profile v8 only, disable the superseded development-only local-second-wall scan because v5 already emits the bounded ownership decision; keep the diagnostic available and unchanged in v7 and earlier.
+9. Run synthetic full-rotation and fixture-edge counterexamples before focused, full, schema, 82-review regression, 700 observed replay, repeatability and warm performance checks. Treat observed results only as regression, never unseen accuracy.
 
 ## Complexity Tracking
 

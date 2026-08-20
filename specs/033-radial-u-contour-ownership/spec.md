@@ -90,6 +90,7 @@ As the safety owner, I need fixture-mixed, occluded, ambiguous and incomplete gr
 - **FR-016**: A physically separate new-part group MUST pass before any accuracy-improvement, production-readiness or PLC-authorization claim.
 - **FR-017**: The work MUST NOT read sealed part-006, modify PLC/HMI or merge main.
 - **FR-018**: Version 5 MUST preserve every decision already authorized by the unchanged version-4 complete-U or visible-boundary proof; the new radial-U route is additive and MAY remove only raw contrast/gradient failures after its stricter proof passes.
+- **FR-019**: Portable profile v8 MUST explicitly disable the superseded development-only local-second-wall diagnostic while preserving it in prior profiles; this diagnostic MUST NOT affect pose decisions, safety nulls or PLC state.
 
 ### Key Entities
 

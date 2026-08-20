@@ -33,6 +33,8 @@ The diagnostic remains development-only, non-authoritative and PLC-disallowed.
 
 Version 5 also preserves the unchanged version-4 complete-U and visible-boundary routes. This compatibility path does not use the new radial proof and changes no version-4 measurement or threshold.
 
+Portable profile v8 explicitly disables the superseded development-only local-second-wall scan. The scan remains available and unchanged in prior profiles; it never owns pose release or PLC state.
+
 ## Failure Contract
 
 For the new radial-U route, any missing proof, same-fixture endpoints, incomplete wall/floor, non-photometric failure, ambiguity or nonfinite value keeps the result invalid. Angle, correction, direction, mechanical command and PLC command remain null; PLC execution remains non-authoritative.

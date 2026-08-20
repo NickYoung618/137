@@ -24,6 +24,14 @@
 
 **Alternatives considered**: Raising contrast/gradient thresholds was rejected because it could release occluded fixture edges. Mutating v4 was rejected because previous configs must remain reproducible. Replacing instead of extending v4 was rejected because it would re-reject previously verified complete-U cases without new negative evidence.
 
+## Decision 4: Retire the superseded local scan only in profile v8
+
+**Decision**: Profile v8 explicitly disables `local_second_wall_diagnostic`; v7 and earlier remain unchanged. Version 5 already records the decisive wall, endpoint, floor, source and ownership failures, while the older scan is non-authoritative and can schedule up to 256 extra search jobs after the decision is already closed.
+
+**Rationale**: The scan added roughly two seconds to complex fail-closed frames but never changed the pose decision. Removing it from the new profile restores the warm performance budget without changing any detection threshold or safety gate.
+
+**Alternatives considered**: Silently skipping the scan in runtime code was rejected because it would ignore an explicitly enabled config. Relaxing its bounds was rejected because that would create another tuned threshold set. Versioned profile disablement is explicit and preserves old behavior.
+
 ## Decision 4: Constant-size diagnostics and work
 
 **Decision**: Record two wall alignments, measured opening half-width and one derived radial envelope; add no new image sampling pass.

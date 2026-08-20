@@ -260,6 +260,9 @@ def build_initial_config_v8(base: dict[str, Any]) -> dict[str, Any]:
         **SOURCE_CONSISTENCY_ADJUDICATION_V5_CONFIG,
         "enabled": True,
     }
+    local_second_wall = configured["detector"].get("local_second_wall_diagnostic")
+    if isinstance(local_second_wall, dict):
+        local_second_wall["enabled"] = False
     configured["config_id"] = PROFILE_ID_V8
     return configured
 
@@ -418,6 +421,7 @@ def build_profile_report_v8(*, source_config_sha256: str, output_config_sha256: 
         "lockedThresholdsPreserved": True,
         "completeUContourRequired": True,
         "priorV4DecisionsPreserved": True,
+        "supersededLocalSecondWallDiagnosticDisabled": True,
         "manualTruthAppliedAtRuntime": False,
         "plcAllowed": False,
     }

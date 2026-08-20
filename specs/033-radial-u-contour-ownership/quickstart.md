@@ -45,5 +45,6 @@ No ambiguity, recognition, refinement, polar-quality, fixture or source-consiste
 - Full available suite: 617/617 PASS in 123.878 seconds.
 - Root JSON Schema Draft 2020-12 checks: 64/64 PASS.
 - `git diff --check` and `git diff --cached --check`: PASS.
-- Portable v8 config SHA-256: `1c31b763db11f8cc0acf3e45aeb843bb20de04ab6e5215ccb87386f11f068ef2`.
+- Final portable v8 config SHA-256: `85dbf8c71e5fc8c9340ad3aff8b5c90272bffe782ee9c441d0b6fd1ccd2ac3a1`.
+- Profile v8 explicitly disables the superseded non-authoritative local-second-wall scan; profiles v7 and earlier remain unchanged.
 - A first replay attempt was explicitly discarded after code changed during execution; no result from that mixed-code attempt is accepted as evidence.

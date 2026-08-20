@@ -312,6 +312,7 @@
         "rotationIndependent", "measuredOpeningEnvelope",
         "existingIntersectionToleranceReused", "lockedThresholdsPreserved",
         "completeUContourRequired", "priorV4DecisionsPreserved",
+        "supersededLocalSecondWallDiagnosticDisabled",
         "manualTruthAppliedAtRuntime", "plcAllowed"
       ],
       "properties": {
@@ -324,6 +325,7 @@
         "lockedThresholdsPreserved": {"const": true},
         "completeUContourRequired": {"const": true},
         "priorV4DecisionsPreserved": {"const": true},
+        "supersededLocalSecondWallDiagnosticDisabled": {"const": true},
         "manualTruthAppliedAtRuntime": {"const": false},
         "plcAllowed": {"const": false}
       }
