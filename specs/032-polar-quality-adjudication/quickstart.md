@@ -83,6 +83,51 @@ or PLC-authorization statement is permitted.
 - `git diff --check`: passed.
 - Representative bad-0041 result SHA-256:
   `b04712e47ca2966c7e1d6e152c59f901bb0c0913eba894f532e40993b716cc77`.
+
+## 2026-08-20 Frozen Observed Replay
+
+- Frozen implementation commit: `98a984a5f04b18d8b1a8f9e9fb3188eb897b0cb9`.
+- Frozen v6 config SHA-256: `395b6710c5b40b23d62f00a1b6d8daad6c14ec2815ebb3b72d62aeb80b33b1b4`.
+- Result JSONL SHA-256: `e19b492cae413eefa805153ff53d7cddf7a838b7fcbad8e4955d8160cab0fb77`.
+- Results: 526 valid, 174 invalid. The exact transitions from 031 were 506
+  valid-to-valid, 20 invalid-to-valid and 174 invalid-to-invalid, with no
+  valid-to-invalid transitions.
+- All 20 changed outcomes were prior sole-`polar_score` quality rejects and
+  retained the original score, threshold and failed check while passing all 11
+  independent physical proof checks.
+- All 24 prior wall-family-recovered valid frames remained valid. All 174 prior
+  runtime mixed/occluded frames remained invalid. The physical outer circle was
+  accepted with exactly one family in all 700 frames.
+- Invalid safety violations: zero. Non-null PLC commands: zero. Authoritative
+  PLC results: zero.
+- First-pass algorithm elapsed P95 across 700 frames: 1281.043 ms.
+- Five repeated released and denied cases were identical after excluding all
+  timing fields. One image decode occurred per estimate, with no second circle,
+  polar, recognition or refinement pass. Combined algorithm-only warm P95 was
+  980.793 ms. Full wrapper wall time is separately retained because result
+  assembly, validation, hashing and large diagnostic copying are outside the
+  adapter algorithm timer; the denied representative wrapper P95 was 3189.554
+  ms and is not hidden.
+- Git-external evaluation summary SHA-256:
+  `37a606a39c5c15cd09c8c2c32321c93f1cb2d5871dbbf7ea6901ced352cccadb`.
+- Git-external repeatability summary SHA-256:
+  `52366e56d0c3723738968775e75113126d3ffd721d77498b11118dd63a0e72b0`.
+
+This remains observed diagnostic evidence, not unseen acceptance or an accuracy
+claim. Physically separate new-part validation remains pending.
+
+## Final Convergence Status
+
+- Branch: `codex/032-polar-quality-adjudication`.
+- Frozen implementation commit: `98a984a5f04b18d8b1a8f9e9fb3188eb897b0cb9`.
+- Full available tests at the frozen implementation: 604/604 passed.
+- Final root Schema structure gate after replay documentation: 62/62 passed.
+- Final `git diff --check` and `git diff --cached --check`: passed.
+- SpecKit convergence checked all functional requirements, success criteria,
+  user-story acceptance cases, plan decisions and five Constitution principles;
+  no missing implementation task was found and no convergence task was appended.
+- Worktree before this final documentation commit: modified only in `quickstart.md`
+  and `tasks.md`; no runtime, config, threshold, PLC/HMI or main change was made.
 - Materialized profile-v6 config SHA-256:
   `395b6710c5b40b23d62f00a1b6d8daad6c14ec2815ebb3b72d62aeb80b33b1b4`.
 - Materialized profile report SHA-256:

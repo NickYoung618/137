@@ -103,10 +103,10 @@
 **Purpose**: Verify determinism, safety, observed regression behavior and performance without converting observed A2 data into acceptance truth.
 
 - [X] T027 Run focused adjudication/adapter/contract/profile/summary tests and all root-schema validation; record exact commands and counts in `specs/032-polar-quality-adjudication/quickstart.md`
-- [ ] T028 Run five static repeats for one released and one denied representative and verify identical non-timing diagnostics and pose/null outputs in Git-external evidence
-- [ ] T029 Replay the frozen observed A2-700 set and verify the 20 sole-polar cases advance only by adjudication, the 24 recovered-valid remain valid, the 174 mixed/occluded remain invalid, and all invalid safety fields remain null
-- [ ] T030 Measure same-adapter preloaded warm P95 and confirm no second decode, polar sampling, circle search, recognition or refinement pass in Git-external performance evidence
-- [ ] T031 Run the full available test suite, `git diff --check`, schema checks and SpecKit convergence; record branch, commit candidate and clean/dirty status in `specs/032-polar-quality-adjudication/quickstart.md`
+- [X] T028 Run five static repeats for one released and one denied representative and verify identical non-timing diagnostics and pose/null outputs in Git-external evidence
+- [X] T029 Replay the frozen observed A2-700 set and verify the 20 sole-polar cases advance only by adjudication, the 24 recovered-valid remain valid, the 174 mixed/occluded remain invalid, and all invalid safety fields remain null
+- [X] T030 Measure same-adapter preloaded warm P95 and confirm no second decode, polar sampling, circle search, recognition or refinement pass in Git-external performance evidence
+- [X] T031 Run the full available test suite, `git diff --check`, schema checks and SpecKit convergence; record branch, commit candidate and clean/dirty status in `specs/032-polar-quality-adjudication/quickstart.md`
 - [X] T032 Document physically separate new-part validation as an outstanding external acceptance gate and prohibit accuracy/production/PLC claims until it passes in `specs/032-polar-quality-adjudication/quickstart.md`
 
 ---
