@@ -43,6 +43,33 @@ def record(image_id: str, angles: list[float], *, error: str = "ROLE_ASSIGNMENT_
 
 
 class SlotPoseDiagnosticSummaryTests(unittest.TestCase):
+    def test_radial_u_ownership_summary_counts_decisions_without_private_truth(self) -> None:
+        released = record("released", [175.0], error="NONE")
+        released["result"]["valid"] = True
+        released["sidewallSourceConsistencyAdjudication"] = {
+            "schemaVersion": "source-consistency-adjudication/5",
+            "decision": "ACCEPTED_OVERRIDE",
+            "sourceSeparationBasis": "radial_u_contour_ownership",
+            "originalFailedChecks": ["edge_contrast_asymmetry"],
+            "failedChecks": [], "imagePoseReleaseAllowed": True,
+        }
+        denied = record("denied", [175.0], error="GROOVE_SOURCE_INCONSISTENT")
+        denied["sidewallSourceConsistencyAdjudication"] = {
+            "schemaVersion": "source-consistency-adjudication/5",
+            "decision": "REJECTED", "sourceSeparationBasis": None,
+            "originalFailedChecks": ["edge_contrast_asymmetry"],
+            "failedChecks": ["radial_u_contour_ownership_verified"],
+            "imagePoseReleaseAllowed": False,
+        }
+        run = build_summary([("v8", {"records": [released, denied]})], 5.0)["runs"][0]
+        summary = run["sourceConsistencyAdjudication"]
+        self.assertEqual({"ACCEPTED_OVERRIDE": 1, "REJECTED": 1}, summary["decisionCounts"])
+        self.assertEqual({"radial_u_contour_ownership": 1, "not_verified": 1},
+                         summary["sourceSeparationBasisCounts"])
+        self.assertEqual({"radial_u_contour_ownership_verified": 1},
+                         summary["proofFailureCounts"])
+        self.assertNotIn("imageId", summary)
+
     def test_polar_quality_adjudication_keeps_original_and_effective_counts_separate(self) -> None:
         released = record("released", [175.0], error="NONE")
         released["result"]["valid"] = True

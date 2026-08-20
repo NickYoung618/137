@@ -301,6 +301,28 @@ class SingleShotInitialProfileTests(unittest.TestCase):
         )
         jsonschema.Draft202012Validator(schema).validate(report)
 
+    def test_v8_enables_radial_u_contour_ownership_without_threshold_changes(self) -> None:
+        from tools.prepare_single_shot_initial_config import (
+            build_initial_config_v7, build_initial_config_v8, build_profile_report_v8,
+        )
+
+        v7 = build_initial_config_v7(base_config())
+        v8 = build_initial_config_v8(v7)
+        self.assertEqual("source-consistency-adjudication/4",
+                         v7["detector"]["source_consistency_adjudication"]["schema_version"])
+        self.assertEqual("source-consistency-adjudication/5",
+                         v8["detector"]["source_consistency_adjudication"]["schema_version"])
+        self.assertEqual(v7["detector"]["groove_refinement"],
+                         v8["detector"]["groove_refinement"])
+        self.assertEqual(v7["detector"]["sidewall_source_consistency"],
+                         v8["detector"]["sidewall_source_consistency"])
+        report = build_profile_report_v8(
+            source_config_sha256="a" * 64, output_config_sha256="b" * 64,
+        )
+        schema = json.loads((ROOT / "contracts/single-shot-initial-profile-v8.schema.json").read_text())
+        jsonschema.Draft202012Validator(schema).validate(report)
+        self.assertTrue(report["radialUContourSourceAdjudication"]["priorV4DecisionsPreserved"])
+
     def test_single_shot_guidance_wrap_direction_and_deadband(self) -> None:
         target = base_config()["detector"]["single_groove_pose"]["target"]
         examples = (

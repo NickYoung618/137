@@ -309,6 +309,7 @@ def adjudicate_polar_quality(
             and fixture.get("schemaVersion") in {
                 "fixture-groove-source-exclusion/1",
                 "fixture-groove-source-exclusion/2",
+                "fixture-groove-source-exclusion/4",
             }
             and fixture.get("status") == "verified"
             and fixture.get("fixtureBodiesVerified") is True
@@ -317,6 +318,13 @@ def adjudicate_polar_quality(
             and fixture.get("fixtureSourceExcluded") is True
             and fixture.get("candidateSelectionUsedFixedAngle") is False
             and fixture.get("failedChecks") == []
+            and (
+                fixture.get("schemaVersion") != "fixture-groove-source-exclusion/4"
+                or (
+                    fixture.get("radialUContourOwnershipVerified") is True
+                    and fixture.get("manualTruthAppliedAtRuntime") is False
+                )
+            )
         )
 
     def runtime_only() -> bool:

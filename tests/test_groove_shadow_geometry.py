@@ -197,6 +197,121 @@ class GrooveShadowGeometryTests(unittest.TestCase):
         self.assertEqual("rejected", upper["status"])
         self.assertFalse(upper.get("visibleBoundaryOwnershipVerified", False))
 
+    def test_radial_u_contour_ownership_is_rotation_independent(self) -> None:
+        source = {
+            "status": "rejected",
+            "checks": [
+                {"checkId": check_id, "passed": passed}
+                for check_id, passed in (
+                    ("edge_contrast_asymmetry", False),
+                    ("edge_gradient_asymmetry", False),
+                    ("normalized_profile_dissimilar", True),
+                    ("normalized_profile_uncorrelated", True),
+                    ("radial_coverage_inconsistent", True),
+                    ("endpoint_structure_inconsistent", True),
+                )
+            ],
+        }
+        floor = {
+            "schemaVersion": "groove-floor-evidence/1", "status": "accepted",
+            "acceptedTrackCount": 5, "failedChecks": [],
+        }
+        for rotation in range(0, 360, 30):
+            with self.subTest(rotation=rotation):
+                refinement = {
+                    "status": "accepted",
+                    "startSide": {"radialAlignmentDeltaDeg": 12.5},
+                    "endSide": {"radialAlignmentDeltaDeg": 7.0},
+                    "outerCircleIntersections": [
+                        {"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0},
+                    ],
+                }
+                result = build_fixture_source_exclusion(
+                    candidate("rotated", rotation, 12.0),
+                    self.verified_fixture(), refinement,
+                    groove_floor_evidence=floor,
+                    source_consistency_evidence=source,
+                    radial_envelope_extra_deg=2.0,
+                )
+                self.assertEqual("fixture-groove-source-exclusion/4", result["schemaVersion"])
+                self.assertEqual("verified", result["status"], result)
+                self.assertTrue(result["radialUContourOwnershipVerified"])
+                self.assertEqual(14.0, result["radialEnvelopeDeg"])
+                self.assertEqual([12.5, 7.0], result["wallRadialAlignmentDeg"])
+
+    def test_radial_u_contour_rejects_tangential_incomplete_and_structural_edges(self) -> None:
+        source_checks = [
+            {"checkId": check_id, "passed": True}
+            for check_id in (
+                "edge_contrast_asymmetry", "edge_gradient_asymmetry",
+                "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
+                "radial_coverage_inconsistent", "endpoint_structure_inconsistent",
+            )
+        ]
+        floor = {"schemaVersion": "groove-floor-evidence/1", "status": "accepted", "failedChecks": []}
+        base = {
+            "status": "accepted",
+            "startSide": {"radialAlignmentDeltaDeg": 53.0},
+            "endSide": {"radialAlignmentDeltaDeg": 51.0},
+            "outerCircleIntersections": [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}],
+        }
+        tangential = build_fixture_source_exclusion(
+            candidate("fixture-edge", 20.0, 12.0), self.verified_fixture(), base,
+            groove_floor_evidence=floor,
+            source_consistency_evidence={"status": "rejected", "checks": source_checks},
+            radial_envelope_extra_deg=2.0,
+        )
+        self.assertFalse(tangential.get("radialUContourOwnershipVerified", False))
+        self.assertIn("wall_radial_envelope", tangential["radialUContourChecksFailed"])
+
+        swapped = build_fixture_source_exclusion(
+            candidate("swapped", 200.0, 12.0), self.verified_fixture(), {
+                **base,
+                "startSide": {"radialAlignmentDeltaDeg": 6.0},
+                "endSide": {"radialAlignmentDeltaDeg": 5.0},
+            }, groove_floor_evidence=floor,
+            source_consistency_evidence={"status": "rejected", "checks": source_checks},
+            radial_envelope_extra_deg=2.0,
+        )
+        self.assertTrue(swapped["radialUContourOwnershipVerified"], swapped)
+
+        incomplete_floor = build_fixture_source_exclusion(
+            candidate("no-floor", 200.0, 12.0), self.verified_fixture(), {
+                **base,
+                "startSide": {"radialAlignmentDeltaDeg": 5.0},
+                "endSide": {"radialAlignmentDeltaDeg": 6.0},
+            }, groove_floor_evidence={"status": "rejected", "failedChecks": ["floor_edge_not_unique"]},
+            source_consistency_evidence={"status": "rejected", "checks": source_checks},
+            radial_envelope_extra_deg=2.0,
+        )
+        self.assertFalse(incomplete_floor["radialUContourOwnershipVerified"])
+        self.assertIn("u_contour_complete", incomplete_floor["radialUContourChecksFailed"])
+
+        for mutation, expected in (
+            ({"endSide": {}}, "wall_alignment_invalid"),
+            ({"outerCircleIntersections": [{"x": 1.0, "y": 2.0}]}, "two_sidewalls_not_complete"),
+        ):
+            refinement = {**base, "startSide": {"radialAlignmentDeltaDeg": 5.0},
+                          "endSide": {"radialAlignmentDeltaDeg": 6.0}, **mutation}
+            result = build_fixture_source_exclusion(
+                candidate("bad", 200.0, 12.0), self.verified_fixture(), refinement,
+                groove_floor_evidence=floor,
+                source_consistency_evidence={"status": "rejected", "checks": source_checks},
+                radial_envelope_extra_deg=2.0,
+            )
+            self.assertFalse(result.get("radialUContourOwnershipVerified", False))
+            self.assertIn(expected, result.get("radialUContourChecksFailed", result["failedChecks"]))
+
+        nonfinite = {**base, "startSide": {"radialAlignmentDeltaDeg": float("nan")}}
+        result = build_fixture_source_exclusion(
+            candidate("nan", 200.0, 12.0), self.verified_fixture(), nonfinite,
+            groove_floor_evidence=floor,
+            source_consistency_evidence={"status": "rejected", "checks": source_checks},
+            radial_envelope_extra_deg=2.0,
+        )
+        self.assertFalse(result.get("radialUContourOwnershipVerified", False))
+        self.assertIn("wall_alignment_invalid", result["radialUContourChecksFailed"])
+
     def test_curved_five_track_floor_is_accepted_but_straight_shadow_edge_is_not(self) -> None:
         yy, xx = np.mgrid[:260, :260]
         center = (130.0, 130.0)

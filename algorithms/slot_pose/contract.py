@@ -439,6 +439,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
                         "source-consistency-adjudication/2",
                         "source-consistency-adjudication/3",
                         "source-consistency-adjudication/4",
+                        "source-consistency-adjudication/5",
                     }
                 ):
                     raise ValueError(

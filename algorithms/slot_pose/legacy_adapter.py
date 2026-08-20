@@ -97,12 +97,20 @@ def recovery_fixture_exclusion_verified(evidence: dict[str, Any] | None) -> bool
         and evidence.get("schemaVersion") in {
             "fixture-groove-source-exclusion/1",
             "fixture-groove-source-exclusion/2",
+            "fixture-groove-source-exclusion/4",
         }
         and evidence.get("status") == "verified"
         and evidence.get("fixtureBodiesVerified") is True
         and evidence.get("uContourComplete") is True
         and evidence.get("fixtureSourceExcluded") is True
         and evidence.get("candidateSelectionUsedFixedAngle") is False
+        and (
+            evidence.get("schemaVersion") != "fixture-groove-source-exclusion/4"
+            or (
+                evidence.get("radialUContourOwnershipVerified") is True
+                and evidence.get("manualTruthAppliedAtRuntime") is False
+            )
+        )
     )
 
 
@@ -714,7 +722,10 @@ class LegacyAEndFaceAdapter:
                 or (
                     detector.get("source_consistency_adjudication", {}).get("enabled", False)
                     and detector.get("source_consistency_adjudication", {}).get("schema_version")
-                    == "source-consistency-adjudication/2"
+                    in {
+                        "source-consistency-adjudication/2",
+                        "source-consistency-adjudication/5",
+                    }
                 )
             )
             fixture_body_evidence = (
@@ -861,6 +872,18 @@ class LegacyAEndFaceAdapter:
                                 pixel_scale=scale,
                             ),
                             source_consistency_evidence=source_consistency,
+                            radial_envelope_extra_deg=(
+                                detector["groove_refinement"][
+                                    "max_intersection_coarse_delta_deg"
+                                ]
+                                if detector.get("source_consistency_adjudication", {}).get(
+                                    "enabled"
+                                ) is True
+                                and detector.get("source_consistency_adjudication", {}).get(
+                                    "schema_version"
+                                ) == "source-consistency-adjudication/5"
+                                else None
+                            ),
                         )
                         if isinstance(fixture_body_evidence, dict) else None
                     )
@@ -886,6 +909,10 @@ class LegacyAEndFaceAdapter:
                                     "radialSidewallsVerified", "radialRecoveryApplied",
                                     "twoSidewallsComplete", "visibleBoundaryOwnershipVerified",
                                     "centralFloorTrackPresent", "manualTruthAppliedAtRuntime",
+                                    "radialUContourOwnershipVerified",
+                                    "wallRadialAlignmentDeg", "openingHalfWidthDeg",
+                                    "radialEnvelopeExtraDeg", "radialEnvelopeDeg",
+                                    "radialUContourChecks", "radialUContourChecksFailed",
                                 )
                                 if key in fixture_source_exclusion
                             }

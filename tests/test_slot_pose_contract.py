@@ -480,6 +480,35 @@ class SlotPoseContractTests(unittest.TestCase):
                 with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, message):
                     load_config(invalid_path)
 
+    def test_source_adjudication_v5_is_explicit_and_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = minimal_single_groove_config()
+            config["detector"]["groove_refinement"] = {
+                "threshold_version": "groove-sidewall-subpixel-v2",
+            }
+            config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+            config["detector"]["source_consistency_adjudication"] = {
+                "schema_version": "source-consistency-adjudication/5",
+                "enabled": True,
+                "strategy_version": "locked-radial-u-contour-ownership-v5",
+                "development_only": True,
+            }
+            path = root / "v5.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_config(path)
+            self.assertEqual(
+                "source-consistency-adjudication/5",
+                loaded["detector"]["source_consistency_adjudication"]["schema_version"],
+            )
+            for key, value in (("strategy_version", "wrong"), ("development_only", False)):
+                invalid = json.loads(json.dumps(config))
+                invalid["detector"]["source_consistency_adjudication"][key] = value
+                bad = root / f"bad-{key}.json"
+                bad.write_text(json.dumps(invalid), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    load_config(bad)
+
     def test_local_second_wall_is_explicit_default_off_and_strictly_gated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

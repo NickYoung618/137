@@ -250,6 +250,16 @@
                 "strategy_version": {"const": "locked-visible-boundary-ownership-v4"},
                 "development_only": {"const": true}
               }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema_version", "enabled", "strategy_version", "development_only"],
+              "properties": {
+                "schema_version": {"const": "source-consistency-adjudication/5"},
+                "enabled": {"type": "boolean", "default": false},
+                "strategy_version": {"const": "locked-radial-u-contour-ownership-v5"},
+                "development_only": {"const": true}
+              }
             }
           ]
         },

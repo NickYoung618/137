@@ -233,6 +233,7 @@ def build_fixture_source_exclusion(
     candidate: dict[str, Any], fixture_evidence: dict[str, Any],
     refinement: dict[str, Any], *, groove_floor_evidence: dict[str, Any] | None = None,
     source_consistency_evidence: dict[str, Any] | None = None,
+    radial_envelope_extra_deg: float | None = None,
 ) -> dict[str, Any]:
     """Build fail-closed source evidence consumed by recovery gates.
 
@@ -308,6 +309,97 @@ def build_fixture_source_exclusion(
             "radial_coverage_inconsistent", "endpoint_structure_inconsistent",
         ))
     )
+    radial_u_diagnostics: dict[str, Any] = {}
+    radial_u_ownership = False
+    if radial_envelope_extra_deg is not None:
+        opening_half_width = candidate.get("halfWidthDeg") if isinstance(candidate, dict) else None
+        try:
+            opening_half_width_value = float(opening_half_width)
+            envelope_extra_value = float(radial_envelope_extra_deg)
+        except (TypeError, ValueError):
+            opening_half_width_value = math.nan
+            envelope_extra_value = math.nan
+        alignments: list[float] = []
+        for side in ("startSide", "endSide"):
+            side_evidence = refinement.get(side) if isinstance(refinement, dict) else None
+            value = (
+                side_evidence.get("radialAlignmentDeltaDeg")
+                if isinstance(side_evidence, dict) else None
+            )
+            try:
+                alignments.append(float(value))
+            except (TypeError, ValueError):
+                alignments.append(math.nan)
+        opening_valid = (
+            math.isfinite(opening_half_width_value) and opening_half_width_value > 0.0
+            and math.isfinite(envelope_extra_value) and envelope_extra_value >= 0.0
+        )
+        alignment_valid = len(alignments) == 2 and all(
+            math.isfinite(value) and value >= 0.0 for value in alignments
+        )
+        radial_envelope = (
+            opening_half_width_value + envelope_extra_value if opening_valid else math.nan
+        )
+        radial_alignment_pass = bool(
+            alignment_valid and opening_valid
+            and all(value <= radial_envelope for value in alignments)
+        )
+        intersections = (
+            refinement.get("outerCircleIntersections")
+            if isinstance(refinement, dict) else None
+        )
+        finite_intersections = bool(
+            isinstance(intersections, list) and len(intersections) == 2
+            and all(
+                isinstance(point, dict)
+                and all(
+                    not isinstance(point.get(axis), bool)
+                    and isinstance(point.get(axis), (int, float))
+                    and math.isfinite(float(point[axis]))
+                    for axis in ("x", "y")
+                )
+                for point in intersections
+            )
+            and not (
+                math.isclose(float(intersections[0]["x"]), float(intersections[1]["x"]), abs_tol=1e-12)
+                and math.isclose(float(intersections[0]["y"]), float(intersections[1]["y"]), abs_tol=1e-12)
+            )
+        )
+        radial_walls_complete = bool(walls_complete and finite_intersections)
+        shape_profile_pass = all(source_checks.get(check_id) is True for check_id in (
+            "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
+            "radial_coverage_inconsistent", "endpoint_structure_inconsistent",
+        ))
+        radial_u_checks = [
+            {"checkId": "fixture_bodies_verified", "passed": bodies_verified},
+            {"checkId": "two_sidewalls_complete", "passed": radial_walls_complete},
+            {"checkId": "u_contour_complete", "passed": bool(radial_walls_complete and floor_complete)},
+            {"checkId": "opening_envelope_valid", "passed": opening_valid},
+            {"checkId": "wall_alignment_valid", "passed": alignment_valid},
+            {"checkId": "wall_radial_envelope", "passed": radial_alignment_pass},
+            {"checkId": "locked_shape_profile_checks_pass", "passed": shape_profile_pass},
+        ]
+        radial_u_ownership = all(item["passed"] for item in radial_u_checks)
+        radial_u_diagnostics = {
+            "radialUContourOwnershipVerified": radial_u_ownership,
+            "wallRadialAlignmentDeg": (
+                alignments if alignment_valid else [value if math.isfinite(value) else None for value in alignments]
+            ),
+            "openingHalfWidthDeg": opening_half_width_value if math.isfinite(opening_half_width_value) else None,
+            "radialEnvelopeExtraDeg": envelope_extra_value if math.isfinite(envelope_extra_value) else None,
+            "radialEnvelopeDeg": radial_envelope if math.isfinite(radial_envelope) else None,
+            "radialUContourChecks": radial_u_checks,
+            "radialUContourChecksFailed": [
+                (
+                    "wall_alignment_invalid"
+                    if item["checkId"] == "wall_alignment_valid"
+                    else "two_sidewalls_not_complete"
+                    if item["checkId"] == "two_sidewalls_complete"
+                    else item["checkId"]
+                )
+                for item in radial_u_checks if not item["passed"]
+            ],
+        }
     # The lower body cannot occlude the groove in this fixture geometry.  A
     # candidate coincident with it is therefore a fixture-source candidate.
     # The upper body can overlap a real groove, so a separately proven curved
@@ -318,7 +410,7 @@ def build_fixture_source_exclusion(
             overlap_role in {"none", "upper_fixture"}
             or (radial_recovery and overlap_role in {"lower_fixture", "multiple_fixture_bodies"})
         )
-    ) or bool(bodies_verified and visible_boundary_ownership)
+    ) or bool(bodies_verified and visible_boundary_ownership) or radial_u_ownership
     failures: list[str] = []
     if not bodies_verified:
         failures.append("fixture_bodies_not_verified")
@@ -327,13 +419,13 @@ def build_fixture_source_exclusion(
     if not floor_complete and not visible_boundary_ownership:
         failures.append("groove_floor_not_complete")
     if overlap_role == "lower_fixture" and not (
-        (radial_recovery and u_complete) or visible_boundary_ownership
+        (radial_recovery and u_complete) or visible_boundary_ownership or radial_u_ownership
     ):
         failures.append("lower_fixture_false_candidate")
     elif overlap_role == "upper_fixture" and not u_complete:
         failures.append("upper_fixture_shadow_overlap")
     elif overlap_role == "multiple_fixture_bodies" and not (
-        (radial_recovery and u_complete) or visible_boundary_ownership
+        (radial_recovery and u_complete) or visible_boundary_ownership or radial_u_ownership
     ):
         failures.append("multiple_fixture_overlap")
     result = {
@@ -348,8 +440,15 @@ def build_fixture_source_exclusion(
         "candidateSelectionUsedFixedAngle": False,
         "manualTruthAppliedAtRuntime": False,
         "failedChecks": failures,
+        **radial_u_diagnostics,
     }
-    if visible_boundary_ownership:
+    if radial_u_ownership:
+        result.update({
+            "schemaVersion": "fixture-groove-source-exclusion/4",
+            "status": "verified",
+            "fixtureSourceExcluded": True,
+        })
+    elif visible_boundary_ownership:
         result.update({
             "schemaVersion": "fixture-groove-source-exclusion/3",
             "visibleBoundaryOwnershipVerified": True,

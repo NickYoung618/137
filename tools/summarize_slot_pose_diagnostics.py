@@ -320,6 +320,23 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
     polar_proof_failures = Counter(
         check for item in polar_adjudications for check in item.get("failedChecks") or []
     )
+    source_adjudications = [
+        item for record in records
+        if isinstance((item := record.get("sidewallSourceConsistencyAdjudication")), dict)
+    ]
+    source_decisions = Counter(
+        str(item.get("decision") or "not_available") for item in source_adjudications
+    )
+    source_bases = Counter(
+        str(item.get("sourceSeparationBasis") or "not_verified")
+        for item in source_adjudications
+    )
+    source_original_failures = Counter(
+        check for item in source_adjudications for check in item.get("originalFailedChecks") or []
+    )
+    source_proof_failures = Counter(
+        check for item in source_adjudications for check in item.get("failedChecks") or []
+    )
     return {
         "label": label,
         "imageCount": total,
@@ -337,6 +354,16 @@ def summarize_run(label: str, review: dict[str, Any], threshold_deg: float) -> d
             "proofFailureCounts": dict(sorted(polar_proof_failures.items())),
             "imagePoseReleaseAllowedCount": sum(
                 item.get("imagePoseReleaseAllowed") is True for item in polar_adjudications
+            ),
+        },
+        "sourceConsistencyAdjudication": {
+            "evaluatedCount": len(source_adjudications),
+            "decisionCounts": dict(sorted(source_decisions.items())),
+            "sourceSeparationBasisCounts": dict(sorted(source_bases.items())),
+            "originalFailureCounts": dict(sorted(source_original_failures.items())),
+            "proofFailureCounts": dict(sorted(source_proof_failures.items())),
+            "imagePoseReleaseAllowedCount": sum(
+                item.get("imagePoseReleaseAllowed") is True for item in source_adjudications
             ),
         },
         "circleLocalizationStatusCounts": dict(sorted(localization_status_counts.items())),

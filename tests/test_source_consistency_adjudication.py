@@ -70,6 +70,29 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
     def enabled_config(self) -> dict:
         return {**DEFAULT_SOURCE_CONSISTENCY_ADJUDICATION_CONFIG, "enabled": True}
 
+    @staticmethod
+    def enabled_v5_config() -> dict:
+        return {
+            "schema_version": "source-consistency-adjudication/5",
+            "enabled": True,
+            "strategy_version": "locked-radial-u-contour-ownership-v5",
+            "development_only": True,
+        }
+
+    @staticmethod
+    def radial_u_ownership() -> dict:
+        return {
+            "schemaVersion": "fixture-groove-source-exclusion/4",
+            "status": "verified", "fixtureBodiesVerified": True,
+            "twoSidewallsComplete": True, "uContourComplete": True,
+            "fixtureSourceExcluded": True,
+            "radialUContourOwnershipVerified": True,
+            "wallRadialAlignmentDeg": [12.5, 7.0],
+            "openingHalfWidthDeg": 12.0, "radialEnvelopeDeg": 14.0,
+            "candidateSelectionUsedFixedAngle": False,
+            "manualTruthAppliedAtRuntime": False,
+        }
+
     def test_exact_contrast_only_clean_structure_is_accepted_override_without_mutation(self) -> None:
         source = source_evidence(endpoint=0.02029454542025491)
         before = copy.deepcopy(source)
@@ -409,6 +432,60 @@ class SourceConsistencyAdjudicationTests(unittest.TestCase):
         )
         self.assertEqual("ACCEPTED_OVERRIDE", contrast_only["decision"], contrast_only)
         self.assertEqual("visible_boundary_ownership", contrast_only["sourceSeparationBasis"])
+
+    def test_v5_accepts_only_photometric_failure_with_radial_u_ownership(self) -> None:
+        for failed in (
+            ["edge_contrast_asymmetry"],
+            ["edge_contrast_asymmetry", "edge_gradient_asymmetry"],
+        ):
+            with self.subTest(failed=failed):
+                source = source_evidence(endpoint=0.04, failed=failed)
+                before = copy.deepcopy(source)
+                result = adjudicate_source_consistency(
+                    source, self.enabled_v5_config(),
+                    fixture_source_evidence=self.radial_u_ownership(),
+                )
+                self.assertEqual(before, source)
+                self.assertEqual("ACCEPTED_OVERRIDE", result["decision"], result)
+                self.assertEqual("radial_u_contour_ownership", result["sourceSeparationBasis"])
+                self.assertTrue(result["imagePoseReleaseAllowed"])
+
+    def test_v5_rejects_missing_ownership_or_any_structural_failure(self) -> None:
+        source = source_evidence(endpoint=0.04)
+        missing = adjudicate_source_consistency(source, self.enabled_v5_config())
+        self.assertEqual("REJECTED", missing["decision"])
+        self.assertIn("prior_v4_or_radial_u_source_ownership_verified", missing["failedChecks"])
+        for failed in (
+            ["edge_contrast_asymmetry", "endpoint_structure_inconsistent"],
+            ["edge_contrast_asymmetry", "radial_coverage_inconsistent"],
+            ["normalized_profile_dissimilar"],
+        ):
+            with self.subTest(failed=failed):
+                result = adjudicate_source_consistency(
+                    source_evidence(endpoint=0.20, failed=failed),
+                    self.enabled_v5_config(), fixture_source_evidence=self.radial_u_ownership(),
+                )
+                self.assertEqual("REJECTED", result["decision"])
+                self.assertFalse(result["imagePoseReleaseAllowed"])
+
+    def test_v5_preserves_prior_v4_complete_u_endpoint_adjudication(self) -> None:
+        prior_v4_proof = {
+            "schemaVersion": "fixture-groove-source-exclusion/1",
+            "status": "verified", "fixtureBodiesVerified": True,
+            "twoSidewallsComplete": True, "uContourComplete": True,
+            "fixtureSourceExcluded": True,
+            "candidateSelectionUsedFixedAngle": False,
+            "manualTruthAppliedAtRuntime": False,
+        }
+        result = adjudicate_source_consistency(
+            source_evidence(
+                endpoint=0.20,
+                failed=["edge_contrast_asymmetry", "edge_gradient_asymmetry",
+                        "endpoint_structure_inconsistent"],
+            ), self.enabled_v5_config(), fixture_source_evidence=prior_v4_proof,
+        )
+        self.assertEqual("ACCEPTED_OVERRIDE", result["decision"], result)
+        self.assertEqual("complete_u_contour", result["sourceSeparationBasis"])
 
 
 if __name__ == "__main__":

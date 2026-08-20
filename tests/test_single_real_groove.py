@@ -606,6 +606,56 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
             diagnostics["grooveRefinement"]["sourceConsistencyAdjudication"],
         )
 
+    def test_v5_requires_radial_u_ownership_and_reuses_existing_geometry_tolerance(self) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3
+        config["detector"]["groove_refinement"] = {
+            **DEFAULT_GROOVE_REFINEMENT_CONFIG,
+            "threshold_version": "groove-sidewall-subpixel-v2",
+        }
+        config["detector"]["sidewall_source_consistency"] = {"enabled": True}
+        config["detector"]["source_consistency_adjudication"] = {
+            "schema_version": "source-consistency-adjudication/5",
+            "enabled": True,
+            "strategy_version": "locked-radial-u-contour-ownership-v5",
+            "development_only": True,
+        }
+        path = self.root / "single-v3-radial-u-adjudication.json"
+        write_json(path, config)
+        source = rejected_source_consistency(0.0203)
+        observed_kwargs: list[dict] = []
+
+        def verified_ownership(*_args, **kwargs):
+            observed_kwargs.append(kwargs)
+            return {
+                "schemaVersion": "fixture-groove-source-exclusion/4",
+                "status": "verified", "fixtureBodiesVerified": True,
+                "twoSidewallsComplete": True, "uContourComplete": True,
+                "fixtureSourceExcluded": True,
+                "radialUContourOwnershipVerified": True,
+                "wallRadialAlignmentDeg": [5.0, 6.0],
+                "openingHalfWidthDeg": 5.0, "radialEnvelopeExtraDeg": 2.0,
+                "radialEnvelopeDeg": 7.0, "radialUContourChecks": [],
+                "radialUContourChecksFailed": [],
+                "candidateSelectionUsedFixedAngle": False,
+                "manualTruthAppliedAtRuntime": False, "failedChecks": [],
+            }
+
+        with (
+            patch("algorithms.slot_pose.legacy_adapter.assess_sidewall_source_consistency",
+                  return_value=source),
+            patch("algorithms.slot_pose.legacy_adapter.build_fixture_source_exclusion",
+                  side_effect=verified_ownership),
+        ):
+            payload = run(self.images / "one-real-two-shadows.png", path, "single:v5:radial-u")
+        self.assertTrue(payload["result"]["valid"], payload)
+        self.assertEqual(2.0, observed_kwargs[0]["radial_envelope_extra_deg"])
+        adjudication = payload["diagnostics"]["sidewallSourceConsistencyAdjudication"]
+        self.assertEqual("ACCEPTED_OVERRIDE", adjudication["decision"])
+        self.assertEqual("radial_u_contour_ownership", adjudication["sourceSeparationBasis"])
+        self.assertIsNone(payload["result"]["plcCommand"])
+        self.assertFalse(payload["result"]["plcExecutionAuthoritative"])
+
     def test_source_adjudication_keeps_known_mixed_and_multi_failure_pairs_closed(self) -> None:
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["detector"]["single_groove_pose"] = DEFAULT_SINGLE_GROOVE_POSE_CONFIG_V3

@@ -37,6 +37,12 @@ SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG: dict[str, Any] = {
     "strategy_version": "locked-visible-boundary-ownership-v4",
     "development_only": True,
 }
+SOURCE_CONSISTENCY_ADJUDICATION_V5_CONFIG: dict[str, Any] = {
+    "schema_version": "source-consistency-adjudication/5",
+    "enabled": False,
+    "strategy_version": "locked-radial-u-contour-ownership-v5",
+    "development_only": True,
+}
 
 _CHECK_DEFINITIONS = (
     ("edge_contrast_asymmetry", "contrastNormalizedDifference", "max"),
@@ -56,6 +62,9 @@ def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> N
         raise ValueError("detector.source_consistency_adjudication must be an object")
     schema_version = config.get("schema_version")
     template = (
+        SOURCE_CONSISTENCY_ADJUDICATION_V5_CONFIG
+        if schema_version == "source-consistency-adjudication/5"
+        else
         SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG
         if schema_version == "source-consistency-adjudication/4"
         else SOURCE_CONSISTENCY_ADJUDICATION_V3_CONFIG
@@ -74,6 +83,7 @@ def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> N
     if schema_version not in {
         "source-consistency-adjudication/1", "source-consistency-adjudication/2",
         "source-consistency-adjudication/3", "source-consistency-adjudication/4",
+        "source-consistency-adjudication/5",
     }:
         raise ValueError("source_consistency_adjudication.schema_version is unsupported")
     if not isinstance(config["enabled"], bool):
@@ -97,6 +107,7 @@ def validate_source_consistency_adjudication_config(config: dict[str, Any]) -> N
         "source-consistency-adjudication/2": "locked-noncontrast-gates-v2",
         "source-consistency-adjudication/3": "locked-shape-profile-fixture-gates-v3",
         "source-consistency-adjudication/4": "locked-visible-boundary-ownership-v4",
+        "source-consistency-adjudication/5": "locked-radial-u-contour-ownership-v5",
     }[schema_version]:
         raise ValueError("source_consistency_adjudication.strategy_version is unsupported")
 
@@ -107,6 +118,10 @@ def merged_source_consistency_adjudication_config(
     if config is not None and not isinstance(config, dict):
         raise ValueError("detector.source_consistency_adjudication must be an object")
     template = (
+        SOURCE_CONSISTENCY_ADJUDICATION_V5_CONFIG
+        if isinstance(config, dict)
+        and config.get("schema_version") == "source-consistency-adjudication/5"
+        else
         SOURCE_CONSISTENCY_ADJUDICATION_V4_CONFIG
         if isinstance(config, dict)
         and config.get("schema_version") == "source-consistency-adjudication/4"
@@ -134,6 +149,7 @@ def _base(config: dict[str, Any]) -> dict[str, Any]:
                 "source-consistency-adjudication/2",
                 "source-consistency-adjudication/3",
                 "source-consistency-adjudication/4",
+                "source-consistency-adjudication/5",
             }
             else {"thresholdVersion": config["threshold_version"]}
         ),
@@ -143,8 +159,9 @@ def _base(config: dict[str, Any]) -> dict[str, Any]:
         "productionDefaultAllowed": False,
         "plcAllowed": False,
         "manualTruthAppliedAtRuntime": False,
-        **({"sourceSeparationBasis": None} if config["schema_version"] ==
-           "source-consistency-adjudication/4" else {}),
+        **({"sourceSeparationBasis": None} if config["schema_version"] in {
+            "source-consistency-adjudication/4", "source-consistency-adjudication/5",
+        } else {}),
     }
 
 
@@ -279,8 +296,9 @@ def adjudicate_source_consistency(
     is_v2 = merged["schema_version"] == "source-consistency-adjudication/2"
     is_v3 = merged["schema_version"] == "source-consistency-adjudication/3"
     is_v4 = merged["schema_version"] == "source-consistency-adjudication/4"
+    is_v5 = merged["schema_version"] == "source-consistency-adjudication/5"
     endpoint_pass = (
-        True if is_v2 or is_v3 or is_v4
+        True if is_v2 or is_v3 or is_v4 or is_v5
         else endpoint <= float(merged["max_endpoint_structure_difference"])
     )
     photometric_only = bool(failed) and set(failed).issubset({
@@ -296,10 +314,11 @@ def adjudicate_source_consistency(
     adjudication_checks = [
         {"checkId": "original_rejected", "passed": status == "rejected"},
         {"checkId": (
-            "bounded_source_failure" if is_v4
+            "photometric_only_failure" if is_v5
+            else "bounded_source_failure" if is_v4
             else "photometric_only_failure" if is_v3 else "exact_contrast_only_failure"
         ), "passed": (
-            bool(failed) and set(failed).issubset({
+            photometric_only if is_v5 else bool(failed) and set(failed).issubset({
                 "edge_contrast_asymmetry", "edge_gradient_asymmetry",
                 "endpoint_structure_inconsistent",
             })
@@ -307,13 +326,14 @@ def adjudicate_source_consistency(
         )},
         {
             "checkId": (
-                "locked_profile_and_coverage_checks_pass" if is_v4
+                "all_locked_shape_profile_checks_pass" if is_v5
+                else "locked_profile_and_coverage_checks_pass" if is_v4
                 else "all_locked_shape_profile_checks_pass" if is_v3
                 else "all_locked_noncontrast_checks_pass" if is_v2
                 else "all_required_noncontrast_checks_pass"
             ),
             "passed": (
-                all(check_map[check_id]["passed"] is True for check_id in (
+                locked_shape_profile_pass if is_v5 else all(check_map[check_id]["passed"] is True for check_id in (
                     "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
                     "radial_coverage_inconsistent",
                 ))
@@ -322,7 +342,7 @@ def adjudicate_source_consistency(
         },
     ]
     source_separation_basis = None
-    if is_v2 or is_v3 or is_v4:
+    if is_v2 or is_v3 or is_v4 or is_v5:
         fixture_schema = (
             fixture_source_evidence.get("schemaVersion")
             if isinstance(fixture_source_evidence, dict) else None
@@ -351,34 +371,88 @@ def adjudicate_source_consistency(
             and (fixture_schema != "fixture-groove-source-exclusion/2" or recovery_verified)
         )
         boundary_verified = bool(
-            is_v4 and common_fixture
+            (is_v4 or is_v5) and common_fixture
             and fixture_schema == "fixture-groove-source-exclusion/3"
             and fixture_source_evidence.get("twoSidewallsComplete") is True
             and fixture_source_evidence.get("visibleBoundaryOwnershipVerified") is True
             and fixture_source_evidence.get("centralFloorTrackPresent") is True
             and fixture_source_evidence.get("manualTruthAppliedAtRuntime") is False
         )
-        fixture_verified = complete_u_verified or boundary_verified
+        radial_u_verified = bool(
+            is_v5 and common_fixture
+            and fixture_schema == "fixture-groove-source-exclusion/4"
+            and fixture_source_evidence.get("twoSidewallsComplete") is True
+            and fixture_source_evidence.get("uContourComplete") is True
+            and fixture_source_evidence.get("radialUContourOwnershipVerified") is True
+            and fixture_source_evidence.get("manualTruthAppliedAtRuntime") is False
+        )
+        prior_v4_fixture_verified = complete_u_verified or boundary_verified
+        fixture_verified = (
+            radial_u_verified or prior_v4_fixture_verified
+            if is_v5 else prior_v4_fixture_verified
+        )
         endpoint_authorized = bool(
             check_map["endpoint_structure_inconsistent"]["passed"] is True
-            or (is_v4 and fixture_verified)
+            or ((is_v4 or is_v5) and fixture_verified)
         )
-        if is_v4:
+        if is_v4 or is_v5:
             adjudication_checks.append({
                 "checkId": "endpoint_structure_or_physical_source_verified",
                 "passed": endpoint_authorized,
             })
         adjudication_checks.append({
-            "checkId": "fixture_source_exclusion_verified",
+            "checkId": (
+                "prior_v4_or_radial_u_source_ownership_verified" if is_v5
+                else "fixture_source_exclusion_verified"
+            ),
             "passed": fixture_verified,
         })
-        if boundary_verified:
+        if radial_u_verified:
+            source_separation_basis = "radial_u_contour_ownership"
+        elif boundary_verified:
             source_separation_basis = "visible_boundary_ownership"
         elif recovery_verified:
             source_separation_basis = "recovery_verified"
         elif complete_u_verified:
             source_separation_basis = "complete_u_contour"
-    if not is_v2 and not is_v3 and not is_v4:
+        if is_v5:
+            prior_v4_failure_scope = bool(failed) and set(failed).issubset({
+                "edge_contrast_asymmetry", "edge_gradient_asymmetry",
+                "endpoint_structure_inconsistent",
+            })
+            prior_v4_profile_pass = all(
+                check_map[check_id]["passed"] is True for check_id in (
+                    "normalized_profile_dissimilar", "normalized_profile_uncorrelated",
+                    "radial_coverage_inconsistent",
+                )
+            )
+            radial_route = bool(
+                radial_u_verified and photometric_only and locked_shape_profile_pass
+            )
+            prior_v4_route = bool(
+                prior_v4_fixture_verified and prior_v4_failure_scope
+                and prior_v4_profile_pass and endpoint_authorized
+            )
+            adjudication_checks = [
+                {"checkId": "original_rejected", "passed": status == "rejected"},
+                {
+                    "checkId": "prior_v4_or_radial_u_failure_scope_verified",
+                    "passed": radial_route or prior_v4_route,
+                },
+                {
+                    "checkId": "locked_profile_and_coverage_checks_pass",
+                    "passed": prior_v4_profile_pass,
+                },
+                {
+                    "checkId": "endpoint_structure_or_physical_source_verified",
+                    "passed": endpoint_authorized,
+                },
+                {
+                    "checkId": "prior_v4_or_radial_u_source_ownership_verified",
+                    "passed": fixture_verified,
+                },
+            ]
+    if not is_v2 and not is_v3 and not is_v4 and not is_v5:
         adjudication_checks.append({
             "checkId": "strict_endpoint_structure",
             "metric": "endpointStructureDifference",
@@ -400,5 +474,5 @@ def adjudicate_source_consistency(
         "checks": adjudication_checks,
         "failedChecks": adjudication_failed,
         "imagePoseReleaseAllowed": accepted,
-        **({"sourceSeparationBasis": source_separation_basis} if is_v4 else {}),
+        **({"sourceSeparationBasis": source_separation_basis} if is_v4 or is_v5 else {}),
     }
