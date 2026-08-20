@@ -87,6 +87,20 @@ def rejected_source_consistency(
     }
 
 
+def without_runtime_timing(value):
+    if isinstance(value, dict):
+        return {
+            key: without_runtime_timing(item)
+            for key, item in value.items()
+            if key not in {"createdAtUtc", "taskId"}
+            and "elapsed" not in key.lower()
+            and "timing" not in key.lower()
+        }
+    if isinstance(value, list):
+        return [without_runtime_timing(item) for item in value]
+    return value
+
+
 class SingleGroovePoseGeometryTests(unittest.TestCase):
     def test_exactly_one_groove_outputs_versioned_image_pose_but_no_target_deviation(self) -> None:
         result = build_single_groove_pose(
@@ -1137,7 +1151,19 @@ class SingleGrooveRuntimeIntegrationTests(unittest.TestCase):
                 return_value=verified_exclusion,
             ),
         ):
-            payload = run(self.images / "two-real-one-shadow.png", path, "single:v3:provisional-multiple")
+            payloads = [
+                run(
+                    self.images / "two-real-one-shadow.png", path,
+                    f"single:v3:provisional-multiple:repeat-{repeat}",
+                )
+                for repeat in range(5)
+            ]
+        signatures = {
+            json.dumps(without_runtime_timing(payload), sort_keys=True, separators=(",", ":"))
+            for payload in payloads
+        }
+        self.assertEqual(1, len(signatures))
+        payload = payloads[0]
         self.assertFalse(payload["result"]["valid"])
         self.assertEqual("GROOVE_RECOGNITION_AMBIGUOUS", payload["error"]["code"])
         self.assertEqual("multiple_survived", payload["diagnostics"]["grooveResolution"]["status"])

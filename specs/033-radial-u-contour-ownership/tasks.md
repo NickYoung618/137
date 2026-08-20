@@ -51,9 +51,9 @@
 ## Phase 6: Validation and evidence
 
 - [X] T016 Run focused tests, full available tests, root schema validation and diff checks; record commands and results in `specs/033-radial-u-contour-ownership/quickstart.md`
-- [ ] T017 Replay the immutable 82 reviewed controls and full observed A2-700 set outside Git; record transitions, 15/15 recovery, 67/67 fail-closed, safety nulls and hashes in `/home/ubuntu/slot-pose-private-data/A2-700-observed-034-diagnostic-20260820/validation-report.json`
-- [ ] T018 Run five-repeat determinism and uncontented reused-adapter warm P95 checks; record that no extra image load or full analysis pass occurs in `/home/ubuntu/slot-pose-private-data/A2-700-observed-034-diagnostic-20260820/performance-report.json`
-- [ ] T019 Reconcile implementation against every FR/SC and append any real remaining work through SpecKit convergence in `specs/033-radial-u-contour-ownership/tasks.md`
+- [X] T017 Replay the immutable 82 reviewed controls and full observed A2-700 set outside Git; record transitions, 15/15 recovery, 67/67 fail-closed, safety nulls and hashes in `/home/ubuntu/slot-pose-private-data/A2-700-observed-034-diagnostic-20260820/validation-report.json`
+- [X] T018 Run five-repeat determinism and uncontented reused-adapter warm P95 checks; record that no extra image load or full analysis pass occurs in `/home/ubuntu/slot-pose-private-data/A2-700-observed-034-diagnostic-20260820/performance-report.json`
+- [X] T019 Reconcile implementation against every FR/SC and append any real remaining work through SpecKit convergence in `specs/033-radial-u-contour-ownership/tasks.md`
 
 ## Dependencies and Execution Order
 
@@ -65,3 +65,7 @@
 ## Implementation Strategy
 
 This feature is not accepted as a 15-image patch. The first executable slice is synthetic full-rotation radial U-contour proof plus tangential fixture counterexamples. Observed A2 replay is regression evidence only; physically separate new-part acceptance remains outside this implementation and is required before production or PLC claims.
+
+## Phase 7: Convergence
+
+- [X] T022 Add an explicit five-repeat deterministic true-ambiguity regression alongside the accepted and occluded repeat evidence per SC-007 (partial)

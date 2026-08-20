@@ -48,3 +48,34 @@ No ambiguity, recognition, refinement, polar-quality, fixture or source-consiste
 - Final portable v8 config SHA-256: `85dbf8c71e5fc8c9340ad3aff8b5c90272bffe782ee9c441d0b6fd1ccd2ac3a1`.
 - Profile v8 explicitly disables the superseded non-authoritative local-second-wall scan; profiles v7 and earlier remain unchanged.
 - A first replay attempt was explicitly discarded after code changed during execution; no result from that mixed-code attempt is accepted as evidence.
+
+## Frozen Observed Replay
+
+- Evidence commit: `24c8015a82235dc933a973327b4876b0c971bd74`.
+- Final result: 700 total, 633 valid and 67 invalid.
+- Transition from the frozen v7 baseline: 618 valid stayed valid, 15 reviewed complete-visible cases changed from invalid to valid, and 67 reviewed mixed/occluded cases stayed invalid.
+- All 15 recovered cases use `radial_u_contour_ownership`; all 67 mixed/occluded controls remain fail-closed with every guidance/PLC value null and PLC execution non-authoritative.
+- No previously valid result regressed. The superseded local-second-wall diagnostic executed zero times in profile v8.
+- Final result SHA-256: `4c24b08e62019eb1b79988aa08a3effdd2e23838628a264d39caf412d4b605ef`.
+- Validation report SHA-256: `d4b1702bc2f83212ef8cfc83b5078ceb67cd98e6d5e4d03f60895a4a46254726`.
+- Validation evidence: `/home/ubuntu/slot-pose-private-data/A2-700-observed-034-diagnostic-20260820/run-003-frozen-24c8015/validation-report.json`.
+
+## Warm Performance and Repeatability
+
+- One adapter was reused on one accepted case and one complex occluded case, with one discarded warmup and five measured repeats per path on CPU 1 while the competing compiler process remained on CPU 0.
+- Combined wall-clock P50/P95/max: `1246.054 / 1290.734 / 1295.273 ms`, passing the `2500 ms` gate.
+- Accepted-path P95: `1293.256 ms`; occluded-path P95: `1211.848 ms`.
+- Both paths had exactly one non-timing result signature across five repeats; all accepted-path results stayed valid and all occluded-path results stayed invalid.
+- Each measured result used one adapter estimate and one runtime image load; the superseded local scan executed zero times.
+- Performance report SHA-256: `d3663fabd23cb2069bc72b5d8306f8f993f69f966e612f7c8a51e999f5744db6`.
+- Performance evidence: `/home/ubuntu/slot-pose-private-data/A2-700-observed-034-diagnostic-20260820/run-003-frozen-24c8015/performance-report.json`.
+
+These results are observed regression evidence only. Physically separate new-part validation remains mandatory before any production accuracy or PLC claim.
+
+## Final Convergence Gate
+
+- Added an explicit five-repeat true-ambiguity integration regression; all five non-timing diagnostics and outputs are identical and remain fail-closed.
+- Final full available suite after convergence: 617/617 PASS in 124.841 seconds.
+- Final root JSON Schema Draft 2020-12 checks: 64/64 PASS.
+- Final `git diff --check` and `git diff --cached --check`: PASS.
+- SpecKit convergence checked 19 functional requirements, 10 success criteria, 9 acceptance scenarios, 9 plan decisions and 5 constitution principles; no remaining implementation gap was found.
