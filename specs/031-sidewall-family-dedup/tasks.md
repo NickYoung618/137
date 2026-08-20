@@ -115,3 +115,9 @@ The MVP is T001-T010: prove and integrate same-source grouping, then show that `
 - [x] T029 Add adapter-level tests proving v2 wall recovery and v3 photometric adjudication cannot release pose without verified radial U-contour fixture exclusion in `tests/test_single_real_groove.py` per FR-012/FR-019 (partial)
 - [x] T030 Emit selected physical source-family identity and bounded family-selection timing, then cover them in diagnostic schema/summary tests per FR-009 (partial)
 - [x] T031 Freeze the corrected-case repeatability/performance report, record the unavailable physically separate acceptance gate, and preserve all invalid safety nulls per SC-004/SC-005/SC-006/SC-008 (partial)
+
+## Phase 8: Convergence
+
+- [x] T032 Complete a Git-external high-resolution CODEX pre-review of all 24 wall-family-recovered valid frames and all 20 runtime-complete-visible `QUALITY_REJECTED` frames, recording independent per-image visual reasons as `CODEX_PREFILL — NOT HUMAN TRUTH` without feeding review labels into runtime per US1/AC2 and FR-011/FR-014 (partial)
+- [x] T033 Add bounded stage-level performance evidence for image loading, outer-circle localization, groove recognition, wall-family construction, refinement, source adjudication and final quality; reproduce and isolate the 42 observed frames over 2.5 seconds without changing recognition thresholds per SC-006 and FR-013 (partial)
+- [x] T034 Produce an image-SHA-paired frozen 030-versus-031 transition table for the same 700 observed frames, or explicitly record unavailable prior raw evidence, and keep every comparison non-acceptance and non-accuracy-bearing per SC-008 and FR-014 (partial)

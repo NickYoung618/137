@@ -63,3 +63,13 @@ Do not merge main or authorize PLC. Production claims remain blocked until a phy
 - Observed 140 compatibility: old valid 97/97 preserved; old mixed/occluded invalid 41/41 remain invalid; two old circle failures recovered by 029; final 99 valid / 41 invalid.
 - Git-external evidence: `/home/ubuntu/disk/dzk/slot-pose-private-data/031-sidewall-family-dedup-validation/`.
 - Physically separate new-part acceptance remains unavailable; accuracy, production readiness and PLC authorization remain prohibited.
+
+## 2026-08-20 Observed A2-700 Convergence
+
+- Frozen 031 replay: 506 valid / 194 invalid; physical outer circle accepted with one qualified edge family in 700/700 frames.
+- High-resolution `CODEX_PREFILL — NOT HUMAN TRUTH` review covered all 24 wall-family-recovered valid frames and all 20 complete-visible `QUALITY_REJECTED` frames. It found 24 likely correct accepts and 20 likely false rejects pending human confirmation.
+- The 20 suspected false rejects form one consecutive complete-visible groove sequence. Both walls and the floor are visible away from fixtures; only the unchanged global polar score fails at 2.845–2.928 against 3.0.
+- Original 700-frame P95 remains recorded as 2614.638 ms and failed the 2.5 s gate. Stage evidence localized first-pass long tails to full-frame proposal/radial-edge extraction under server page/memory pressure, not wall-family grouping. A preloaded same-adapter two-pass replay of the original slow 42 had P95 1516.052 ms then 1949.265 ms with zero results over 2.5 s and identical outcomes.
+- The prior 030 result JSONL with reported SHA `e87b5f186e1b0b86bc2d72b564c0fa31d8433aec868f01bbfbd52bfcd9377ba0` is not present on the server, so no per-image 030→031 transition table was fabricated; only aggregate differences are reported.
+- Git-external evidence is under `/home/ubuntu/slot-pose-private-data/A2-700-observed-031-20260819/run-001/`, including `codex-review-44/`, `performance-root-cause.json`, and `030-031-transition-audit.json`.
+- No recognition threshold was changed. A versioned safe treatment of global polar quality, if pursued, requires a separate specification because FR-010 keeps the current polar gate unchanged in feature 031.
